@@ -1,0 +1,42 @@
+name: Upstream Sync Check
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly Monday 9am UTC
+  workflow_dispatch:
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for sdlc-wizard updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST=$(gh release view --repo BaseInfinity/agentic-ai-sdlc-wizard --json tagName -q .tagName 2>/dev/null || echo "unknown")
+          CURRENT=$(cat UPSTREAM_VERSION 2>/dev/null || echo "none")
+
+          if [ "$LATEST" = "unknown" ]; then
+            echo "Could not fetch upstream version"
+            exit 0
+          fi
+
+          if [ "$LATEST" != "$CURRENT" ]; then
+            # Check if issue already exists
+            EXISTING=$(gh issue list --search "Upstream sync: $LATEST" --json number -q '.[0].number' 2>/dev/null || echo "")
+            if [ -z "$EXISTING" ]; then
+              gh issue create \
+                --title "Upstream sync: sdlc-wizard $LATEST" \
+                --body "sdlc-wizard released **$LATEST** (adapter is based on **$CURRENT**).
+
+          Review [release notes](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard/releases/tag/$LATEST) and translate applicable changes to Codex format.
+
+          After adapting, update \`UPSTREAM_VERSION\` to \`$LATEST\`." \
+                --label "upstream-sync"
+              echo "Created sync issue for $LATEST"
+            else
+              echo "Issue already exists: #$EXISTING"
+            fi
+          else
+            echo "Already up to date: $CURRENT"
+          fi
