@@ -1,0 +1,29 @@
+# Testing Guide
+
+## Stack
+
+- **Language:** {{LANGUAGE}}
+- **Framework:** {{TEST_FRAMEWORK}}
+- **Test command:** {{TEST_COMMAND}}
+
+## Testing Diamond
+
+Prioritize integration tests — best bang for buck. Unit tests for pure logic, E2E for critical paths.
+
+| Layer | Purpose | Ratio |
+|-------|---------|-------|
+| E2E | Critical user paths | ~10% |
+| Integration | Component interactions, real dependencies | ~60% |
+| Unit | Pure functions, edge cases | ~30% |
+
+These ratios are guidance, not doctrine. Adjust for your domain.
+
+{{DOMAIN_SECTION}}
+
+## Principles
+
+- Test behavior, not implementation
+- Minimize mocking — use real dependencies where practical
+- Flaky tests are bugs — investigate and fix, never skip
+- Test code is production code — same quality standards apply
+- Every bug fix starts with a failing test that reproduces the bug
