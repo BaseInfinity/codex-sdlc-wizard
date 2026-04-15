@@ -165,8 +165,8 @@ detect_domain() {
         return
     fi
 
-    # Data science: .ipynb files present
-    if ls ./*.ipynb 2>/dev/null | head -1 | grep -q . || ls ./**/*.ipynb 2>/dev/null | head -1 | grep -q .; then
+    # Data science: .ipynb files present (find for bash 3.x compat — ** not recursive)
+    if find . -maxdepth 3 -name '*.ipynb' -print -quit 2>/dev/null | grep -q .; then
         echo "data-science"
         return
     fi
