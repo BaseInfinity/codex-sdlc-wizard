@@ -1,0 +1,75 @@
+# SDLC Enforcement
+
+## Project Context
+
+- **Language:** {{LANGUAGE}}
+- **Source:** {{SOURCE_DIR}}
+- **Tests:** {{TEST_DIR}}
+- **Domain:** {{DOMAIN}}
+
+Read TESTING.md for testing guidance before writing or modifying tests.
+Read ARCHITECTURE.md for system context before architectural changes.
+
+## Philosophy
+
+This project follows a strict Software Development Life Cycle. The goal is not speed — it is confidence. Every change should be planned, tested, and reviewed before it ships. If these docs don't fully match your project yet, improve them as you learn.
+
+## Before Every Task
+
+1. **Plan first.** State your approach and confidence level before writing code
+   - HIGH (90%+): Know exactly what to do — proceed after stating approach
+   - MEDIUM (60-89%): Solid approach, some unknowns — highlight uncertainties
+   - LOW (<60%): Not sure — do more research or ASK the user before proceeding
+2. **TDD Red:** Write a failing test FIRST that proves the feature/fix is needed
+3. **TDD Green:** Implement the minimum code to make the test pass
+4. **Run ALL tests** — not just the new one. No exceptions
+
+## Commands
+
+| Action | Command |
+|--------|---------|
+| Test | {{TEST_COMMAND}} |
+| Lint | {{LINT_COMMAND}} |
+| Build | {{BUILD_COMMAND}} |
+
+If any command above shows N/A, figure out the right command for this project and update this table.
+
+## Testing Diamond
+
+Prioritize integration tests — best bang for buck. Minimize mocking.
+
+| Layer | Ratio | Purpose |
+|-------|-------|---------|
+| E2E | ~10% | Critical user paths, prove the system works |
+| Integration | ~60% | Real dependencies, component interactions |
+| Unit | ~30% | Pure logic, edge cases, fast feedback |
+
+Flaky tests are bugs. Investigate and fix them — never skip or retry blindly.
+
+## Git Gates
+
+- Do NOT run `git commit` without ALL tests passing
+- Do NOT run `git push` without a self-review
+- These are enforced by hooks — violations are blocked automatically
+
+## Self-Review
+
+After implementation, BEFORE presenting to the user:
+
+1. Re-read every file you changed — look for bugs, dead code, leftover debug statements
+2. Run the full test suite
+3. Check: did you only change what was asked? No scope creep
+4. Check: any security issues? (injection, secrets, permissions)
+
+## Principles
+
+- Don't over-engineer. Three similar lines beat a premature abstraction
+- Don't add features beyond what was asked
+- Delete dead code — no legacy fallbacks, no commented-out blocks
+- Test code is production code — same quality standards
+- Every bug fix starts with a failing test that reproduces the bug
+- If you fail twice on the same problem, STOP and ask the user
+
+## Self-Improving
+
+If you discover something about this project that these docs don't cover — a test command, a build step, an architectural pattern — update the relevant doc. These files are living documents, not static templates.
