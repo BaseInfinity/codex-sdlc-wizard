@@ -104,7 +104,8 @@ generate_testing_md() {
     content=$(substitute_template "$SCRIPT_DIR/templates/TESTING.md.tmpl")
 
     # Replace {{DOMAIN_SECTION}} with the actual domain content
-    echo "$content" | sed "/{{DOMAIN_SECTION}}/r /dev/stdin" <<< "$domain_section" | sed '/{{DOMAIN_SECTION}}/d' > "$target"
+    # Use parameter expansion — simpler and more portable than sed r
+    echo "${content//\{\{DOMAIN_SECTION\}\}/$domain_section}" > "$target"
     echo "Generated TESTING.md ($DOMAIN domain)"
 }
 
