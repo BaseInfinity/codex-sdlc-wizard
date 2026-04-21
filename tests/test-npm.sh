@@ -35,7 +35,7 @@ test_package_metadata_exists() {
     [ -f "$PACKAGE_JSON" ] || has_name=false
     jq -e '.name == "codex-sdlc-wizard"' "$PACKAGE_JSON" >/dev/null 2>&1 || has_name=false
     jq -e '.version | type == "string"' "$PACKAGE_JSON" >/dev/null 2>&1 || has_version=false
-    jq -e '.bin["codex-sdlc-wizard"] == "./bin/codex-sdlc-wizard.js"' "$PACKAGE_JSON" >/dev/null 2>&1 || has_bin=false
+    jq -e '.bin["codex-sdlc-wizard"] == "bin/codex-sdlc-wizard.js"' "$PACKAGE_JSON" >/dev/null 2>&1 || has_bin=false
 
     if [ "$has_name" = "true" ] &&
        [ "$has_version" = "true" ] &&
@@ -61,6 +61,8 @@ test_npm_pack_includes_runtime_files() {
     local has_setup=true
     local has_hooks=true
     local has_bin=true
+    local has_skill=true
+    local has_openai_yaml=true
 
     if [ -z "$tarball_name" ] || [ ! -f "$pack_dir/$tarball_name" ]; then
         has_tarball=false
@@ -68,11 +70,15 @@ test_npm_pack_includes_runtime_files() {
         has_setup=false
         has_hooks=false
         has_bin=false
+        has_skill=false
+        has_openai_yaml=false
     else
         tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/install.sh$' || has_install=false
         tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/setup.sh$' || has_setup=false
         tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/.codex/hooks/bash-guard.sh$' || has_hooks=false
         tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/bin/codex-sdlc-wizard.js$' || has_bin=false
+        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/SKILL.md$' || has_skill=false
+        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/agents/openai.yaml$' || has_openai_yaml=false
     fi
 
     rm -rf "$pack_dir" "$npm_cache"
@@ -81,8 +87,10 @@ test_npm_pack_includes_runtime_files() {
        [ "$has_install" = "true" ] &&
        [ "$has_setup" = "true" ] &&
        [ "$has_hooks" = "true" ] &&
-       [ "$has_bin" = "true" ]; then
-        pass "npm pack includes the CLI and installer runtime files"
+       [ "$has_bin" = "true" ] &&
+       [ "$has_skill" = "true" ] &&
+       [ "$has_openai_yaml" = "true" ]; then
+        pass "npm pack includes the CLI, installer, and skill runtime files"
     else
         fail "npm pack is missing required runtime files"
     fi

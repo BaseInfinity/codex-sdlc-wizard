@@ -65,22 +65,22 @@ test_installer_smoke_test_clean_project() {
 test_readme_explains_distribution_model() {
     local has_section=true
     local has_adapter=true
-    local has_not_skill=true
+    local has_skill=true
     local has_not_plugin=true
     local has_install_sh=true
 
     grep -q '^## What This Repo Is$' "$README" || has_section=false
     grep -qi 'installer-style adapter' "$README" || has_adapter=false
-    grep -qi 'not a Codex skill' "$README" || has_not_skill=false
+    grep -qi 'Codex skill' "$README" || has_skill=false
     grep -qi 'not a Codex plugin' "$README" || has_not_plugin=false
     grep -q '`install.sh`' "$README" || has_install_sh=false
 
     if [ "$has_section" = "true" ] &&
        [ "$has_adapter" = "true" ] &&
-       [ "$has_not_skill" = "true" ] &&
+       [ "$has_skill" = "true" ] &&
        [ "$has_not_plugin" = "true" ] &&
        [ "$has_install_sh" = "true" ]; then
-        pass "README explains the current distribution model near the top"
+        pass "README explains the dual skill plus installer distribution near the top"
     else
         fail "README does not clearly explain adapter vs skill vs plugin"
     fi

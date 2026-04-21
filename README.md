@@ -4,16 +4,16 @@ An adapter that brings [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-
 
 ## What This Repo Is
 
-This repo is currently an **installer-style adapter** for Codex projects.
+This repo is now a **Codex skill plus installer-style adapter** for Codex projects.
 
-- It is **not a Codex skill** today.
+- It ships a repo-root `SKILL.md` for the normal Codex skill install flow.
 - It is **not a Codex plugin** today.
-- The supported install path is to run `install.sh` inside the target project you want to enforce.
+- It still ships `install.sh` / `setup.sh` when you want direct repo mutation from GitHub or npm.
 
 | Need | Use | Why |
 |------|-----|-----|
-| Add SDLC enforcement to an existing Codex project now | `install.sh` | This repo ships hooks, config, and baseline docs for a target repo |
-| Install a reusable Codex skill from this repo | Not supported yet | Skill packaging is tracked separately and does not exist in the current repo layout |
+| Install a reusable Codex skill from this repo | `SKILL.md` | The repo root is now a Codex skill package for normal GitHub skill-install flow |
+| Add SDLC enforcement to an existing Codex project now | `install.sh` or `setup.sh` | The skill and npm package both wrap the same installer scripts for target repos |
 | Install a Codex plugin from this repo | Not supported | There is no `.codex-plugin/plugin.json` package here |
 
 ## Self-Adapting SDLC Enforcement
@@ -65,6 +65,8 @@ For adaptive setup instead of the basic installer:
 npx codex-sdlc-wizard@X.Y.Z setup --yes
 ```
 
+If you want Codex to discover this as a reusable skill, install this repository through the normal GitHub skill-install flow. The repo root now contains `SKILL.md` and `agents/openai.yaml`, while the bundled skill behavior still delegates real repo mutation to `install.sh` / `setup.sh`.
+
 ## Releases
 
 Versioned releases for this adapter live at:
@@ -76,6 +78,10 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 ```bash
 # npm / npx
 npx codex-sdlc-wizard@X.Y.Z
+
+# Codex skill install
+# Install this repository through the normal GitHub skill-install flow
+# so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
 git clone --branch vX.Y.Z --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
@@ -129,6 +135,9 @@ bash tests/test-release.sh
 # Packaging smoke test (clean temp project, validates install path)
 bash tests/test-packaging.sh
 
+# Codex skill package smoke test
+bash tests/test-skill.sh
+
 # npm / npx packaging smoke test
 bash tests/test-npm.sh
 
@@ -141,6 +150,7 @@ bash tests/test-e2e.sh
 
 - Release contract tests for semver tags, GitHub Releases, and README release docs
 - Packaging smoke tests for the documented installer path and README packaging contract
+- Skill packaging tests for SKILL.md, agents/openai.yaml, and dual-distribution docs
 - npm packaging smoke tests for package metadata, packed contents, and npm exec
 - 15 behavioral unit tests (hook behavior, payload format, config merge, install)
 - 5 E2E integration tests (real Codex sessions proving hooks fire)
