@@ -56,8 +56,10 @@ cd your-project
 bash /tmp/codex-sdlc-wizard/install.sh
 
 # Start coding with SDLC enforcement
-codex
+codex --full-auto
 ```
+
+`codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing/runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
 
 For adaptive setup instead of the basic installer:
 
