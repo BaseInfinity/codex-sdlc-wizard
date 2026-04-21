@@ -55,3 +55,11 @@ After `0.3.1` and issue cleanup, the main backlog is:
 1. Clean up stale shipped issues
 2. Take `#14`
 3. Work through `#4` to `#10` as docs/process/product-shape improvements
+
+## Later Research
+
+After the current backlog is under control, investigate whether Codex's built-in `Skill Creator` and `Plugin Creator` can help reduce maintenance or packaging friction for this repo.
+
+- evaluate `Skill Creator` as a possible future aid for skill-structure maintenance
+- evaluate `Plugin Creator` only as later research, since plugins are not part of the current shipping path
+- keep this behind the active workload so it does not compete with `#14` or the `#4` to `#10` backlog
