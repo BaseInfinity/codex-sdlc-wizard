@@ -93,9 +93,39 @@ test_readme_documents_dual_distribution() {
     fi
 }
 
+test_readme_recommends_full_auto() {
+    local has_full_auto=true
+    local has_manual_fallback=true
+
+    grep -q 'codex --full-auto' "$README" || has_full_auto=false
+    grep -q 'plain `codex`' "$README" || has_manual_fallback=false
+
+    if [ "$has_full_auto" = "true" ] && [ "$has_manual_fallback" = "true" ]; then
+        pass "README recommends codex --full-auto with plain codex as the manual fallback"
+    else
+        fail "README does not document the recommended Codex startup mode"
+    fi
+}
+
+test_skill_recommends_full_auto_after_install() {
+    local mentions_full_auto=true
+    local mentions_fresh_session=true
+
+    grep -q 'codex --full-auto' "$SKILL_MD" || mentions_full_auto=false
+    grep -qi 'fresh Codex session' "$SKILL_MD" || mentions_fresh_session=false
+
+    if [ "$mentions_full_auto" = "true" ] && [ "$mentions_fresh_session" = "true" ]; then
+        pass "SKILL.md tells users to start a fresh codex --full-auto session after install"
+    else
+        fail "SKILL.md does not guide post-install Codex startup clearly enough"
+    fi
+}
+
 test_skill_manifest_exists
 test_agents_openai_yaml_exists
 test_readme_documents_dual_distribution
+test_readme_recommends_full_auto
+test_skill_recommends_full_auto_after_install
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
