@@ -48,10 +48,10 @@ This adapter evolves automatically with the upstream [SDLC Wizard](https://githu
 
 ```bash
 # Install from npm via npx
-npx codex-sdlc-wizard@0.1.0
+npx codex-sdlc-wizard@X.Y.Z
 
 # Or clone the adapter release directly
-git clone --branch v0.1.0 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch vX.Y.Z --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 cd your-project
 bash /tmp/codex-sdlc-wizard/install.sh
 
@@ -62,7 +62,7 @@ codex
 For adaptive setup instead of the basic installer:
 
 ```bash
-npx codex-sdlc-wizard@0.1.0 setup --yes
+npx codex-sdlc-wizard@X.Y.Z setup --yes
 ```
 
 ## Releases
