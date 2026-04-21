@@ -47,7 +47,7 @@ test_roadmap_states_current_release_status() {
     ' "$ROADMAP")
 
     grep -q '^## Current State$' "$ROADMAP" || has_heading=false
-    echo "$current_state_section" | grep -Eq '0\.3\.1|v0\.3\.1' || has_current_release=false
+    echo "$current_state_section" | grep -Eq '0\.4\.0|v0\.4\.0' || has_current_release=false
     echo "$current_state_section" | grep -qi 'trusted publishing' || has_trusted_publishing=false
 
     if [ "$has_heading" = "true" ] &&
@@ -72,7 +72,7 @@ test_roadmap_lists_next_release_cycle() {
     ' "$ROADMAP")
 
     grep -q '^## Next Release Cycle$' "$ROADMAP" || has_heading=false
-    echo "$next_release_section" | grep -q '0.4.0' || has_minor_release=false
+    echo "$next_release_section" | grep -q '0.5.0' || has_minor_release=false
     echo "$next_release_section" | grep -q '#14' || has_issue14=false
 
     if [ "$has_heading" = "true" ] &&
@@ -86,20 +86,27 @@ test_roadmap_lists_next_release_cycle() {
 
 test_roadmap_calls_out_stale_issue_cleanup() {
     local has_heading=true
-    local has_issue11=true
-    local has_issue12=true
-    local has_issue13=true
+    local has_issue4=true
+    local has_issue5=true
+    local has_issue6=true
+    local cleanup_section
+
+    cleanup_section=$(awk '
+        /^## Tracker Cleanup$/ { in_section=1; next }
+        /^## / && in_section { exit }
+        in_section { print }
+    ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    grep -q '#11' "$ROADMAP" || has_issue11=false
-    grep -q '#12' "$ROADMAP" || has_issue12=false
-    grep -q '#13' "$ROADMAP" || has_issue13=false
+    echo "$cleanup_section" | grep -q '#4' || has_issue4=false
+    echo "$cleanup_section" | grep -q '#5' || has_issue5=false
+    echo "$cleanup_section" | grep -q '#6' || has_issue6=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_issue11" = "true" ] &&
-       [ "$has_issue12" = "true" ] &&
-       [ "$has_issue13" = "true" ]; then
-        pass "Roadmap calls out stale shipped issues for cleanup"
+       [ "$has_issue4" = "true" ] &&
+       [ "$has_issue5" = "true" ] &&
+       [ "$has_issue6" = "true" ]; then
+        pass "Roadmap calls out the consumer-path release issues for cleanup"
     else
         fail "Roadmap does not call out tracker cleanup clearly"
     fi
@@ -123,12 +130,10 @@ test_roadmap_tracks_late_creator_investigation() {
     fi
 }
 
-test_roadmap_prioritizes_consumer_path_before_discovery_bridge() {
+test_roadmap_prioritizes_discovery_bridge_before_docs_process_backlog() {
     local order_section
-    local line_issue5
-    local line_issue6
-    local line_issue4
     local line_issue14
+    local line_docs_backlog
 
     order_section=$(awk '
         /^## Working Order$/ { in_section=1; next }
@@ -136,21 +141,15 @@ test_roadmap_prioritizes_consumer_path_before_discovery_bridge() {
         in_section { print }
     ' "$ROADMAP")
 
-    line_issue5=$(echo "$order_section" | nl -ba | grep '#5' | awk '{print $1}' | head -n1)
-    line_issue6=$(echo "$order_section" | nl -ba | grep '#6' | awk '{print $1}' | head -n1)
-    line_issue4=$(echo "$order_section" | nl -ba | grep '#4' | awk '{print $1}' | head -n1)
     line_issue14=$(echo "$order_section" | nl -ba | grep '#14' | awk '{print $1}' | head -n1)
+    line_docs_backlog=$(echo "$order_section" | nl -ba | grep '#7.*#10' | awk '{print $1}' | head -n1)
 
-    if [ -n "${line_issue5:-}" ] &&
-       [ -n "${line_issue6:-}" ] &&
-       [ -n "${line_issue4:-}" ] &&
-       [ -n "${line_issue14:-}" ] &&
-       [ "$line_issue5" -lt "$line_issue14" ] &&
-       [ "$line_issue6" -lt "$line_issue14" ] &&
-       [ "$line_issue4" -lt "$line_issue14" ]; then
-        pass "Roadmap prioritizes consumer-path work (#5/#6/#4) before the Codex discovery bridge (#14)"
+    if [ -n "${line_issue14:-}" ] &&
+       [ -n "${line_docs_backlog:-}" ] &&
+       [ "$line_issue14" -lt "$line_docs_backlog" ]; then
+        pass "Roadmap prioritizes the Codex discovery bridge (#14) before the docs/process backlog (#7-#10)"
     else
-        fail "Roadmap does not prioritize consumer-path work ahead of #14"
+        fail "Roadmap does not prioritize #14 ahead of the remaining docs/process backlog"
     fi
 }
 
@@ -159,7 +158,7 @@ test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_calls_out_stale_issue_cleanup
 test_roadmap_tracks_late_creator_investigation
-test_roadmap_prioritizes_consumer_path_before_discovery_bridge
+test_roadmap_prioritizes_discovery_bridge_before_docs_process_backlog
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
