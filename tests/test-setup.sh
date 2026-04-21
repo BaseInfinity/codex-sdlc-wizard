@@ -216,6 +216,11 @@ run_setup() {
     (cd "$project_dir" && bash "$SETUP_SH" --yes 2>/dev/null) || true
 }
 
+run_setup_capture() {
+    local project_dir="$1"
+    (cd "$project_dir" && bash "$SETUP_SH" --yes 2>&1) || true
+}
+
 # ---- Test 11: Template substitution produces valid AGENTS.md under 32KiB ----
 test_template_agents_md_valid() {
     local ws
@@ -348,6 +353,23 @@ test_manifest_created() {
     fi
 }
 
+test_setup_recommends_full_auto() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    local output
+    output=$(run_setup_capture "$ws")
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q "codex --full-auto"; then
+        pass "setup.sh recommends codex --full-auto after installation"
+    else
+        fail "setup.sh does not recommend codex --full-auto"
+    fi
+}
+
 # ---- Run all tests ----
 test_detect_nodejs
 test_detect_rust
@@ -364,6 +386,7 @@ test_template_testing_md_domain
 test_generated_no_placeholders
 test_agents_md_read_directives
 test_manifest_created
+test_setup_recommends_full_auto
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
