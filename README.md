@@ -2,6 +2,20 @@
 
 An adapter that brings [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard) enforcement to OpenAI's Codex CLI.
 
+## What This Repo Is
+
+This repo is currently an **installer-style adapter** for Codex projects.
+
+- It is **not a Codex skill** today.
+- It is **not a Codex plugin** today.
+- The supported install path is to run `install.sh` inside the target project you want to enforce.
+
+| Need | Use | Why |
+|------|-----|-----|
+| Add SDLC enforcement to an existing Codex project now | `install.sh` | This repo ships hooks, config, and baseline docs for a target repo |
+| Install a reusable Codex skill from this repo | Not supported yet | Skill packaging is tracked separately and does not exist in the current repo layout |
+| Install a Codex plugin from this repo | Not supported | There is no `.codex-plugin/plugin.json` package here |
+
 ## Self-Adapting SDLC Enforcement
 
 Like a suit that molds to its wearer, the SDLC Wizard adapts to YOUR project. The Claude Code version reads your repo's language, framework, test runner, and domain to generate tailored docs, hooks, and config. This Codex adapter brings that same philosophy — starting with universal SDLC enforcement hooks, evolving toward full project-adaptive setup.
@@ -44,12 +58,41 @@ bash /tmp/codex-sdlc-wizard/install.sh
 codex
 ```
 
-### What install.sh Does
+## Releases
+
+Versioned releases for this adapter live at:
+
+https://github.com/BaseInfinity/codex-sdlc-wizard/releases
+
+If you are consuming this repo in a real project, prefer a tagged release over `main`.
+
+```bash
+# Install a pinned release instead of main
+git clone --branch vX.Y.Z --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+cd your-project
+bash /tmp/codex-sdlc-wizard/install.sh
+```
+
+### Maintainer Release Flow
+
+This adapter should follow the same semver-tag plus GitHub Release rhythm as the upstream wizard.
+
+```bash
+# After tests pass on main
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+Pushing a `vX.Y.Z` tag triggers this repo's release workflow and publishes GitHub Release notes automatically. `workflow_dispatch` exists as a retry path for an existing tag if a release job needs to be rerun.
+
+### What `install.sh` Changes
 
 1. Copies `AGENTS.md` (skips if exists — your customizations are safe)
 2. Creates/merges `.codex/config.toml` with `codex_hooks = true`
 3. Installs `.codex/hooks.json` (backs up existing)
 4. Copies hook scripts to `.codex/hooks/`
+
+In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, and `.codex/hooks/*.sh`.
 
 ### Requirements
 
@@ -72,6 +115,12 @@ PASS: E2E: Session works without AGENTS.md (hook warns, doesn't crash)
 ## Testing
 
 ```bash
+# Release contract tests (workflow + docs)
+bash tests/test-release.sh
+
+# Packaging smoke test (clean temp project, validates install path)
+bash tests/test-packaging.sh
+
 # Unit tests (no API calls, fast)
 bash tests/test-adapter.sh
 
@@ -79,6 +128,8 @@ bash tests/test-adapter.sh
 bash tests/test-e2e.sh
 ```
 
+- Release contract tests for semver tags, GitHub Releases, and README release docs
+- Packaging smoke tests for the documented installer path and README packaging contract
 - 15 behavioral unit tests (hook behavior, payload format, config merge, install)
 - 5 E2E integration tests (real Codex sessions proving hooks fire)
 
