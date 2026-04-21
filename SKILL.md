@@ -17,7 +17,7 @@ Use the bundled scripts like this:
 1. If the user wants the simplest install, run the bundled `install.sh` from this skill bundle against the current working repo.
 2. If the user wants repo-aware setup or regenerated docs, run the bundled `setup.sh --yes` from this skill bundle against the current working repo.
 3. Tell the user exactly which path you chose: `install.sh` for baseline enforcement, `setup.sh` for adaptive setup.
-4. After installation, tell the user to start a fresh Codex session so hooks and repo docs are loaded cleanly.
+4. After installation, tell the user to start a fresh Codex session so hooks and repo docs are loaded cleanly. Recommend `codex --full-auto` as the default start mode once the guardrails are installed, and mention plain `codex` as the manual fallback.
 
 Rules:
 - Do not invent a second installer path when the bundled scripts already do the job.
