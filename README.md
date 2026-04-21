@@ -47,15 +47,22 @@ This adapter evolves automatically with the upstream [SDLC Wizard](https://githu
 ## Quick Start
 
 ```bash
-# Clone the adapter
-git clone https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+# Install from npm via npx
+npx codex-sdlc-wizard@0.1.0
 
-# Install into your project
+# Or clone the adapter release directly
+git clone --branch v0.1.0 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 cd your-project
 bash /tmp/codex-sdlc-wizard/install.sh
 
 # Start coding with SDLC enforcement
 codex
+```
+
+For adaptive setup instead of the basic installer:
+
+```bash
+npx codex-sdlc-wizard@0.1.0 setup --yes
 ```
 
 ## Releases
@@ -67,10 +74,11 @@ https://github.com/BaseInfinity/codex-sdlc-wizard/releases
 If you are consuming this repo in a real project, prefer a tagged release over `main`.
 
 ```bash
-# Install a pinned release instead of main
+# npm / npx
+npx codex-sdlc-wizard@X.Y.Z
+
+# git-based install
 git clone --branch vX.Y.Z --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
-cd your-project
-bash /tmp/codex-sdlc-wizard/install.sh
 ```
 
 ### Maintainer Release Flow
@@ -121,6 +129,9 @@ bash tests/test-release.sh
 # Packaging smoke test (clean temp project, validates install path)
 bash tests/test-packaging.sh
 
+# npm / npx packaging smoke test
+bash tests/test-npm.sh
+
 # Unit tests (no API calls, fast)
 bash tests/test-adapter.sh
 
@@ -130,6 +141,7 @@ bash tests/test-e2e.sh
 
 - Release contract tests for semver tags, GitHub Releases, and README release docs
 - Packaging smoke tests for the documented installer path and README packaging contract
+- npm packaging smoke tests for package metadata, packed contents, and npm exec
 - 15 behavioral unit tests (hook behavior, payload format, config merge, install)
 - 5 E2E integration tests (real Codex sessions proving hooks fire)
 
