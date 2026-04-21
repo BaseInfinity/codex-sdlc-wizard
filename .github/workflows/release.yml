@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -44,9 +45,9 @@ jobs:
         run: git checkout "${{ steps.tag.outputs.tag }}"
 
       - name: Set up Node.js for npm publish
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
       - name: Validate package version matches release tag
@@ -65,20 +66,6 @@ jobs:
           echo "name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
           echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Require NPM_TOKEN secret
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "$NPM_TOKEN" ]; then
-            echo "NPM_TOKEN secret is required for npm publishing"
-            exit 1
-          fi
-
-      - name: Verify npm authentication
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm whoami
-
       - name: Check whether npm version already exists
         id: npm
         run: |
@@ -90,8 +77,6 @@ jobs:
 
       - name: Publish package to npm
         if: steps.npm.outputs.exists != 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
 
       - name: Create GitHub Release
