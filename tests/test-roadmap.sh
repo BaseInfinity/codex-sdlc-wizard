@@ -105,10 +105,29 @@ test_roadmap_calls_out_stale_issue_cleanup() {
     fi
 }
 
+test_roadmap_tracks_late_creator_investigation() {
+    local has_skill_creator=true
+    local has_plugin_creator=true
+    local has_later_priority=true
+
+    grep -qi 'Skill Creator' "$ROADMAP" || has_skill_creator=false
+    grep -qi 'Plugin Creator' "$ROADMAP" || has_plugin_creator=false
+    grep -Eqi 'later|down the road|after' "$ROADMAP" || has_later_priority=false
+
+    if [ "$has_skill_creator" = "true" ] &&
+       [ "$has_plugin_creator" = "true" ] &&
+       [ "$has_later_priority" = "true" ]; then
+        pass "Roadmap tracks Skill Creator / Plugin Creator investigation as later work"
+    else
+        fail "Roadmap does not track the later Skill Creator / Plugin Creator investigation"
+    fi
+}
+
 test_roadmap_exists
 test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_calls_out_stale_issue_cleanup
+test_roadmap_tracks_late_creator_investigation
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
