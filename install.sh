@@ -54,4 +54,5 @@ echo "Installed hook scripts"
 
 echo ""
 echo "SDLC Wizard for Codex installed."
-echo "Run 'codex' to start a session with SDLC enforcement."
+echo "Recommended start: 'codex --full-auto' for low-friction SDLC inside the repo guardrails."
+echo "Use plain 'codex' instead if you want more manual confirmation."
