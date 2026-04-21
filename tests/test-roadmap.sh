@@ -38,10 +38,17 @@ test_roadmap_states_current_release_status() {
     local has_heading=true
     local has_current_release=true
     local has_trusted_publishing=true
+    local current_state_section
+
+    current_state_section=$(awk '
+        /^## Current State$/ { in_section=1; next }
+        /^## / && in_section { exit }
+        in_section { print }
+    ' "$ROADMAP")
 
     grep -q '^## Current State$' "$ROADMAP" || has_heading=false
-    grep -Eq '0\.3\.0|v0\.3\.0' "$ROADMAP" || has_current_release=false
-    grep -qi 'trusted publishing' "$ROADMAP" || has_trusted_publishing=false
+    echo "$current_state_section" | grep -Eq '0\.3\.1|v0\.3\.1' || has_current_release=false
+    echo "$current_state_section" | grep -qi 'trusted publishing' || has_trusted_publishing=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$has_current_release" = "true" ] &&
@@ -54,15 +61,22 @@ test_roadmap_states_current_release_status() {
 
 test_roadmap_lists_next_release_cycle() {
     local has_heading=true
-    local has_patch_release=true
+    local has_minor_release=true
     local has_issue14=true
+    local next_release_section
+
+    next_release_section=$(awk '
+        /^## Next Release Cycle$/ { in_section=1; next }
+        /^## / && in_section { exit }
+        in_section { print }
+    ' "$ROADMAP")
 
     grep -q '^## Next Release Cycle$' "$ROADMAP" || has_heading=false
-    grep -q '0.3.1' "$ROADMAP" || has_patch_release=false
-    grep -q '#14' "$ROADMAP" || has_issue14=false
+    echo "$next_release_section" | grep -q '0.4.0' || has_minor_release=false
+    echo "$next_release_section" | grep -q '#14' || has_issue14=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_patch_release" = "true" ] &&
+       [ "$has_minor_release" = "true" ] &&
        [ "$has_issue14" = "true" ]; then
         pass "Roadmap lists the next release proof and main engineering item"
     else
