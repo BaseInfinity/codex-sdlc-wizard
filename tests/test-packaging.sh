@@ -62,6 +62,29 @@ test_installer_smoke_test_clean_project() {
     fi
 }
 
+test_installer_recommends_full_auto() {
+    local adapter_clone
+    local target_repo
+    local output
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+
+    output=$(
+        cd "$target_repo" &&
+        bash "$adapter_clone/install.sh" 2>&1
+    )
+
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if echo "$output" | grep -q "codex --full-auto"; then
+        pass "Installer output recommends codex --full-auto after setup"
+    else
+        fail "Installer output does not recommend codex --full-auto"
+    fi
+}
+
 test_readme_explains_distribution_model() {
     local has_section=true
     local has_adapter=true
@@ -123,11 +146,27 @@ test_readme_mentions_packaging_test_command() {
     fi
 }
 
+test_readme_recommends_full_auto() {
+    local has_full_auto=true
+    local has_manual_fallback=true
+
+    grep -q 'codex --full-auto' "$README" || has_full_auto=false
+    grep -q 'plain `codex`' "$README" || has_manual_fallback=false
+
+    if [ "$has_full_auto" = "true" ] && [ "$has_manual_fallback" = "true" ]; then
+        pass "README recommends codex --full-auto and documents plain codex as fallback"
+    else
+        fail "README does not document the recommended Codex startup mode clearly"
+    fi
+}
+
 test_installer_smoke_test_clean_project
+test_installer_recommends_full_auto
 test_readme_explains_distribution_model
 test_readme_has_install_choice_table
 test_readme_explains_install_side_effects
 test_readme_mentions_packaging_test_command
+test_readme_recommends_full_auto
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
