@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 PACKAGE_JSON="$REPO_DIR/package.json"
+ROADMAP="$REPO_DIR/ROADMAP.md"
 PASSED=0
 FAILED=0
 MKTEMP_DIR="${TMPDIR:-/tmp}"
@@ -43,6 +44,22 @@ test_package_metadata_exists() {
         pass "package.json exposes the codex-sdlc-wizard CLI"
     else
         fail "package.json is missing the expected npm CLI metadata"
+    fi
+}
+
+test_package_version_matches_roadmap_current_release() {
+    local package_version current_state_section
+    package_version=$(jq -r '.version' "$PACKAGE_JSON" 2>/dev/null || true)
+    current_state_section=$(awk '
+        /^## Current State$/ { in_section=1; next }
+        /^## / && in_section { exit }
+        in_section { print }
+    ' "$ROADMAP")
+
+    if [ -n "$package_version" ] && echo "$current_state_section" | grep -q "$package_version"; then
+        pass "package.json version matches the roadmap current-release state"
+    else
+        fail "package.json version does not match the roadmap current-release state"
     fi
 }
 
@@ -134,6 +151,7 @@ test_local_npx_installs_into_clean_repo() {
 }
 
 test_package_metadata_exists
+test_package_version_matches_roadmap_current_release
 test_npm_pack_includes_runtime_files
 test_local_npx_installs_into_clean_repo
 

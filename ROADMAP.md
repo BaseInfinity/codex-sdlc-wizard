@@ -2,28 +2,17 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.3.1` and `v0.3.1` are live
+- `codex-sdlc-wizard@0.4.0` and `v0.4.0` are live
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
+- consumer-path hardening for auth-heavy boundaries, capability detectors, and docs-strong scaffold repos is shipped
 - release, packaging, npm, skill, setup, adapter, and E2E tests are green
 
 ## Next Release Cycle
 
-### 0.4.0
-
-Purpose: harden the consumer path before broader rollout.
-
-Scope:
-- issue `#5`
-- make auth-heavy / WAM / MFA boundaries explicit in docs and setup output
-- issue `#6`
-- encourage capability-detector patterns for auth/license-sensitive repos
-- issue `#4`
-- improve setup parity for docs-heavy / scaffold-heavy repos
-
 ### 0.5.0
 
-Purpose: finish the biggest remaining Codex-native engineering gap once consumer setup is stronger.
+Purpose: finish the biggest remaining Codex-native engineering gap now that the consumer path is stronger.
 
 Scope:
 - issue `#14`
@@ -42,20 +31,17 @@ Scope:
 
 ## Tracker Cleanup
 
-The issue tracker should be updated now that the trusted-publishing proof release is live.
+The issue tracker should be updated now that the consumer-path release is live.
 
-- close or rewrite `#11` first-class Codex skill packaging
-- close or rewrite `#12` packaging smoke tests
-- close or rewrite `#13` README packaging clarity
+- close `#4` setup parity for docs-strong / scaffold repos
+- close `#5` auth-heavy Windows / WAM / MFA boundary docs
+- close `#6` capability detector pattern for auth/license-sensitive repos
 - review whether `#7` and `#8` should be closed as mostly shipped or narrowed to docs polish
 
 ## Remaining Backlog
 
-After `0.3.1` and issue cleanup, the main backlog is:
+After `0.4.0` and issue cleanup, the main backlog is:
 
-- `#5` auth-heavy Windows / WAM / MFA boundary docs
-- `#6` capability detector pattern for auth/license-sensitive repos
-- `#4` setup parity for doc-heavy / scaffold repos
 - `#14` Codex discovery bridge for `sdlc` / `adlc`
 - `#7` keep the honest Codex SDLC architecture explicit
 - `#8` high-confidence slices and explicit confidence reporting
@@ -64,9 +50,9 @@ After `0.3.1` and issue cleanup, the main backlog is:
 
 ## Working Order
 
-1. Finish consumer-path work: `#5`, `#6`, then `#4`
-2. Re-scope and take `#14`
-3. Work through `#7` to `#10` as docs/process/product-shape improvements
+1. Re-scope and take `#14`
+2. Work through `#7` to `#10` as docs/process/product-shape improvements
+3. Keep creator-tool investigation behind the active backlog
 
 ## Later Research
 

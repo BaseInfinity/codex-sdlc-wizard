@@ -199,10 +199,116 @@ detect_existing_docs() {
     fi
 }
 
+# ---- File Counts ----
+count_files_under() {
+    local dir="${1:-}"
+
+    if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+        echo "0"
+        return
+    fi
+
+    find "$dir" -type f \
+        ! -path '*/.git/*' \
+        ! -path '*/node_modules/*' \
+        2>/dev/null | wc -l | tr -d ' '
+}
+
+# ---- Repo Shape ----
+detect_repo_shape() {
+    local existing_docs="$1"
+    local source_dir="$2"
+    local test_dir="$3"
+    local docs_count source_file_count test_file_count
+
+    docs_count=$(printf '%s\n' "$existing_docs" | jq 'length')
+    source_file_count=$(count_files_under "$source_dir")
+    test_file_count=$(count_files_under "$test_dir")
+
+    if [ "$docs_count" -ge 3 ] &&
+       [ "$source_file_count" -le 3 ] &&
+       [ "$test_file_count" -le 1 ]; then
+        echo "docs-strong-scaffold"
+    elif [ "$docs_count" -ge 3 ]; then
+        echo "docs-strong"
+    elif [ "$source_file_count" -le 1 ] && [ "$test_file_count" -eq 0 ]; then
+        echo "scaffold"
+    else
+        echo "standard"
+    fi
+}
+
+# ---- Confidence Map ----
+build_confidence_map() {
+    local repo_shape="$1"
+    local test_command="$2"
+    local overall known unresolved
+
+    case "$repo_shape" in
+        docs-strong-scaffold)
+            overall="medium"
+            known=$(jq -cn '[
+                "Planning/docs already exist",
+                "Code/test tree is still mostly scaffold"
+            ]')
+            if [ -n "$test_command" ]; then
+                unresolved=$(jq -cn '[
+                    "Test harness shape needs explicit repo-specific interpretation"
+                ]')
+            else
+                unresolved=$(jq -cn '[
+                    "Test command is still missing",
+                    "Test harness shape needs explicit repo-specific interpretation"
+                ]')
+            fi
+            ;;
+        docs-strong)
+            overall="high"
+            known=$(jq -cn '[
+                "Planning/docs already exist",
+                "Implementation tree looks more substantial than a pure scaffold"
+            ]')
+            unresolved=$(jq -cn '[]')
+            ;;
+        scaffold)
+            overall="medium"
+            known=$(jq -cn '[
+                "Repository is still mostly scaffold"
+            ]')
+            if [ -n "$test_command" ]; then
+                unresolved=$(jq -cn '[
+                    "Detected test command likely needs confirmation against the scaffolded repo shape"
+                ]')
+            else
+                unresolved=$(jq -cn '[
+                    "Test command is still missing"
+                ]')
+            fi
+            ;;
+        *)
+            overall="high"
+            known=$(jq -cn '[
+                "Repository shape looks standard"
+            ]')
+            unresolved=$(jq -cn '[]')
+            ;;
+    esac
+
+    jq -cn \
+        --arg overall "$overall" \
+        --argjson known "$known" \
+        --argjson unresolved "$unresolved" \
+        '{
+            overall: $overall,
+            known: $known,
+            unresolved: $unresolved
+        }'
+}
+
 # ---- Main: run all detections, output JSON ----
 main() {
     local language source_dir test_dir test_framework test_command
-    local lint_command build_command ci domain existing_docs
+    local lint_command build_command ci domain existing_docs repo_shape confidence_map
 
     language=$(detect_language)
     source_dir=$(detect_source_dir)
@@ -214,6 +320,8 @@ main() {
     ci=$(detect_ci)
     domain=$(detect_domain)
     existing_docs=$(detect_existing_docs)
+    repo_shape=$(detect_repo_shape "$existing_docs" "$source_dir" "$test_dir")
+    confidence_map=$(build_confidence_map "$repo_shape" "$test_command")
 
     jq -n \
         --arg language "$language" \
@@ -225,7 +333,9 @@ main() {
         --arg build_command "$build_command" \
         --arg ci "$ci" \
         --arg domain "$domain" \
+        --arg repo_shape "$repo_shape" \
         --argjson existing_docs "$existing_docs" \
+        --argjson confidence_map "$confidence_map" \
         '{
             language: $language,
             source_dir: $source_dir,
@@ -236,7 +346,9 @@ main() {
             build_command: $build_command,
             ci: $ci,
             domain: $domain,
-            existing_docs: $existing_docs
+            existing_docs: $existing_docs,
+            repo_shape: $repo_shape,
+            confidence_map: $confidence_map
         }'
 }
 

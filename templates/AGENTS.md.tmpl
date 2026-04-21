@@ -6,6 +6,8 @@
 - **Source:** {{SOURCE_DIR}}
 - **Tests:** {{TEST_DIR}}
 - **Domain:** {{DOMAIN}}
+- **Repo shape:** {{REPO_SHAPE}}
+- **Setup confidence:** {{SETUP_CONFIDENCE}}
 
 Read TESTING.md for testing guidance before writing or modifying tests.
 Read ARCHITECTURE.md for system context before architectural changes.
@@ -33,6 +35,22 @@ This project follows a strict Software Development Life Cycle. The goal is not s
 | Build | {{BUILD_COMMAND}} |
 
 If any command above shows N/A, figure out the right command for this project and update this table.
+
+## Setup Status
+
+- Known: {{SETUP_KNOWN_SUMMARY}}
+- Unresolved: {{SETUP_UNRESOLVED_SUMMARY}}
+
+## Capability Detectors
+
+If auth, license, tenant, or account shape determines what work is possible here, add and use a repo-local capability detector instead of raw provider commands.
+
+Good patterns:
+- `doctor`
+- `check-capability`
+- `Test-*Access.ps1`
+
+Prefer one-command classification that tells you the current lane clearly before deeper work starts.
 
 ## Testing Diamond
 

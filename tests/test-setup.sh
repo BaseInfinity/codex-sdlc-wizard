@@ -210,6 +210,30 @@ test_detect_domain_cli() {
     fi
 }
 
+# ---- Test 11: Detects docs-strong scaffold repos and reports a confidence map ----
+test_detect_docs_strong_scaffold() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+    echo 'console.log("scaffold");' > "$ws/src/index.js"
+    echo '# Existing agent guidance' > "$ws/AGENTS.md"
+    echo '# Existing testing contract' > "$ws/TESTING.md"
+    echo '# Existing architecture notes' > "$ws/ARCHITECTURE.md"
+
+    local output
+    output=$(run_scan "$ws")
+    rm -rf "$ws"
+
+    if echo "$output" | jq -e '.repo_shape == "docs-strong-scaffold"' >/dev/null 2>&1 &&
+       echo "$output" | jq -e '.confidence_map.overall == "medium"' >/dev/null 2>&1 &&
+       echo "$output" | jq -e '.confidence_map.unresolved[] | select(. == "Test harness shape needs explicit repo-specific interpretation")' >/dev/null 2>&1; then
+        pass "Detects docs-strong scaffold repos and reports a confidence map"
+    else
+        fail "Did not classify docs-strong scaffold repo shape and confidence map correctly"
+    fi
+}
+
 # Helper: run setup.sh in a project dir
 run_setup() {
     local project_dir="$1"
@@ -353,6 +377,64 @@ test_manifest_created() {
     fi
 }
 
+test_setup_prints_confidence_map_for_docs_strong_scaffold() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+    echo 'console.log("scaffold");' > "$ws/src/index.js"
+    echo '# Existing agent guidance' > "$ws/AGENTS.md"
+    echo '# Existing testing contract' > "$ws/TESTING.md"
+    echo '# Existing architecture notes' > "$ws/ARCHITECTURE.md"
+
+    local output
+    output=$(run_setup_capture "$ws")
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q 'Confidence map:' &&
+       echo "$output" | grep -q 'docs-strong-scaffold' &&
+       echo "$output" | grep -q 'Test harness shape needs explicit repo-specific interpretation'; then
+        pass "setup.sh prints a confidence map for docs-strong scaffold repos"
+    else
+        fail "setup.sh does not print a strong-enough confidence map for docs-strong scaffold repos"
+    fi
+}
+
+test_manifest_records_confidence_map_for_docs_strong_scaffold() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+    echo 'console.log("scaffold");' > "$ws/src/index.js"
+    echo '# Existing agent guidance' > "$ws/AGENTS.md"
+    echo '# Existing testing contract' > "$ws/TESTING.md"
+    echo '# Existing architecture notes' > "$ws/ARCHITECTURE.md"
+
+    run_setup "$ws"
+
+    local valid=true
+    if [ ! -f "$ws/.codex-sdlc/manifest.json" ]; then
+        valid=false
+    else
+        if ! jq -e '.scan.repo_shape == "docs-strong-scaffold"' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! jq -e '.confidence_map.overall == "medium"' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! jq -e '.confidence_map.unresolved[] | select(. == "Test harness shape needs explicit repo-specific interpretation")' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "manifest.json records the confidence map for docs-strong scaffold repos"
+    else
+        fail "manifest.json does not persist the docs-strong scaffold confidence map"
+    fi
+}
+
 test_setup_recommends_full_auto() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -370,6 +452,65 @@ test_setup_recommends_full_auto() {
     fi
 }
 
+test_setup_calls_out_auth_heavy_boundary() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    local output
+    output=$(run_setup_capture "$ws")
+    rm -rf "$ws"
+
+    if echo "$output" | grep -qi 'Windows / WAM / MFA' &&
+       echo "$output" | grep -qi 'user-owned' &&
+       echo "$output" | grep -qi 'resume'; then
+        pass "setup.sh explains the user-owned auth boundary for Windows / WAM / MFA flows"
+    else
+        fail "setup.sh does not explain the auth-heavy boundary clearly enough"
+    fi
+}
+
+test_generated_agents_md_encourages_capability_detectors() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws"
+
+    local has_detector_pattern=false
+    if [ -f "$ws/AGENTS.md" ] &&
+       grep -Eqi 'doctor|check-capability|Test-.*Access|capability detector' "$ws/AGENTS.md" 2>/dev/null; then
+        has_detector_pattern=true
+    fi
+    rm -rf "$ws"
+
+    if [ "$has_detector_pattern" = "true" ]; then
+        pass "Generated AGENTS.md encourages repo-local capability detectors for auth / license-sensitive work"
+    else
+        fail "Generated AGENTS.md does not encourage capability-detector helpers"
+    fi
+}
+
+test_setup_output_encourages_capability_detectors() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    local output
+    output=$(run_setup_capture "$ws")
+    rm -rf "$ws"
+
+    if echo "$output" | grep -Eqi 'doctor|check-capability|Test-.*Access' &&
+       echo "$output" | grep -Eqi 'one-command classification|single command classification|one command classification'; then
+        pass "setup.sh output encourages capability-detector helpers over raw provider commands"
+    else
+        fail "setup.sh output does not encourage capability-detector helpers clearly enough"
+    fi
+}
+
 # ---- Run all tests ----
 test_detect_nodejs
 test_detect_rust
@@ -381,12 +522,18 @@ test_detect_test_framework
 test_detect_domain_firmware
 test_detect_domain_data_science
 test_detect_domain_cli
+test_detect_docs_strong_scaffold
 test_template_agents_md_valid
 test_template_testing_md_domain
 test_generated_no_placeholders
 test_agents_md_read_directives
 test_manifest_created
+test_setup_prints_confidence_map_for_docs_strong_scaffold
+test_manifest_records_confidence_map_for_docs_strong_scaffold
 test_setup_recommends_full_auto
+test_setup_calls_out_auth_heavy_boundary
+test_generated_agents_md_encourages_capability_detectors
+test_setup_output_encourages_capability_detectors
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

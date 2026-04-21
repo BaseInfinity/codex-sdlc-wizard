@@ -69,6 +69,40 @@ npx codex-sdlc-wizard@X.Y.Z setup --yes
 
 If you want Codex to discover this as a reusable skill, install this repository through the normal GitHub skill-install flow. The repo root now contains `SKILL.md` and `agents/openai.yaml`, while the bundled skill behavior still delegates real repo mutation to `install.sh` / `setup.sh`.
 
+## Auth-Heavy Workflow Boundaries
+
+Some repos still hit auth-heavy steps that the agent cannot finish fully on your behalf, especially on Windows when Microsoft Graph auth lands in WAM / MFA / browser sign-in flows.
+
+What stays agent-owned:
+- command shape and wrapper scripts
+- prerequisite checks and environment validation
+- outcome classification and next-step guidance
+- verify/resume commands after the live sign-in completes
+
+What stays user-owned:
+- your live Windows / browser sign-in interaction
+- WAM / MFA approval prompts that land in your session
+
+How repos should wrap these flows:
+1. give Codex an explicit auth-start command
+2. let the user complete the live sign-in step
+3. give Codex an explicit verify/resume command so the workflow continues cleanly afterward
+
+This should be presented as a boundary, not a refusal. The agent is not refusing the work; it still owns setup, checks, classification, and the resume path, while your live sign-in remains user-owned.
+
+## Capability Detectors for Auth / License-Sensitive Repos
+
+If account type, tenant shape, licensing, or permission state determines what is possible in a repo, do not leave users hand-running vague provider commands.
+
+Prefer a repo-local helper such as:
+- `doctor`
+- `check-capability`
+- `Test-*Access.ps1`
+
+Bias setup and troubleshooting toward one-command classification first. The goal is to turn provider vagueness into explicit repo-owned signals like `OK`, `NotConnected`, `PermissionError`, or `UnsupportedAccount`.
+
+Treat account type, license, tenant, and permission state as setup data, not just troubleshooting noise. Codex should be able to run the detector, classify the current lane, and continue from a clear starting point.
+
 ## Releases
 
 Versioned releases for this adapter live at:
