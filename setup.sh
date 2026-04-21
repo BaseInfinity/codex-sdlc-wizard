@@ -178,7 +178,8 @@ done
 if [ "$ERRORS" -eq 0 ]; then
     echo "  All files present."
     echo ""
-    echo "Setup complete. Trust this repo in Codex, then run 'codex' to start."
+    echo "Setup complete. Trust this repo in Codex, then start with 'codex --full-auto'."
+    echo "Use plain 'codex' instead if you want more manual confirmation."
 else
     echo ""
     echo "WARNING: $ERRORS file(s) missing — setup may be incomplete."
