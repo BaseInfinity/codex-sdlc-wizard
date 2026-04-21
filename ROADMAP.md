@@ -2,21 +2,12 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.3.0` and `v0.3.0` are live
-- npm trusted publishing is configured and the GitHub release workflow is wired for OIDC publish
+- `codex-sdlc-wizard@0.3.1` and `v0.3.1` are live
+- npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - release, packaging, npm, skill, setup, adapter, and E2E tests are green
 
 ## Next Release Cycle
-
-### 0.3.1
-
-Purpose: prove the trusted-publishing path with a real fresh npm publish instead of a rerun against an already-published `0.3.0`.
-
-Scope:
-- bump `package.json` to `0.3.1`
-- tag and release `v0.3.1`
-- verify GitHub Actions performs the real npm publish through trusted publishing
 
 ### 0.4.0
 
@@ -28,9 +19,18 @@ Scope:
 - remove Claude-only review/tool assumptions from the bridged skill text
 - add smoke coverage for repo-scope Codex discovery
 
+### 0.5.0
+
+Purpose: tighten the remaining docs/process backlog after the Codex discovery bridge lands.
+
+Scope:
+- work through `#4` to `#10`
+- keep the honest Codex SDLC architecture explicit
+- close the loop on confidence reporting, issue filing, and repo-focus guidance
+
 ## Tracker Cleanup
 
-The issue tracker should be updated to match shipped reality after the next proof release.
+The issue tracker should be updated now that the trusted-publishing proof release is live.
 
 - close or rewrite `#11` first-class Codex skill packaging
 - close or rewrite `#12` packaging smoke tests
@@ -52,7 +52,6 @@ After `0.3.1` and issue cleanup, the main backlog is:
 
 ## Working Order
 
-1. Cut `0.3.1`
-2. Clean up stale shipped issues
-3. Take `#14`
-4. Work through `#4` to `#10` as docs/process/product-shape improvements
+1. Clean up stale shipped issues
+2. Take `#14`
+3. Work through `#4` to `#10` as docs/process/product-shape improvements
