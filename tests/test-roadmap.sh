@@ -123,11 +123,43 @@ test_roadmap_tracks_late_creator_investigation() {
     fi
 }
 
+test_roadmap_prioritizes_consumer_path_before_discovery_bridge() {
+    local order_section
+    local line_issue5
+    local line_issue6
+    local line_issue4
+    local line_issue14
+
+    order_section=$(awk '
+        /^## Working Order$/ { in_section=1; next }
+        /^## / && in_section { exit }
+        in_section { print }
+    ' "$ROADMAP")
+
+    line_issue5=$(echo "$order_section" | nl -ba | grep '#5' | awk '{print $1}' | head -n1)
+    line_issue6=$(echo "$order_section" | nl -ba | grep '#6' | awk '{print $1}' | head -n1)
+    line_issue4=$(echo "$order_section" | nl -ba | grep '#4' | awk '{print $1}' | head -n1)
+    line_issue14=$(echo "$order_section" | nl -ba | grep '#14' | awk '{print $1}' | head -n1)
+
+    if [ -n "${line_issue5:-}" ] &&
+       [ -n "${line_issue6:-}" ] &&
+       [ -n "${line_issue4:-}" ] &&
+       [ -n "${line_issue14:-}" ] &&
+       [ "$line_issue5" -lt "$line_issue14" ] &&
+       [ "$line_issue6" -lt "$line_issue14" ] &&
+       [ "$line_issue4" -lt "$line_issue14" ]; then
+        pass "Roadmap prioritizes consumer-path work (#5/#6/#4) before the Codex discovery bridge (#14)"
+    else
+        fail "Roadmap does not prioritize consumer-path work ahead of #14"
+    fi
+}
+
 test_roadmap_exists
 test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_calls_out_stale_issue_cleanup
 test_roadmap_tracks_late_creator_investigation
+test_roadmap_prioritizes_consumer_path_before_discovery_bridge
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
