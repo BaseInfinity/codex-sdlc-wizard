@@ -99,11 +99,18 @@ git push origin vX.Y.Z
 
 Pushing a `vX.Y.Z` tag triggers this repo's release workflow, publishes the npm package, and publishes GitHub Release notes automatically. `workflow_dispatch` exists as a retry path for an existing tag if a release job needs to be rerun.
 
-To enable npm publish from GitHub Actions, add `NPM_TOKEN` as a repository Actions secret:
+To enable npm publish from GitHub Actions, configure npm trusted publishing for this package instead of storing a long-lived token:
 
-`Settings -> Secrets and variables -> Actions -> New repository secret`
+1. Open the npm package settings for `codex-sdlc-wizard`
+2. Go to `Trusted publishing`
+3. Choose `GitHub Actions`
+4. Configure:
+   `Organization or user`: `BaseInfinity`
+   `Repository`: `codex-sdlc-wizard`
+   `Workflow filename`: `release.yml`
+   `Environment name`: leave blank unless you later add a protected GitHub environment
 
-The workflow validates that the tag matches `package.json` and skips `npm publish` on reruns when that exact version already exists on npm.
+The workflow uses GitHub OIDC trusted publishing, validates that the tag matches `package.json`, and skips `npm publish` on reruns when that exact version already exists on npm. No `NPM_TOKEN` GitHub secret is required.
 
 ### What `install.sh` Changes
 
