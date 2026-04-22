@@ -13,6 +13,26 @@ else
   echo "AGENTS.md already exists — skipping (review manually)"
 fi
 
+install_repo_skill() {
+  local name="$1"
+  local source="$SCRIPT_DIR/.agents/skills/$name/SKILL.md"
+  local target=".agents/skills/$name/SKILL.md"
+
+  if [ ! -f "$source" ]; then
+    echo "Skill source missing for $name — skipping"
+    return
+  fi
+
+  mkdir -p "$(dirname "$target")"
+
+  if [ -f "$target" ]; then
+    echo "$target already exists — skipping (review manually)"
+  else
+    cp "$source" "$target"
+    echo "Installed $target"
+  fi
+}
+
 mkdir -p .codex/hooks
 
 # config.toml — ensure codex_hooks = true, TOML-safe
@@ -52,10 +72,15 @@ cp "$SCRIPT_DIR/.codex/hooks/"*.sh .codex/hooks/
 chmod +x .codex/hooks/*.sh
 echo "Installed hook scripts"
 
+# Repo-scoped Codex skills
+install_repo_skill sdlc
+install_repo_skill adlc
+
 echo ""
 echo "SDLC Wizard for Codex installed."
 echo "Recommended start: 'codex --full-auto' for low-friction SDLC inside the repo guardrails."
 echo "Use plain 'codex' instead if you want more manual confirmation."
+echo "Repo-scoped skills will be available in a fresh Codex session: '\$sdlc' and '\$adlc'."
 echo "Auth-heavy note: for Windows / WAM / MFA or other live sign-in flows, the prompt itself stays user-owned."
 echo "This wizard still owns command shape, checks, and the verify/resume steps after you complete sign-in."
 echo "If auth, license, tenant, or permission state decides what work is possible, add a repo-local doctor / check-capability / Test-*Access helper."

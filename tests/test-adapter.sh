@@ -133,18 +133,51 @@ test_bash_guard_reads_command_field() {
     fi
 }
 
-# Test 9: hooks.json PreToolUse matcher is ^Bash$ (not Write|Edit)
-test_hooks_json_matcher() {
-    local matcher
-    matcher=$(jq -r '.hooks.PreToolUse[0].matcher' "$REPO_DIR/.codex/hooks.json" 2>/dev/null)
-    if [ "$matcher" = "^Bash\$" ]; then
-        pass "hooks.json PreToolUse matcher is ^Bash$ (correct for Codex)"
+# Test 9: bash-guard.sh also blocks root-level command payloads
+test_bash_guard_blocks_root_command_field() {
+    local output
+    output=$(echo '{"command":"git commit -m '\''test'\''"}' | "$HOOKS_DIR/bash-guard.sh" 2>/dev/null)
+    if echo "$output" | jq -e '.decision == "block"' >/dev/null 2>&1; then
+        pass "bash-guard.sh blocks git commit from a root-level command field too"
     else
-        fail "hooks.json PreToolUse matcher is '$matcher' — should be ^Bash\$"
+        fail "bash-guard.sh did not block git commit from a root-level command field (output: $output)"
     fi
 }
 
-# Test 10: hooks.json is valid JSON with correct event-keyed format
+# Test 10: bash-guard.sh blocks git commit even when git -c flags are present
+test_bash_guard_blocks_commit_with_git_flags() {
+    local output
+    output=$(echo '{"tool_input":{"command":"git -c user.name=test -c user.email=test@example.com commit -m '\''test'\''"}}' | "$HOOKS_DIR/bash-guard.sh" 2>/dev/null)
+    if echo "$output" | jq -e '.decision == "block"' >/dev/null 2>&1; then
+        pass "bash-guard.sh blocks git commit even when git -c flags are present"
+    else
+        fail "bash-guard.sh did not block git commit with git -c flags (output: $output)"
+    fi
+}
+
+# Test 11: bash-guard.sh blocks a bare interactive shell launch used to bypass commit/push guards
+test_bash_guard_blocks_bare_interactive_shell() {
+    local output
+    output=$(echo '{"tool_input":{"command":"zsh"}}' | "$HOOKS_DIR/bash-guard.sh" 2>/dev/null)
+    if echo "$output" | jq -e '.decision == "block"' >/dev/null 2>&1; then
+        pass "bash-guard.sh blocks a bare interactive shell launch"
+    else
+        fail "bash-guard.sh did not block a bare interactive shell launch (output: $output)"
+    fi
+}
+
+# Test 12: hooks.json PreToolUse matcher covers both legacy Bash and current command_execution
+test_hooks_json_matcher() {
+    local matcher
+    matcher=$(jq -r '.hooks.PreToolUse[0].matcher' "$REPO_DIR/.codex/hooks.json" 2>/dev/null)
+    if [ "$matcher" = "^(Bash|command_execution)\$" ]; then
+        pass "hooks.json PreToolUse matcher covers Bash and command_execution for Codex shell runs"
+    else
+        fail "hooks.json PreToolUse matcher is '$matcher' — should cover Bash and command_execution"
+    fi
+}
+
+# Test 13: hooks.json is valid JSON with correct event-keyed format
 test_hooks_json_valid() {
     if jq -e '.hooks.UserPromptSubmit and .hooks.PreToolUse and .hooks.SessionStart' "$REPO_DIR/.codex/hooks.json" >/dev/null 2>&1; then
         pass "hooks.json is valid JSON with all 3 event keys"
@@ -155,7 +188,7 @@ test_hooks_json_valid() {
 
 # ---- Config and install tests ----
 
-# Test 11: config.toml enables codex_hooks feature flag
+# Test 14: config.toml enables codex_hooks feature flag
 test_config_enables_hooks() {
     if grep -q 'codex_hooks\s*=\s*true' "$REPO_DIR/.codex/config.toml" 2>/dev/null; then
         pass "config.toml enables codex_hooks = true"
@@ -164,7 +197,7 @@ test_config_enables_hooks() {
     fi
 }
 
-# Test 12: install.sh doesn't overwrite existing AGENTS.md
+# Test 15: install.sh doesn't overwrite existing AGENTS.md
 test_install_preserves_agents_md() {
     local tmpdir
     tmpdir=$(mktemp -d)
@@ -180,7 +213,7 @@ test_install_preserves_agents_md() {
     fi
 }
 
-# Test 13: install.sh merges codex_hooks into existing config.toml (4 cases)
+# Test 16: install.sh merges codex_hooks into existing config.toml (4 cases)
 test_install_merges_config() {
     local all_passed=true
 
@@ -303,6 +336,9 @@ test_bash_guard_allows_git_diff
 test_session_start_warns_missing
 test_session_start_silent_when_present
 test_bash_guard_reads_command_field
+test_bash_guard_blocks_root_command_field
+test_bash_guard_blocks_commit_with_git_flags
+test_bash_guard_blocks_bare_interactive_shell
 test_hooks_json_matcher
 test_hooks_json_valid
 test_config_enables_hooks

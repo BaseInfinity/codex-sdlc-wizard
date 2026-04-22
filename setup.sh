@@ -170,6 +170,8 @@ jq -n \
     --arg bash_guard_hash "$(compute_hash .codex/hooks/bash-guard.sh)" \
     --arg prompt_check_hash "$(compute_hash .codex/hooks/sdlc-prompt-check.sh)" \
     --arg session_start_hash "$(compute_hash .codex/hooks/session-start.sh)" \
+    --arg sdlc_skill_hash "$(compute_hash .agents/skills/sdlc/SKILL.md)" \
+    --arg adlc_skill_hash "$(compute_hash .agents/skills/adlc/SKILL.md)" \
     '{
         adapter_version: $adapter_version,
         installed_at: $installed_at,
@@ -191,7 +193,9 @@ jq -n \
             ".codex/hooks.json": $hooks_json_hash,
             ".codex/hooks/bash-guard.sh": $bash_guard_hash,
             ".codex/hooks/sdlc-prompt-check.sh": $prompt_check_hash,
-            ".codex/hooks/session-start.sh": $session_start_hash
+            ".codex/hooks/session-start.sh": $session_start_hash,
+            ".agents/skills/sdlc/SKILL.md": $sdlc_skill_hash,
+            ".agents/skills/adlc/SKILL.md": $adlc_skill_hash
         }
     }' > "$MANIFEST"
 
@@ -202,7 +206,7 @@ echo "Created $MANIFEST"
 echo ""
 echo "Verifying installation..."
 ERRORS=0
-for f in AGENTS.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json; do
+for f in AGENTS.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .agents/skills/sdlc/SKILL.md .agents/skills/adlc/SKILL.md; do
     if [ ! -f "$f" ]; then
         echo "  MISSING: $f"
         ERRORS=$((ERRORS + 1))
@@ -214,6 +218,7 @@ if [ "$ERRORS" -eq 0 ]; then
     echo ""
     echo "Setup complete. Trust this repo in Codex, then start with 'codex --full-auto'."
     echo "Use plain 'codex' instead if you want more manual confirmation."
+    echo "Repo-scoped skills will be available in a fresh Codex session: '\$sdlc' and '\$adlc'."
     echo "If a repo hits Windows / WAM / MFA sign-in, the live prompt remains user-owned in your session."
     echo "Let Codex handle the wrapped checks, then resume with the verify step after you complete sign-in."
     echo "For auth / license-sensitive repos, add a repo-local doctor / check-capability / Test-*Access helper."

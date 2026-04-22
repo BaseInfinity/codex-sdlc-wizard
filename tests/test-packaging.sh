@@ -62,6 +62,34 @@ test_installer_smoke_test_clean_project() {
     fi
 }
 
+test_installer_scaffolds_repo_scope_skills() {
+    local adapter_clone
+    local target_repo
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+
+    (
+        cd "$target_repo"
+        bash "$adapter_clone/install.sh" >/dev/null 2>&1
+    )
+
+    local has_sdlc_skill=true
+    local has_adlc_skill=true
+
+    [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || has_sdlc_skill=false
+    [ -f "$target_repo/.agents/skills/adlc/SKILL.md" ] || has_adlc_skill=false
+
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if [ "$has_sdlc_skill" = "true" ] && [ "$has_adlc_skill" = "true" ]; then
+        pass "Installer scaffolds repo-scope Codex sdlc and adlc skills"
+    else
+        fail "Installer did not scaffold repo-scope Codex sdlc/adlc skills"
+    fi
+}
+
 test_installer_recommends_full_auto() {
     local adapter_clone
     local target_repo
@@ -230,7 +258,32 @@ test_readme_documents_capability_detectors() {
     fi
 }
 
+test_readme_documents_repo_scope_skills() {
+    local has_heading=true
+    local has_agents_path=true
+    local has_sdlc=true
+    local has_adlc=true
+    local has_fresh_session=true
+
+    grep -q '^## Repo-Scoped Skills$' "$README" || has_heading=false
+    grep -q '\.agents/skills' "$README" || has_agents_path=false
+    grep -q '\$sdlc' "$README" || has_sdlc=false
+    grep -q '\$adlc' "$README" || has_adlc=false
+    grep -Eqi 'fresh Codex session|start a fresh codex session|restart Codex' "$README" || has_fresh_session=false
+
+    if [ "$has_heading" = "true" ] &&
+       [ "$has_agents_path" = "true" ] &&
+       [ "$has_sdlc" = "true" ] &&
+       [ "$has_adlc" = "true" ] &&
+       [ "$has_fresh_session" = "true" ]; then
+        pass "README documents repo-scope sdlc/adlc skills and how Codex discovers them"
+    else
+        fail "README does not document the repo-scope sdlc/adlc skills clearly enough"
+    fi
+}
+
 test_installer_smoke_test_clean_project
+test_installer_scaffolds_repo_scope_skills
 test_installer_recommends_full_auto
 test_installer_calls_out_auth_heavy_boundary
 test_readme_explains_distribution_model
@@ -240,6 +293,7 @@ test_readme_mentions_packaging_test_command
 test_readme_recommends_full_auto
 test_readme_documents_auth_heavy_boundaries
 test_readme_documents_capability_detectors
+test_readme_documents_repo_scope_skills
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

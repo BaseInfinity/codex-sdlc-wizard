@@ -61,6 +61,29 @@ codex --full-auto
 
 `codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing/runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
 
+If you want actual model-choice numbers instead of anecdotes, record slices in [benchmarks/model-experiment.csv](/Users/stefanayala/codex-sdlc-wizard/benchmarks/model-experiment.csv) and summarize them with:
+
+```bash
+bash scripts/summarize-model-experiment.sh
+```
+
+The current threshold for recommending `gpt-5.4-mini` as the main pass with `xhigh` review is:
+- sample size `>= 20`
+- end-to-end success `>= 95%`
+- follow-up rate `<= 10%`
+- cycle-time improvement vs all-`xhigh` `>= 15%`
+
+If you want to know whether this wizard is ready for default use across real repos, track pilot installs in [benchmarks/pilot-rollout.csv](/Users/stefanayala/codex-sdlc-wizard/benchmarks/pilot-rollout.csv) and summarize them with:
+
+```bash
+bash scripts/summarize-pilot-rollout.sh
+```
+
+The current default-use gate is:
+- 3-5 pilot repos
+- pilot success `>= 95%`
+- no more than `1` reusable wizard bug across the pilot set
+
 For adaptive setup instead of the basic installer:
 
 ```bash
@@ -68,6 +91,17 @@ npx codex-sdlc-wizard@X.Y.Z setup --yes
 ```
 
 If you want Codex to discover this as a reusable skill, install this repository through the normal GitHub skill-install flow. The repo root now contains `SKILL.md` and `agents/openai.yaml`, while the bundled skill behavior still delegates real repo mutation to `install.sh` / `setup.sh`.
+
+## Repo-Scoped Skills
+
+`install.sh` and `setup.sh` now scaffold repo-local Codex skills under `.agents/skills`:
+
+- `$sdlc` for implementation, fixes, refactors, testing, release, and publish work
+- `$adlc` for evidence-heavy, investigation, audit, QA, or report-oriented work
+
+These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so `.agents/skills/sdlc` and `.agents/skills/adlc` are loaded cleanly.
+
+The bridge here is explicit, not magical: this adapter ships the Codex-native skill copies that target repos consume. It does not depend on local `.claude/skills/*` paths being present in the target repo.
 
 ## Auth-Heavy Workflow Boundaries
 
@@ -156,6 +190,7 @@ The workflow uses GitHub OIDC trusted publishing, validates that the tag matches
 4. Copies hook scripts to `.codex/hooks/`
 
 In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, and `.codex/hooks/*.sh`.
+It also scaffolds repo-scope Codex skills at `.agents/skills/sdlc/SKILL.md` and `.agents/skills/adlc/SKILL.md`.
 
 ### Requirements
 

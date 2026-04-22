@@ -8,6 +8,8 @@ REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
 SKILL_MD="$REPO_DIR/SKILL.md"
 OPENAI_YAML="$REPO_DIR/agents/openai.yaml"
+REPO_SDLC_SKILL="$REPO_DIR/.agents/skills/sdlc/SKILL.md"
+REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
 PASSED=0
 FAILED=0
 
@@ -121,11 +123,51 @@ test_skill_recommends_full_auto_after_install() {
     fi
 }
 
+test_repo_scoped_skills_exist() {
+    local has_sdlc=true
+    local has_adlc=true
+
+    [ -f "$REPO_SDLC_SKILL" ] || has_sdlc=false
+    [ -f "$REPO_ADLC_SKILL" ] || has_adlc=false
+
+    if [ "$has_sdlc" = "true" ] && [ "$has_adlc" = "true" ]; then
+        pass "Repo-scoped Codex sdlc/adlc skills exist under .agents/skills"
+    else
+        fail "Repo-scoped Codex sdlc/adlc skills are missing"
+    fi
+}
+
+test_repo_scoped_skills_are_codex_native() {
+    local has_no_todowrite=true
+    local has_no_slash_review=true
+    local has_no_read_tool=true
+
+    if grep -Rqi 'TodoWrite' "$REPO_DIR/.agents/skills" 2>/dev/null; then
+        has_no_todowrite=false
+    fi
+    if grep -Rqi '/code-review' "$REPO_DIR/.agents/skills" 2>/dev/null; then
+        has_no_slash_review=false
+    fi
+    if grep -Rqi 'Read tool' "$REPO_DIR/.agents/skills" 2>/dev/null; then
+        has_no_read_tool=false
+    fi
+
+    if [ "$has_no_todowrite" = "true" ] &&
+       [ "$has_no_slash_review" = "true" ] &&
+       [ "$has_no_read_tool" = "true" ]; then
+        pass "Repo-scoped skills avoid Claude-only TodoWrite, /code-review, and Read tool assumptions"
+    else
+        fail "Repo-scoped skills still contain Claude-only workflow assumptions"
+    fi
+}
+
 test_skill_manifest_exists
 test_agents_openai_yaml_exists
 test_readme_documents_dual_distribution
 test_readme_recommends_full_auto
 test_skill_recommends_full_auto_after_install
+test_repo_scoped_skills_exist
+test_repo_scoped_skills_are_codex_native
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

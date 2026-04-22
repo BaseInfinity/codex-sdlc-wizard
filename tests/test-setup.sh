@@ -511,6 +511,55 @@ test_setup_output_encourages_capability_detectors() {
     fi
 }
 
+test_setup_scaffolds_repo_scope_skills() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws"
+
+    local has_sdlc_skill=false
+    local has_adlc_skill=false
+    [ -f "$ws/.agents/skills/sdlc/SKILL.md" ] && has_sdlc_skill=true
+    [ -f "$ws/.agents/skills/adlc/SKILL.md" ] && has_adlc_skill=true
+    rm -rf "$ws"
+
+    if [ "$has_sdlc_skill" = "true" ] && [ "$has_adlc_skill" = "true" ]; then
+        pass "setup.sh scaffolds repo-scope Codex sdlc and adlc skills"
+    else
+        fail "setup.sh did not scaffold repo-scope Codex sdlc/adlc skills"
+    fi
+}
+
+test_manifest_tracks_repo_scope_skills() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws"
+
+    local valid=true
+    if [ ! -f "$ws/.codex-sdlc/manifest.json" ]; then
+        valid=false
+    else
+        if ! jq -e '.managed_files[".agents/skills/sdlc/SKILL.md"]' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! jq -e '.managed_files[".agents/skills/adlc/SKILL.md"]' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "manifest.json tracks the repo-scope Codex sdlc/adlc skills"
+    else
+        fail "manifest.json does not track the repo-scope Codex skills"
+    fi
+}
+
 # ---- Run all tests ----
 test_detect_nodejs
 test_detect_rust
@@ -534,6 +583,8 @@ test_setup_recommends_full_auto
 test_setup_calls_out_auth_heavy_boundary
 test_generated_agents_md_encourages_capability_detectors
 test_setup_output_encourages_capability_detectors
+test_setup_scaffolds_repo_scope_skills
+test_manifest_tracks_repo_scope_skills
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
