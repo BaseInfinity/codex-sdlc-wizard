@@ -65,22 +65,25 @@ test_release_workflow_can_publish_release() {
 
 test_release_workflow_can_publish_npm() {
     local has_node_setup=true
+    local has_oidc_permission=true
     local has_npm_publish=true
-    local has_npm_token=true
-    local has_npm_auth_check=true
+    local has_no_npm_token=true
+    local has_no_token_auth_check=true
 
     grep -Eq 'actions/setup-node@v[0-9]+' "$WORKFLOW" || has_node_setup=false
-    grep -Eq 'npm whoami' "$WORKFLOW" || has_npm_auth_check=false
+    grep -Eq 'id-token:[[:space:]]*write' "$WORKFLOW" || has_oidc_permission=false
     grep -Eq 'npm publish --access public|npm publish[[:space:]]*$' "$WORKFLOW" || has_npm_publish=false
-    grep -Eq 'NODE_AUTH_TOKEN:[[:space:]]*\$\{\{ secrets\.NPM_TOKEN \}\}' "$WORKFLOW" || has_npm_token=false
+    grep -Eq 'NODE_AUTH_TOKEN:[[:space:]]*\$\{\{ secrets\.NPM_TOKEN \}\}|NPM_TOKEN:[[:space:]]*\$\{\{ secrets\.NPM_TOKEN \}\}' "$WORKFLOW" && has_no_npm_token=false
+    grep -Eq 'npm whoami|Require NPM_TOKEN secret' "$WORKFLOW" && has_no_token_auth_check=false
 
     if [ "$has_node_setup" = "true" ] &&
-       [ "$has_npm_auth_check" = "true" ] &&
+       [ "$has_oidc_permission" = "true" ] &&
        [ "$has_npm_publish" = "true" ] &&
-       [ "$has_npm_token" = "true" ]; then
-        pass "Release workflow can publish the npm package with NPM_TOKEN"
+       [ "$has_no_npm_token" = "true" ] &&
+       [ "$has_no_token_auth_check" = "true" ]; then
+        pass "Release workflow can publish the npm package with trusted publishing"
     else
-        fail "Release workflow does not clearly automate npm publishing"
+        fail "Release workflow does not clearly automate npm trusted publishing"
     fi
 }
 
