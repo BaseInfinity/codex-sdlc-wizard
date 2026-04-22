@@ -47,7 +47,7 @@ test_roadmap_states_current_release_status() {
     ' "$ROADMAP")
 
     grep -q '^## Current State$' "$ROADMAP" || has_heading=false
-    echo "$current_state_section" | grep -Eq '0\.4\.0|v0\.4\.0' || has_current_release=false
+    echo "$current_state_section" | grep -Eq '0\.5\.0|v0\.5\.0' || has_current_release=false
     echo "$current_state_section" | grep -qi 'trusted publishing' || has_trusted_publishing=false
 
     if [ "$has_heading" = "true" ] &&
@@ -62,7 +62,7 @@ test_roadmap_states_current_release_status() {
 test_roadmap_lists_next_release_cycle() {
     local has_heading=true
     local has_minor_release=true
-    local has_issue14=true
+    local has_backlog_window=true
     local next_release_section
 
     next_release_section=$(awk '
@@ -72,12 +72,12 @@ test_roadmap_lists_next_release_cycle() {
     ' "$ROADMAP")
 
     grep -q '^## Next Release Cycle$' "$ROADMAP" || has_heading=false
-    echo "$next_release_section" | grep -q '0.5.0' || has_minor_release=false
-    echo "$next_release_section" | grep -q '#14' || has_issue14=false
+    echo "$next_release_section" | grep -q '0.6.0' || has_minor_release=false
+    echo "$next_release_section" | grep -Eq '#7|#8|#9|#10' || has_backlog_window=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$has_minor_release" = "true" ] &&
-       [ "$has_issue14" = "true" ]; then
+       [ "$has_backlog_window" = "true" ]; then
         pass "Roadmap lists the next release proof and main engineering item"
     else
         fail "Roadmap does not list the next release sequence clearly"
@@ -86,9 +86,9 @@ test_roadmap_lists_next_release_cycle() {
 
 test_roadmap_calls_out_stale_issue_cleanup() {
     local has_heading=true
-    local has_issue4=true
-    local has_issue5=true
-    local has_issue6=true
+    local has_issue14=true
+    local has_issue7=true
+    local has_issue8=true
     local cleanup_section
 
     cleanup_section=$(awk '
@@ -98,14 +98,14 @@ test_roadmap_calls_out_stale_issue_cleanup() {
     ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    echo "$cleanup_section" | grep -q '#4' || has_issue4=false
-    echo "$cleanup_section" | grep -q '#5' || has_issue5=false
-    echo "$cleanup_section" | grep -q '#6' || has_issue6=false
+    echo "$cleanup_section" | grep -q '#14' || has_issue14=false
+    echo "$cleanup_section" | grep -q '#7' || has_issue7=false
+    echo "$cleanup_section" | grep -q '#8' || has_issue8=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_issue4" = "true" ] &&
-       [ "$has_issue5" = "true" ] &&
-       [ "$has_issue6" = "true" ]; then
+       [ "$has_issue14" = "true" ] &&
+       [ "$has_issue7" = "true" ] &&
+       [ "$has_issue8" = "true" ]; then
         pass "Roadmap calls out the consumer-path release issues for cleanup"
     else
         fail "Roadmap does not call out tracker cleanup clearly"
@@ -130,10 +130,73 @@ test_roadmap_tracks_late_creator_investigation() {
     fi
 }
 
+test_roadmap_tracks_review_model_experiment() {
+    local has_mini=true
+    local has_xhigh_review=true
+    local has_experiment_language=true
+
+    grep -qi 'gpt-5\.4-mini' "$ROADMAP" || has_mini=false
+    grep -Eqi 'xhigh review|review.*xhigh|cross-model review.*xhigh' "$ROADMAP" || has_xhigh_review=false
+    grep -Eqi 'experiment|test against|compare' "$ROADMAP" || has_experiment_language=false
+
+    if [ "$has_mini" = "true" ] &&
+       [ "$has_xhigh_review" = "true" ] &&
+       [ "$has_experiment_language" = "true" ]; then
+        pass "Roadmap tracks the gpt-5.4-mini vs xhigh-review experiment as later work"
+    else
+        fail "Roadmap does not track the gpt-5.4-mini vs xhigh-review experiment"
+    fi
+}
+
+test_roadmap_sets_numeric_model_experiment_targets() {
+    local has_sample_size=true
+    local has_success_rate=true
+    local has_speed_delta=true
+    local has_reopen_rate=true
+    local has_complex_xhigh_rule=true
+
+    grep -Eqi '20 slices|sample of 20|n=20' "$ROADMAP" || has_sample_size=false
+    grep -Eqi '95%|>= ?95%' "$ROADMAP" || has_success_rate=false
+    grep -Eqi '15% faster|>= ?15%|15% improvement' "$ROADMAP" || has_speed_delta=false
+    grep -Eqi '10% reopen|<= ?10%|follow-up rate <= ?10%' "$ROADMAP" || has_reopen_rate=false
+    grep -Eqi 'abstract|complex|high-blast-radius' "$ROADMAP" || has_complex_xhigh_rule=false
+
+    if [ "$has_sample_size" = "true" ] &&
+       [ "$has_success_rate" = "true" ] &&
+       [ "$has_speed_delta" = "true" ] &&
+       [ "$has_reopen_rate" = "true" ] &&
+       [ "$has_complex_xhigh_rule" = "true" ]; then
+        pass "Roadmap sets numeric targets for the model experiment and keeps complex work on xhigh for now"
+    else
+        fail "Roadmap does not set numeric targets for the model experiment clearly enough"
+    fi
+}
+
+test_roadmap_tracks_default_use_pilot_gate() {
+    local has_pilot_sample=true
+    local has_success_threshold=true
+    local has_reusable_bug_threshold=true
+    local has_default_use_language=true
+
+    grep -Eqi '3-5 pilot repos|3 to 5 pilot repos|five pilot repos' "$ROADMAP" || has_pilot_sample=false
+    grep -Eqi '>= ?95% pilot success|95% pilot success|pilot success >= ?95%' "$ROADMAP" || has_success_threshold=false
+    grep -Eqi '<=? ?1 reusable wizard bug|no more than 1 reusable wizard bug|1 reusable wizard bug' "$ROADMAP" || has_reusable_bug_threshold=false
+    grep -Eqi 'default use|default rollout|default path' "$ROADMAP" || has_default_use_language=false
+
+    if [ "$has_pilot_sample" = "true" ] &&
+       [ "$has_success_threshold" = "true" ] &&
+       [ "$has_reusable_bug_threshold" = "true" ] &&
+       [ "$has_default_use_language" = "true" ]; then
+        pass "Roadmap tracks a measurable pilot gate before default use"
+    else
+        fail "Roadmap does not track a measurable pilot gate before default use"
+    fi
+}
+
 test_roadmap_prioritizes_discovery_bridge_before_docs_process_backlog() {
     local order_section
-    local line_issue14
     local line_docs_backlog
+    local line_creator_investigation
 
     order_section=$(awk '
         /^## Working Order$/ { in_section=1; next }
@@ -141,12 +204,12 @@ test_roadmap_prioritizes_discovery_bridge_before_docs_process_backlog() {
         in_section { print }
     ' "$ROADMAP")
 
-    line_issue14=$(echo "$order_section" | nl -ba | grep '#14' | awk '{print $1}' | head -n1)
     line_docs_backlog=$(echo "$order_section" | nl -ba | grep '#7.*#10' | awk '{print $1}' | head -n1)
+    line_creator_investigation=$(echo "$order_section" | nl -ba | grep -Ei 'creator-tool|creator' | awk '{print $1}' | head -n1)
 
-    if [ -n "${line_issue14:-}" ] &&
-       [ -n "${line_docs_backlog:-}" ] &&
-       [ "$line_issue14" -lt "$line_docs_backlog" ]; then
+    if [ -n "${line_docs_backlog:-}" ] &&
+       [ -n "${line_creator_investigation:-}" ] &&
+       [ "$line_docs_backlog" -lt "$line_creator_investigation" ]; then
         pass "Roadmap prioritizes the Codex discovery bridge (#14) before the docs/process backlog (#7-#10)"
     else
         fail "Roadmap does not prioritize #14 ahead of the remaining docs/process backlog"
@@ -158,6 +221,9 @@ test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_calls_out_stale_issue_cleanup
 test_roadmap_tracks_late_creator_investigation
+test_roadmap_tracks_review_model_experiment
+test_roadmap_sets_numeric_model_experiment_targets
+test_roadmap_tracks_default_use_pilot_gate
 test_roadmap_prioritizes_discovery_bridge_before_docs_process_backlog
 
 echo ""
