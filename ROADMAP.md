@@ -11,7 +11,19 @@
 
 ### 0.4.0
 
-Purpose: finish the biggest remaining Codex-native engineering gap.
+Purpose: harden the consumer path before broader rollout.
+
+Scope:
+- issue `#5`
+- make auth-heavy / WAM / MFA boundaries explicit in docs and setup output
+- issue `#6`
+- encourage capability-detector patterns for auth/license-sensitive repos
+- issue `#4`
+- improve setup parity for docs-heavy / scaffold-heavy repos
+
+### 0.5.0
+
+Purpose: finish the biggest remaining Codex-native engineering gap once consumer setup is stronger.
 
 Scope:
 - issue `#14`
@@ -19,12 +31,12 @@ Scope:
 - remove Claude-only review/tool assumptions from the bridged skill text
 - add smoke coverage for repo-scope Codex discovery
 
-### 0.5.0
+### 0.6.0
 
-Purpose: tighten the remaining docs/process backlog after the Codex discovery bridge lands.
+Purpose: tighten the remaining docs/process backlog after the consumer path and discovery bridge land.
 
 Scope:
-- work through `#4` to `#10`
+- work through `#7` to `#10`
 - keep the honest Codex SDLC architecture explicit
 - close the loop on confidence reporting, issue filing, and repo-focus guidance
 
@@ -41,10 +53,10 @@ The issue tracker should be updated now that the trusted-publishing proof releas
 
 After `0.3.1` and issue cleanup, the main backlog is:
 
-- `#14` Codex discovery bridge for `sdlc` / `adlc`
-- `#4` setup parity for doc-heavy / scaffold repos
 - `#5` auth-heavy Windows / WAM / MFA boundary docs
 - `#6` capability detector pattern for auth/license-sensitive repos
+- `#4` setup parity for doc-heavy / scaffold repos
+- `#14` Codex discovery bridge for `sdlc` / `adlc`
 - `#7` keep the honest Codex SDLC architecture explicit
 - `#8` high-confidence slices and explicit confidence reporting
 - `#9` prefer direct GitHub issue creation for proven reusable findings
@@ -52,9 +64,9 @@ After `0.3.1` and issue cleanup, the main backlog is:
 
 ## Working Order
 
-1. Clean up stale shipped issues
-2. Take `#14`
-3. Work through `#4` to `#10` as docs/process/product-shape improvements
+1. Finish consumer-path work: `#5`, `#6`, then `#4`
+2. Re-scope and take `#14`
+3. Work through `#7` to `#10` as docs/process/product-shape improvements
 
 ## Later Research
 
