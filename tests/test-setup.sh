@@ -412,7 +412,7 @@ test_setup_generates_sdlc_md() {
     fi
 }
 
-# ---- Test 16: interactive setup keeps detected values and asks only inferred facts plus preferences ----
+# ---- Test 16: interactive setup keeps detected values and offers one-shot inferred/default acceptance ----
 test_setup_interactive_only_asks_preferences() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -427,16 +427,18 @@ EOF
     rm -rf "$ws"
 
     if echo "$output" | grep -q "I'll keep detected values automatically" \
-        && echo "$output" | grep -q 'Single test command \[npm test -- <test-file>\]' \
-        && echo "$output" | grep -q 'Response detail preference' \
-        && echo "$output" | grep -q 'Testing approach preference' \
-        && echo "$output" | grep -q 'Mocking philosophy preference' \
+        && echo "$output" | grep -q 'Press Enter to keep the inferred values above' \
+        && echo "$output" | grep -q 'Press Enter to keep these workflow defaults' \
         && ! echo "$output" | grep -q 'Use scan results above and continue' \
         && ! echo "$output" | grep -q '^Source directory:' \
         && ! echo "$output" | grep -q '^Test directory:' \
         && ! echo "$output" | grep -q '^Test command:' \
+        && ! echo "$output" | grep -q 'Single test command \[' \
+        && ! echo "$output" | grep -q '^Response detail preference' \
+        && ! echo "$output" | grep -q '^Testing approach preference' \
+        && ! echo "$output" | grep -q '^Mocking philosophy preference' \
         && ! echo "$output" | grep -q 'CI shepherd'; then
-        pass "interactive setup keeps detected values and asks only inferred facts plus preferences"
+        pass "interactive setup keeps detected values and offers one-shot inferred/default acceptance"
     else
         fail "interactive setup did not stay on the conversational fast path"
     fi
@@ -459,16 +461,17 @@ EOF
 
     if echo "$output" | grep -q "I'll keep detected values automatically" \
         && echo "$output" | grep -q "I'll ask only about inferred guesses or missing core repo facts" \
-        && echo "$output" | grep -q 'Test framework \[playwright\]' \
-        && echo "$output" | grep -q 'Single test command \[npx playwright test <test-file>\]' \
-        && echo "$output" | grep -q 'Response detail preference' \
-        && echo "$output" | grep -q 'Testing approach preference' \
-        && echo "$output" | grep -q 'Mocking philosophy preference' \
+        && echo "$output" | grep -q 'Resolved (inferred):' \
+        && echo "$output" | grep -q 'Press Enter to keep the inferred values above' \
+        && echo "$output" | grep -q 'Press Enter to keep these workflow defaults' \
         && ! echo "$output" | grep -q 'Use scan results above and continue' \
         && ! echo "$output" | grep -q '^Source directory:' \
         && ! echo "$output" | grep -q '^Lint command:' \
         && ! echo "$output" | grep -q '^Type-check command:' \
-        && ! echo "$output" | grep -q '^Build command:'; then
+        && ! echo "$output" | grep -q '^Build command:' \
+        && ! echo "$output" | grep -q 'Test framework \[' \
+        && ! echo "$output" | grep -q 'Single test command \[' \
+        && ! echo "$output" | grep -q '^Response detail preference'; then
         pass "interactive setup explains the scan plan and skips unresolved optional blanks"
     else
         fail "interactive setup still felt confusing or asked optional blanks on the fast path"
@@ -510,7 +513,7 @@ test_setup_interactive_ci_shepherd_is_conditional() {
     output=$(run_setup_interactive "$ws" $'\n\n\n\n\n\n')
     rm -rf "$ws"
 
-    if echo "$output" | grep -q 'CI shepherd'; then
+    if echo "$output" | grep -q 'ci shepherd=disabled'; then
         pass "interactive setup asks CI shepherd only when CI is detected"
     else
         fail "interactive setup did not ask about CI shepherd when CI was detected"
@@ -531,7 +534,8 @@ test_setup_interactive_shows_inferred_values() {
         && echo "$output" | grep -q 'Test framework: jest' \
         && echo "$output" | grep -q 'Domain: web' \
         && echo "$output" | grep -q "I'll keep detected values automatically" \
-        && echo "$output" | grep -q 'Last thing: a few workflow preferences so I can tailor the generated docs'; then
+        && echo "$output" | grep -q 'Press Enter to keep the inferred values above' \
+        && echo "$output" | grep -q 'Press Enter to keep these workflow defaults'; then
         pass "interactive setup explains why it is asking the remaining questions"
     else
         fail "interactive setup did not explain its adaptive questioning clearly"
