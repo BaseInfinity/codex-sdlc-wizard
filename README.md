@@ -5,8 +5,8 @@ An adapter that brings [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-
 ## Quick Start
 
 ```bash
-# Install/update the latest wizard into the current repo
-npx codex-sdlc-wizard@latest setup --yes
+# Run adaptive interactive setup in the current repo
+npx codex-sdlc-wizard@latest
 
 # Start coding with SDLC enforcement
 codex --full-auto
@@ -14,20 +14,22 @@ codex --full-auto
 
 `codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing and runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
 
-Generic npm entrypoint examples: `npx codex-sdlc-wizard setup --yes`, `npx codex-sdlc-wizard check`, and `npx codex-sdlc-wizard update`.
+Bare `npx codex-sdlc-wizard` is the adaptive interactive path. It scans the repo, asks only what it cannot resolve, and then writes the setup. `--yes` still exists for automation, but it is not the normal human path.
+
+Generic npm entrypoint examples: `npx codex-sdlc-wizard`, `npx codex-sdlc-wizard check`, and `npx codex-sdlc-wizard update`.
 
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.2 check
-npx codex-sdlc-wizard@0.7.2 update
+npx codex-sdlc-wizard@0.7.3 check
+npx codex-sdlc-wizard@0.7.3 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
 
 ## What This Repo Is
 
-This repo is now a **Codex skill plus installer-style adapter** for Codex projects.
+This repo is now a **Codex skill plus adaptive installer-style adapter** for Codex projects.
 
 - It ships a repo-root `SKILL.md` for the normal Codex skill install flow.
 - It is **not a Codex plugin** today.
@@ -36,12 +38,12 @@ This repo is now a **Codex skill plus installer-style adapter** for Codex projec
 | Need | Use | Why |
 |------|-----|-----|
 | Install a reusable Codex skill from this repo | `SKILL.md` | The repo root is now a Codex skill package for normal GitHub skill-install flow |
-| Add SDLC enforcement to an existing Codex project now | `install.sh` or `setup.sh` | The skill and npm package both wrap the same installer scripts for target repos |
+| Add SDLC enforcement to an existing Codex project now | `npx codex-sdlc-wizard` or `setup.sh` | The npm package defaults to adaptive setup; direct scripts still exist for advanced/manual paths |
 | Install a Codex plugin from this repo | Not supported | There is no `.codex-plugin/plugin.json` package here |
 
 ## Self-Adapting SDLC Enforcement
 
-This adapter brings the SDLC Wizard discipline into Codex today with hard guardrails, repo-local guidance, and setup/install flows that work in existing projects.
+This adapter brings the SDLC Wizard discipline into Codex today with hard guardrails, repo-local guidance, and adaptive setup/update flows that work in existing projects.
 
 **What works today:**
 - Hard enforcement hooks that block bad habits (`git commit` without proof, `git push` without review)
@@ -80,17 +82,17 @@ The wizard supports two wizard-owned model profiles:
 How to choose:
 
 ```bash
-# recommended bootstrap path
-npx codex-sdlc-wizard@0.7.2 setup --yes --model-profile maximum
+# recommended interactive bootstrap path
+npx codex-sdlc-wizard@0.7.3 --model-profile maximum
 
-# routine work can switch back to the efficiency-first profile later
-npx codex-sdlc-wizard@0.7.2 setup --yes --model-profile mixed
+# interactive bootstrap with the efficiency-first profile if you already know you want it
+npx codex-sdlc-wizard@0.7.3 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
-npx codex-sdlc-wizard@latest setup --yes --model-profile maximum
+npx codex-sdlc-wizard@latest --model-profile maximum
 ```
 
-Interactive `setup` should ask which profile you want when you do not pass `--yes` or `--model-profile`, and it should recommend `maximum` as the safer bootstrap default.
+Interactive setup should ask which profile you want when you do not pass `--model-profile`, and it should recommend `maximum` as the safer bootstrap default.
 
 Low-confidence rule:
 - Default to `xhigh` in this repo when the work is meta, setup-heavy, or otherwise high-blast-radius.
@@ -160,7 +162,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.2
+npx codex-sdlc-wizard@0.7.3
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -170,7 +172,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.2 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.3 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow

@@ -538,11 +538,12 @@ test_package_cli_help_documents_bootstrap_profile_policy() {
     local output
     output=$(node "$REPO_DIR/bin/codex-sdlc-wizard.js" --help 2>&1)
 
-    if echo "$output" | grep -Eqi 'setup.*maximum|bootstrap.*maximum' &&
+    if echo "$output" | grep -Eqi 'default.*adaptive setup|adaptive setup.*default' &&
+       echo "$output" | grep -Eqi 'setup.*maximum|bootstrap.*maximum' &&
        echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed'; then
-        pass "npm CLI help documents maximum for bootstrap and mixed for routine work"
+        pass "npm CLI help documents adaptive setup as the default and the bootstrap profile policy"
     else
-        fail "npm CLI help does not document the bootstrap-versus-routine profile policy"
+        fail "npm CLI help does not document the adaptive default and bootstrap-versus-routine profile policy"
     fi
 }
 
@@ -630,7 +631,7 @@ test_package_cli_runs_update_command() {
 
 test_readme_mentions_npx_entrypoint() {
     if grep -q 'npx codex-sdlc-wizard' "$REPO_DIR/README.md" \
-        && grep -q 'npx codex-sdlc-wizard setup --yes' "$REPO_DIR/README.md" \
+        && grep -q 'npx codex-sdlc-wizard@latest' "$REPO_DIR/README.md" \
         && grep -q 'npx codex-sdlc-wizard check' "$REPO_DIR/README.md"; then
         pass "README documents the npm entrypoint"
     else
