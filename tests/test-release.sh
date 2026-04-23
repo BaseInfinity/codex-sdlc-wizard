@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
+RELEASE_DOC="$REPO_DIR/RELEASE.md"
 WORKFLOW="$REPO_DIR/.github/workflows/release.yml"
 PACKAGE_JSON="$REPO_DIR/package.json"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
@@ -128,6 +129,60 @@ test_readme_documents_maintainer_release_steps() {
     fi
 }
 
+test_release_checklist_exists() {
+    if [ -f "$RELEASE_DOC" ]; then
+        pass "Release checklist exists as RELEASE.md"
+    else
+        fail "RELEASE.md is missing"
+    fi
+}
+
+test_release_checklist_enforces_sync_and_proof() {
+    local has_sync=true
+    local has_rebase=true
+    local has_release_suite=true
+    local has_tarball_smoke=true
+    local has_tagging=true
+
+    grep -Eq 'git fetch origin' "$RELEASE_DOC" || has_sync=false
+    grep -Eq 'git rebase origin/main|git pull --ff-only origin main|merge onto origin/main' "$RELEASE_DOC" || has_rebase=false
+
+    for cmd in \
+        'bash tests/test-release.sh' \
+        'bash tests/test-roadmap.sh' \
+        'bash tests/test-packaging.sh' \
+        'bash tests/test-npm.sh' \
+        'bash tests/test-skill.sh' \
+        'bash tests/test-adapter.sh' \
+        'bash tests/test-setup.sh' \
+        'bash tests/test-update.sh'
+    do
+        grep -Fq "$cmd" "$RELEASE_DOC" || has_release_suite=false
+    done
+
+    grep -Eqi 'packed tarball|scratch smoke|npm pack' "$RELEASE_DOC" || has_tarball_smoke=false
+    grep -Eq 'git tag vX\.Y\.Z' "$RELEASE_DOC" || has_tagging=false
+    grep -Eq 'git push origin vX\.Y\.Z' "$RELEASE_DOC" || has_tagging=false
+
+    if [ "$has_sync" = "true" ] &&
+       [ "$has_rebase" = "true" ] &&
+       [ "$has_release_suite" = "true" ] &&
+       [ "$has_tarball_smoke" = "true" ] &&
+       [ "$has_tagging" = "true" ]; then
+        pass "RELEASE.md requires latest-main sync, proof suite, tarball smoke, and tagging steps"
+    else
+        fail "RELEASE.md does not yet enforce the full maintainer release checklist"
+    fi
+}
+
+test_readme_points_to_release_checklist() {
+    if grep -Eq 'RELEASE\.md|release checklist' "$README"; then
+        pass "README points maintainers to the release checklist"
+    else
+        fail "README does not point maintainers to RELEASE.md"
+    fi
+}
+
 test_roadmap_tests_are_version_agnostic() {
     local roadmap_test="$REPO_DIR/tests/test-roadmap.sh"
     local reads_package_version=true
@@ -154,6 +209,9 @@ test_release_workflow_can_publish_release
 test_release_workflow_can_publish_npm
 test_readme_documents_versioned_release_path
 test_readme_documents_maintainer_release_steps
+test_release_checklist_exists
+test_release_checklist_enforces_sync_and_proof
+test_readme_points_to_release_checklist
 test_roadmap_tests_are_version_agnostic
 
 echo ""

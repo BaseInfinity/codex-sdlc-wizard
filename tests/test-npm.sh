@@ -202,6 +202,62 @@ test_local_npx_setup_honors_model_profile_flag() {
     fi
 }
 
+test_packed_tarball_scratch_smoke() {
+    local pack_dir target_repo
+    pack_dir=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-pack.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    local npm_cache
+    npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
+
+    local json tarball_name tarball_path
+    json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
+    tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
+    tarball_path="$pack_dir/$tarball_name"
+
+    local valid=true
+    local setup_output="" check_output="" update_output=""
+
+    if [ -z "$tarball_name" ] || [ ! -f "$tarball_path" ]; then
+        valid=false
+    else
+        printf '%s' '{"name":"release-smoke","scripts":{"test":"jest"}}' > "$target_repo/package.json"
+        mkdir -p "$target_repo/src"
+
+        setup_output=$(
+            cd "$target_repo" && \
+            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+                codex-sdlc-wizard setup --yes 2>&1
+        ) || valid=false
+
+        check_output=$(
+            cd "$target_repo" && \
+            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+                codex-sdlc-wizard check 2>&1
+        ) || valid=false
+
+        update_output=$(
+            cd "$target_repo" && \
+            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+                codex-sdlc-wizard update check-only 2>&1
+        ) || valid=false
+    fi
+
+    [ -f "$target_repo/.codex-sdlc/manifest.json" ] || valid=false
+    json_has_truthy_file "$target_repo/.codex-sdlc/manifest.json" 'typeof data.managed_files?.["AGENTS.md"] === "string" && /^sha256:[0-9a-f]{64}$/.test(data.managed_files["AGENTS.md"])' || valid=false
+    echo "$setup_output" | grep -q 'Setup complete' || valid=false
+    echo "$setup_output" | grep -q 'shasum: command not found' && valid=false
+    echo "$check_output" | grep -q '"status": "match"' || valid=false
+    echo "$update_output" | grep -Eq 'No managed files need updates|"status": "match"|match' || valid=false
+
+    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
+
+    if [ "$valid" = "true" ]; then
+        pass "packed tarball scratch smoke proves setup, check, and update on a clean repo"
+    else
+        fail "packed tarball scratch smoke did not prove the release surface cleanly"
+    fi
+}
+
 test_cli_help_documents_bootstrap_profile_policy() {
     local output
     output=$(node "$REPO_DIR/bin/codex-sdlc-wizard.js" --help 2>&1) || true
@@ -224,6 +280,7 @@ test_package_version_matches_roadmap_current_release
 test_npm_pack_includes_runtime_files
 test_local_npx_installs_into_clean_repo
 test_local_npx_setup_honors_model_profile_flag
+test_packed_tarball_scratch_smoke
 test_cli_help_documents_bootstrap_profile_policy
 
 echo ""
