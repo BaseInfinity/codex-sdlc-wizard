@@ -412,32 +412,37 @@ test_setup_generates_sdlc_md() {
     fi
 }
 
-# ---- Test 16: interactive setup only asks preference questions when core facts are detected ----
+# ---- Test 16: interactive setup keeps detected values and asks only inferred facts plus preferences ----
 test_setup_interactive_only_asks_preferences() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest","lint":"eslint .","build":"tsc"}}' > "$ws/package.json"
-    mkdir -p "$ws/src" "$ws/__tests__"
-    touch "$ws/jest.config.js"
+    cat > "$ws/package.json" <<'EOF'
+{"name":"test-app","bin":{"test-app":"./bin/cli.js"},"scripts":{"test":"jest","lint":"eslint .","build":"tsc","typecheck":"tsc --noEmit"}}
+EOF
+    mkdir -p "$ws/src" "$ws/__tests__" "$ws/bin"
+    touch "$ws/jest.config.js" "$ws/tsconfig.json" "$ws/bin/cli.js"
 
     local output
     output=$(run_setup_interactive "$ws" $'\n\n\n\n\n')
     rm -rf "$ws"
 
-    if echo "$output" | grep -q 'Response detail preference' \
+    if echo "$output" | grep -q "I'll keep detected values automatically" \
+        && echo "$output" | grep -q 'Single test command \[npm test -- <test-file>\]' \
+        && echo "$output" | grep -q 'Response detail preference' \
         && echo "$output" | grep -q 'Testing approach preference' \
         && echo "$output" | grep -q 'Mocking philosophy preference' \
-        && ! echo "$output" | grep -q 'Set source directory' \
-        && ! echo "$output" | grep -q 'Set test directory' \
-        && ! echo "$output" | grep -q 'Set test command' \
+        && ! echo "$output" | grep -q 'Use scan results above and continue' \
+        && ! echo "$output" | grep -q '^Source directory:' \
+        && ! echo "$output" | grep -q '^Test directory:' \
+        && ! echo "$output" | grep -q '^Test command:' \
         && ! echo "$output" | grep -q 'CI shepherd'; then
-        pass "interactive setup only asks preference questions when core facts are detected"
+        pass "interactive setup keeps detected values and asks only inferred facts plus preferences"
     else
-        fail "interactive setup did not limit questions to unresolved preferences"
+        fail "interactive setup did not stay on the conversational fast path"
     fi
 }
 
-# ---- Test 17: interactive setup fast path skips unresolved repo facts after scan acceptance ----
+# ---- Test 17: interactive setup explains the scan plan and skips unresolved optional blanks ----
 test_setup_interactive_accepts_scan_without_prompting_optional_blanks() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -452,35 +457,41 @@ EOF
     output=$(run_setup_interactive "$ws" $'\n\n\n\n\n')
     rm -rf "$ws"
 
-    if echo "$output" | grep -q 'Use scan results above and continue' \
+    if echo "$output" | grep -q "I'll keep detected values automatically" \
+        && echo "$output" | grep -q "I'll ask only about inferred guesses or missing core repo facts" \
+        && echo "$output" | grep -q 'Test framework \[playwright\]' \
+        && echo "$output" | grep -q 'Single test command \[npx playwright test <test-file>\]' \
         && echo "$output" | grep -q 'Response detail preference' \
         && echo "$output" | grep -q 'Testing approach preference' \
         && echo "$output" | grep -q 'Mocking philosophy preference' \
-        && ! echo "$output" | grep -q 'Set source directory' \
-        && ! echo "$output" | grep -q 'Set lint command' \
-        && ! echo "$output" | grep -q 'Set type-check command' \
-        && ! echo "$output" | grep -q 'Set build command'; then
-        pass "interactive setup accepts the scan without prompting unresolved optional blanks"
+        && ! echo "$output" | grep -q 'Use scan results above and continue' \
+        && ! echo "$output" | grep -q '^Source directory:' \
+        && ! echo "$output" | grep -q '^Lint command:' \
+        && ! echo "$output" | grep -q '^Type-check command:' \
+        && ! echo "$output" | grep -q '^Build command:'; then
+        pass "interactive setup explains the scan plan and skips unresolved optional blanks"
     else
-        fail "interactive setup still prompted unresolved optional blanks after scan acceptance"
+        fail "interactive setup still felt confusing or asked optional blanks on the fast path"
     fi
 }
 
-# ---- Test 18: interactive setup asks missing core facts when the user enters edit mode ----
+# ---- Test 18: interactive setup asks missing core facts directly without an edit gate ----
 test_setup_interactive_asks_missing_core_facts() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app"}' > "$ws/package.json"
 
     local output
-    output=$(run_setup_interactive "$ws" $'n\n\n\n\n\n\n\n\n\n')
+    output=$(run_setup_interactive "$ws" $'\n\n\n\n\n\n\n')
     rm -rf "$ws"
 
-    if echo "$output" | grep -q 'Set source directory' \
-        && echo "$output" | grep -q 'Set test directory' \
-        && echo "$output" | grep -q 'Set test framework' \
-        && echo "$output" | grep -q 'Set test command'; then
-        pass "interactive setup asks missing core facts when they are unresolved"
+    if echo "$output" | grep -q "I'll ask only about inferred guesses or missing core repo facts" \
+        && ! echo "$output" | grep -q 'Use scan results above and continue' \
+        && echo "$output" | grep -q '^Source directory:' \
+        && echo "$output" | grep -q '^Test directory:' \
+        && echo "$output" | grep -q '^Test framework:' \
+        && echo "$output" | grep -q '^Test command:'; then
+        pass "interactive setup asks missing core facts directly without an edit gate"
     else
         fail "interactive setup did not ask for unresolved core facts"
     fi
@@ -506,7 +517,7 @@ test_setup_interactive_ci_shepherd_is_conditional() {
     fi
 }
 
-# ---- Test 20: interactive setup separates inferred values from detected values ----
+# ---- Test 20: interactive setup explains why it is asking the remaining questions ----
 test_setup_interactive_shows_inferred_values() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -518,10 +529,12 @@ test_setup_interactive_shows_inferred_values() {
 
     if echo "$output" | grep -q 'Resolved (inferred):' \
         && echo "$output" | grep -q 'Test framework: jest' \
-        && echo "$output" | grep -q 'Domain: web'; then
-        pass "interactive setup separates inferred values from detected values"
+        && echo "$output" | grep -q 'Domain: web' \
+        && echo "$output" | grep -q "I'll keep detected values automatically" \
+        && echo "$output" | grep -q 'Last thing: a few workflow preferences so I can tailor the generated docs'; then
+        pass "interactive setup explains why it is asking the remaining questions"
     else
-        fail "interactive setup did not surface inferred values separately"
+        fail "interactive setup did not explain its adaptive questioning clearly"
     fi
 }
 
@@ -864,9 +877,10 @@ EOF
     touch "$ws/jest.config.js" "$ws/tsconfig.json"
 
     local output
-    output=$(run_setup_interactive "$ws" $'n\napp/\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+    output=$(run_setup_interactive "$ws" $'\nedit\napp/\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
 
     local valid=true
+    echo "$output" | grep -q 'If any detected values are wrong, type edit to review them now' 2>/dev/null || valid=false
     echo "$output" | grep -q 'Source directory \[src/\]' 2>/dev/null || valid=false
     echo "$output" | grep -vq 'Aborted\.' 2>/dev/null || valid=false
     grep -q 'Source directory: `app/`' "$ws/SDLC.md" 2>/dev/null || valid=false
