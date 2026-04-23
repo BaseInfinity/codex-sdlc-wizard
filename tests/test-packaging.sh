@@ -90,6 +90,37 @@ test_installer_scaffolds_repo_scope_skills() {
     fi
 }
 
+test_installer_writes_default_model_profile() {
+    local adapter_clone
+    local target_repo
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+
+    (
+        cd "$target_repo"
+        bash "$adapter_clone/install.sh" >/dev/null 2>&1
+    )
+
+    local has_profile=true
+    if [ ! -f "$target_repo/.codex-sdlc/model-profile.json" ]; then
+        has_profile=false
+    elif ! jq -e '.selected_profile == "mixed"' "$target_repo/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+        has_profile=false
+    elif ! jq -e '.profiles.maximum.main_model == "gpt-5.4"' "$target_repo/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+        has_profile=false
+    fi
+
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if [ "$has_profile" = "true" ]; then
+        pass "Installer writes the default mixed model profile with a maximum option"
+    else
+        fail "Installer did not write the expected default model profile"
+    fi
+}
+
 test_installer_recommends_full_auto() {
     local adapter_clone
     local target_repo
@@ -110,6 +141,32 @@ test_installer_recommends_full_auto() {
         pass "Installer output recommends codex --full-auto after setup"
     else
         fail "Installer output does not recommend codex --full-auto"
+    fi
+}
+
+test_installer_mentions_model_profile_tradeoff() {
+    local adapter_clone
+    local target_repo
+    local output
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+
+    output=$(
+        cd "$target_repo" &&
+        bash "$adapter_clone/install.sh" 2>&1
+    )
+
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if echo "$output" | grep -qi 'mixed' &&
+       echo "$output" | grep -qi 'maximum' &&
+       echo "$output" | grep -Eqi 'speed|token|latency' &&
+       echo "$output" | grep -qi 'stability'; then
+        pass "Installer output explains the mixed versus maximum model-profile tradeoff"
+    else
+        fail "Installer output does not explain the mixed versus maximum profile tradeoff"
     fi
 }
 
@@ -262,29 +319,101 @@ test_readme_documents_repo_scope_skills() {
     local has_heading=true
     local has_agents_path=true
     local has_sdlc=true
-    local has_adlc=true
+    local has_wip_language=true
+    local has_gdlc=true
+    local has_rdlc=true
     local has_fresh_session=true
 
     grep -q '^## Repo-Scoped Skills$' "$README" || has_heading=false
     grep -q '\.agents/skills' "$README" || has_agents_path=false
     grep -q '\$sdlc' "$README" || has_sdlc=false
-    grep -q '\$adlc' "$README" || has_adlc=false
+    grep -Eqi 'work in progress|still in progress|not all available yet' "$README" || has_wip_language=false
+    grep -q 'gdlc' "$README" || has_gdlc=false
+    grep -q 'rdlc' "$README" || has_rdlc=false
     grep -Eqi 'fresh Codex session|start a fresh codex session|restart Codex' "$README" || has_fresh_session=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$has_agents_path" = "true" ] &&
        [ "$has_sdlc" = "true" ] &&
-       [ "$has_adlc" = "true" ] &&
+       [ "$has_wip_language" = "true" ] &&
+       [ "$has_gdlc" = "true" ] &&
+       [ "$has_rdlc" = "true" ] &&
        [ "$has_fresh_session" = "true" ]; then
-        pass "README documents repo-scope sdlc/adlc skills and how Codex discovers them"
+        pass "README documents the current repo-scope skill rollout and future skill roadmap"
     else
-        fail "README does not document the repo-scope sdlc/adlc skills clearly enough"
+        fail "README does not document the repo-scope skill rollout clearly enough"
+    fi
+}
+
+test_readme_documents_honest_codex_shape() {
+    local has_skills_layer=true
+    local has_hooks_layer=true
+    local has_docs_truth=true
+
+    grep -q 'skills = explicit workflow layer' "$README" || has_skills_layer=false
+    grep -q 'hooks = silent event enforcement' "$README" || has_hooks_layer=false
+    grep -q 'repo docs = source of local truth' "$README" || has_docs_truth=false
+
+    if [ "$has_skills_layer" = "true" ] &&
+       [ "$has_hooks_layer" = "true" ] &&
+       [ "$has_docs_truth" = "true" ]; then
+        pass "README documents the honest Codex SDLC shape"
+    else
+        fail "README does not document the honest Codex SDLC shape clearly enough"
+    fi
+}
+
+test_readme_documents_feedback_flow_and_repo_focus() {
+    local has_direct_issue=true
+    local has_proven_finding=true
+    local has_product_repo=true
+    local has_blocked_boundary=true
+
+    grep -qi 'direct GitHub issue' "$README" || has_direct_issue=false
+    grep -qi 'proven reusable' "$README" || has_proven_finding=false
+    grep -qi 'product repo' "$README" || has_product_repo=false
+    grep -qi 'actually blocked' "$README" || has_blocked_boundary=false
+
+    if [ "$has_direct_issue" = "true" ] &&
+       [ "$has_proven_finding" = "true" ] &&
+       [ "$has_product_repo" = "true" ] &&
+       [ "$has_blocked_boundary" = "true" ]; then
+        pass "README documents the feedback flow and repo-focus rule"
+    else
+        fail "README does not document the feedback flow and repo-focus rule clearly enough"
+    fi
+}
+
+test_readme_documents_model_profiles() {
+    local has_heading=true
+    local has_mixed=true
+    local has_maximum=true
+    local has_tradeoff=true
+    local has_confidence_rule=true
+
+    grep -q '^## Model Profiles$' "$README" || has_heading=false
+    grep -q '`mixed`' "$README" || has_mixed=false
+    grep -q '`maximum`' "$README" || has_maximum=false
+    grep -Eqi 'speed|latency|token' "$README" || has_tradeoff=false
+    grep -Eqi 'stability|ultimate' "$README" || has_tradeoff=false
+    grep -Eqi '95%|xhigh review|research more first' "$README" || has_confidence_rule=false
+
+    if [ "$has_heading" = "true" ] &&
+       [ "$has_mixed" = "true" ] &&
+       [ "$has_maximum" = "true" ] &&
+       [ "$has_tradeoff" = "true" ] &&
+       [ "$has_confidence_rule" = "true" ]; then
+        pass "README documents the mixed versus maximum model profiles and the confidence escalation rule"
+    else
+        fail "README does not document the model profiles and escalation rule clearly enough"
     fi
 }
 
 test_installer_smoke_test_clean_project
 test_installer_scaffolds_repo_scope_skills
+test_installer_writes_default_model_profile
 test_installer_recommends_full_auto
+test_installer_mentions_model_profile_tradeoff
 test_installer_calls_out_auth_heavy_boundary
 test_readme_explains_distribution_model
 test_readme_has_install_choice_table
@@ -294,6 +423,9 @@ test_readme_recommends_full_auto
 test_readme_documents_auth_heavy_boundaries
 test_readme_documents_capability_detectors
 test_readme_documents_repo_scope_skills
+test_readme_documents_honest_codex_shape
+test_readme_documents_feedback_flow_and_repo_focus
+test_readme_documents_model_profiles
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

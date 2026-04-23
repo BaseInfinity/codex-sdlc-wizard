@@ -237,12 +237,21 @@ test_detect_docs_strong_scaffold() {
 # Helper: run setup.sh in a project dir
 run_setup() {
     local project_dir="$1"
-    (cd "$project_dir" && bash "$SETUP_SH" --yes 2>/dev/null) || true
+    shift
+    (cd "$project_dir" && bash "$SETUP_SH" --yes "$@" 2>/dev/null) || true
 }
 
 run_setup_capture() {
     local project_dir="$1"
-    (cd "$project_dir" && bash "$SETUP_SH" --yes 2>&1) || true
+    shift
+    (cd "$project_dir" && bash "$SETUP_SH" --yes "$@" 2>&1) || true
+}
+
+run_setup_interactive_capture() {
+    local project_dir="$1"
+    local input="$2"
+    shift 2
+    (cd "$project_dir" && printf '%s' "$input" | bash "$SETUP_SH" "$@" 2>&1) || true
 }
 
 # ---- Test 11: Template substitution produces valid AGENTS.md under 32KiB ----
@@ -560,6 +569,173 @@ test_manifest_tracks_repo_scope_skills() {
     fi
 }
 
+test_setup_writes_default_model_profile() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws"
+
+    local valid=true
+    if [ ! -f "$ws/.codex-sdlc/model-profile.json" ]; then
+        valid=false
+    else
+        if ! jq -e '.selected_profile == "mixed"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! jq -e '.profiles.mixed.main_model == "gpt-5.4-mini"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! jq -e '.profiles.maximum.main_reasoning == "xhigh"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup.sh writes the default mixed model profile with a maximum option"
+    else
+        fail "setup.sh did not write the expected default model profile"
+    fi
+}
+
+test_setup_accepts_maximum_model_profile() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws" --model-profile maximum
+
+    local valid=true
+    if [ ! -f "$ws/.codex-sdlc/model-profile.json" ]; then
+        valid=false
+    else
+        if ! jq -e '.selected_profile == "maximum"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup.sh accepts an explicit maximum model profile"
+    else
+        fail "setup.sh did not honor --model-profile maximum"
+    fi
+}
+
+test_setup_interactive_prompts_for_model_profile() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    local output
+    output=$(run_setup_interactive_capture "$ws" $'maximum\nY\n')
+
+    local valid=true
+    if ! echo "$output" | grep -qi 'model profile'; then
+        valid=false
+    fi
+    if [ ! -f "$ws/.codex-sdlc/model-profile.json" ] ||
+       ! jq -e '.selected_profile == "maximum"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "interactive setup prompts for a model profile and honors the user's choice"
+    else
+        fail "interactive setup did not prompt for or honor the model-profile choice"
+    fi
+}
+
+test_manifest_tracks_selected_model_profile() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws" --model-profile maximum
+
+    local valid=true
+    if [ ! -f "$ws/.codex-sdlc/manifest.json" ]; then
+        valid=false
+    else
+        if ! jq -e '.model_profile.selected_profile == "maximum"' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! jq -e '.managed_files[".codex-sdlc/model-profile.json"]' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "manifest.json tracks the selected model profile and profile file"
+    else
+        fail "manifest.json does not track the selected model profile cleanly"
+    fi
+}
+
+test_generated_agents_md_documents_profile_policy() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws"
+
+    local valid=true
+    if [ ! -f "$ws/AGENTS.md" ]; then
+        valid=false
+    else
+        grep -q 'Model Profile' "$ws/AGENTS.md" || valid=false
+        grep -q 'mixed' "$ws/AGENTS.md" || valid=false
+        grep -q 'maximum' "$ws/AGENTS.md" || valid=false
+        grep -Eqi '95%|research more first' "$ws/AGENTS.md" || valid=false
+        grep -Eqi 'xhigh review|xhigh' "$ws/AGENTS.md" || valid=false
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "Generated AGENTS.md documents the model-profile tradeoff and low-confidence escalation rule"
+    else
+        fail "Generated AGENTS.md does not document the model-profile policy clearly enough"
+    fi
+}
+
+test_generated_agents_md_documents_codex_shape_and_repo_focus() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws"
+
+    local valid=true
+    if [ ! -f "$ws/AGENTS.md" ]; then
+        valid=false
+    else
+        grep -q 'skills = explicit workflow layer' "$ws/AGENTS.md" || valid=false
+        grep -q 'hooks = silent event enforcement' "$ws/AGENTS.md" || valid=false
+        grep -q 'repo docs = source of local truth' "$ws/AGENTS.md" || valid=false
+        grep -qi 'always state confidence' "$ws/AGENTS.md" || valid=false
+        grep -qi 'direct GitHub issue' "$ws/AGENTS.md" || valid=false
+        grep -qi 'product repo' "$ws/AGENTS.md" || valid=false
+        grep -qi 'actually blocked' "$ws/AGENTS.md" || valid=false
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "Generated AGENTS.md documents the honest Codex shape, confidence rule, and repo-focus feedback loop"
+    else
+        fail "Generated AGENTS.md does not document the Codex shape and repo-focus feedback loop clearly enough"
+    fi
+}
+
 # ---- Run all tests ----
 test_detect_nodejs
 test_detect_rust
@@ -585,6 +761,12 @@ test_generated_agents_md_encourages_capability_detectors
 test_setup_output_encourages_capability_detectors
 test_setup_scaffolds_repo_scope_skills
 test_manifest_tracks_repo_scope_skills
+test_setup_writes_default_model_profile
+test_setup_accepts_maximum_model_profile
+test_setup_interactive_prompts_for_model_profile
+test_manifest_tracks_selected_model_profile
+test_generated_agents_md_documents_profile_policy
+test_generated_agents_md_documents_codex_shape_and_repo_focus
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

@@ -123,6 +123,27 @@ test_skill_recommends_full_auto_after_install() {
     fi
 }
 
+test_skill_documents_model_profiles() {
+    local has_mixed=true
+    local has_maximum=true
+    local has_tradeoff=true
+    local has_interactive_setup=true
+
+    grep -q '`mixed`' "$SKILL_MD" || has_mixed=false
+    grep -q '`maximum`' "$SKILL_MD" || has_maximum=false
+    grep -Eqi 'speed|latency|token|stability|ultimate' "$SKILL_MD" || has_tradeoff=false
+    grep -Eqi 'ask|interactive `setup` should ask|does not pass `--yes`' "$SKILL_MD" || has_interactive_setup=false
+
+    if [ "$has_mixed" = "true" ] &&
+       [ "$has_maximum" = "true" ] &&
+       [ "$has_tradeoff" = "true" ] &&
+       [ "$has_interactive_setup" = "true" ]; then
+        pass "SKILL.md documents the mixed versus maximum model-profile tradeoff"
+    else
+        fail "SKILL.md does not document the model-profile tradeoff clearly enough"
+    fi
+}
+
 test_repo_scoped_skills_exist() {
     local has_sdlc=true
     local has_adlc=true
@@ -161,13 +182,41 @@ test_repo_scoped_skills_are_codex_native() {
     fi
 }
 
+test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus() {
+    local has_shape=true
+    local has_confidence=true
+    local has_direct_issue=true
+    local has_product_repo=true
+    local has_blocked_boundary=true
+
+    grep -q 'skills = explicit workflow layer' "$REPO_SDLC_SKILL" || has_shape=false
+    grep -q 'hooks = silent event enforcement' "$REPO_SDLC_SKILL" || has_shape=false
+    grep -q 'repo docs = source of local truth' "$REPO_SDLC_SKILL" || has_shape=false
+    grep -qi 'keep slices small' "$REPO_SDLC_SKILL" || has_confidence=false
+    grep -qi 'direct GitHub issue' "$REPO_SDLC_SKILL" || has_direct_issue=false
+    grep -qi 'product repo' "$REPO_SDLC_SKILL" || has_product_repo=false
+    grep -qi 'actually blocked' "$REPO_SDLC_SKILL" || has_blocked_boundary=false
+
+    if [ "$has_shape" = "true" ] &&
+       [ "$has_confidence" = "true" ] &&
+       [ "$has_direct_issue" = "true" ] &&
+       [ "$has_product_repo" = "true" ] &&
+       [ "$has_blocked_boundary" = "true" ]; then
+        pass "Repo-scoped sdlc skill documents the Codex shape and repo-focus feedback loop"
+    else
+        fail "Repo-scoped sdlc skill does not document the Codex shape and repo-focus feedback loop clearly enough"
+    fi
+}
+
 test_skill_manifest_exists
 test_agents_openai_yaml_exists
 test_readme_documents_dual_distribution
 test_readme_recommends_full_auto
 test_skill_recommends_full_auto_after_install
+test_skill_documents_model_profiles
 test_repo_scoped_skills_exist
 test_repo_scoped_skills_are_codex_native
+test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

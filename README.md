@@ -84,6 +84,34 @@ The current default-use gate is:
 - pilot success `>= 95%`
 - no more than `1` reusable wizard bug across the pilot set
 
+## Model Profiles
+
+The wizard now supports two wizard-owned model profiles:
+
+- `mixed` (default): `gpt-5.4-mini` for the main pass plus `gpt-5.4` at `xhigh` for review.
+  Tradeoff: better speed, lower latency, and lower token usage on routine work.
+- `maximum`: `gpt-5.4` at `xhigh` throughout.
+  Tradeoff: higher latency and token usage in exchange for the most stable and thorough "ultimate mode."
+
+How to choose:
+
+```bash
+# default efficiency-first path
+npx codex-sdlc-wizard@X.Y.Z setup --yes
+
+# explicit maximum / ultimate mode
+npx codex-sdlc-wizard@X.Y.Z setup --yes --model-profile maximum
+```
+
+Interactive `setup` should ask which profile you want when you do not pass `--yes` or `--model-profile`.
+
+Low-confidence rule:
+- if confidence is below `95%`, research more first
+- if it still stays below `95%`, escalate review to `xhigh`
+- prefer `maximum` for abstract, complex, or high-blast-radius work
+
+The wizard stores the selected profile in `.codex-sdlc/model-profile.json` so the repo can keep that choice explicit. The profile toggle ships before the experiment is finished, but the long-term default recommendation still stays gated on the 20-slice model experiment.
+
 For adaptive setup instead of the basic installer:
 
 ```bash
@@ -94,14 +122,43 @@ If you want Codex to discover this as a reusable skill, install this repository 
 
 ## Repo-Scoped Skills
 
-`install.sh` and `setup.sh` now scaffold repo-local Codex skills under `.agents/skills`:
+`install.sh` and `setup.sh` now scaffold repo-local Codex skills under `.agents/skills`.
 
-- `$sdlc` for implementation, fixes, refactors, testing, release, and publish work
-- `$adlc` for evidence-heavy, investigation, audit, QA, or report-oriented work
+Repo-scoped skill coverage is still a work in progress:
 
-These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so `.agents/skills/sdlc` and `.agents/skills/adlc` are loaded cleanly.
+- `$sdlc` is the supported public workflow skill today
+- `gdlc` (gaming) and `rdlc` (research) are the next planned repo-scoped skills
 
-The bridge here is explicit, not magical: this adapter ships the Codex-native skill copies that target repos consume. It does not depend on local `.claude/skills/*` paths being present in the target repo.
+These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so repo-scoped skills are loaded cleanly.
+
+The bridge here is explicit, not magical: this adapter ships the Codex-native skill copies that target repos consume. It does not depend on local `.claude/skills/*` paths being present in the target repo. Some additional internal or experimental repo-scoped skill support may still exist under the hood, but `$sdlc` is the main public contract today.
+
+## Honest Codex SDLC Shape
+
+The current recommended Codex-native architecture is explicit:
+
+- `skills = explicit workflow layer`
+- `hooks = silent event enforcement`
+- `repo docs = source of local truth`
+
+That means:
+- use repo-scoped or installed skills for the user-facing workflow contract
+- use hooks to block or warn silently at the right events
+- keep `AGENTS.md`, `ARCHITECTURE.md`, `TESTING.md`, and related repo docs as the local source of truth
+
+What not to do:
+- do not pretend Codex has native slash commands when it does not
+- do not overload hooks to act as the user-facing workflow layer
+
+## Feedback Flow and Repo Focus
+
+When you dogfood this wizard in a product repo, keep the active session focused on that product repo.
+
+- if you discover a **proven reusable** wizard lesson, prefer filing a **direct GitHub issue** in `codex-sdlc-wizard` right away
+- keep building the **product repo** in the current session
+- only switch into live wizard work when the product repo is **actually blocked**
+
+This keeps dogfooding useful without turning every implementation session into wizard meta-work.
 
 ## Auth-Heavy Workflow Boundaries
 

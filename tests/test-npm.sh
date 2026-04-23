@@ -160,10 +160,50 @@ test_local_npx_installs_into_clean_repo() {
     fi
 }
 
+test_local_npx_setup_honors_model_profile_flag() {
+    local pack_dir target_repo
+    pack_dir=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-pack.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    local npm_cache
+    npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
+
+    local json tarball_name
+    json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
+    tarball_name=$(printf '%s' "$json" | jq -r 'if type=="array" then .[0].filename // empty else empty end' 2>/dev/null || true)
+
+    local configured=true
+    local tarball_path="$pack_dir/$tarball_name"
+
+    if [ -z "$tarball_name" ] || [ ! -f "$tarball_path" ]; then
+        configured=false
+    else
+        (
+            cd "$target_repo"
+            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
+        ) || configured=false
+    fi
+
+    if [ "$configured" = "true" ]; then
+        if [ ! -f "$target_repo/.codex-sdlc/model-profile.json" ] ||
+           ! jq -e '.selected_profile == "maximum"' "$target_repo/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+            configured=false
+        fi
+    fi
+
+    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
+
+    if [ "$configured" = "true" ]; then
+        pass "local npm exec setup honors the model-profile flag"
+    else
+        fail "local npm exec setup did not honor the model-profile flag"
+    fi
+}
+
 test_package_metadata_exists
 test_package_version_matches_roadmap_current_release
 test_npm_pack_includes_runtime_files
 test_local_npx_installs_into_clean_repo
+test_local_npx_setup_honors_model_profile_flag
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

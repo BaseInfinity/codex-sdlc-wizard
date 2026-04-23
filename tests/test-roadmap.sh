@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 ROADMAP="$REPO_DIR/ROADMAP.md"
+PACKAGE_JSON="$REPO_DIR/package.json"
 PASSED=0
 FAILED=0
 
@@ -35,10 +36,13 @@ test_roadmap_exists() {
 }
 
 test_roadmap_states_current_release_status() {
+    local package_version
     local has_heading=true
     local has_current_release=true
     local has_trusted_publishing=true
     local current_state_section
+
+    package_version=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' "$PACKAGE_JSON" | head -n1)
 
     current_state_section=$(awk '
         /^## Current State$/ { in_section=1; next }
@@ -47,7 +51,7 @@ test_roadmap_states_current_release_status() {
     ' "$ROADMAP")
 
     grep -q '^## Current State$' "$ROADMAP" || has_heading=false
-    echo "$current_state_section" | grep -Eq '0\.5\.0|v0\.5\.0' || has_current_release=false
+    echo "$current_state_section" | grep -Eq "${package_version}|v${package_version}" || has_current_release=false
     echo "$current_state_section" | grep -qi 'trusted publishing' || has_trusted_publishing=false
 
     if [ "$has_heading" = "true" ] &&
@@ -60,24 +64,29 @@ test_roadmap_states_current_release_status() {
 }
 
 test_roadmap_lists_next_release_cycle() {
+    local has_semver_heading=true
     local has_heading=true
-    local has_minor_release=true
-    local has_backlog_window=true
+    local has_pilot_rollout=true
+    local has_stabilization_rule=true
     local next_release_section
+    local next_release_heading
 
     next_release_section=$(awk '
         /^## Next Release Cycle$/ { in_section=1; next }
         /^## / && in_section { exit }
         in_section { print }
     ' "$ROADMAP")
+    next_release_heading=$(echo "$next_release_section" | awk '/^### / { print $2; exit }')
 
     grep -q '^## Next Release Cycle$' "$ROADMAP" || has_heading=false
-    echo "$next_release_section" | grep -q '0.6.0' || has_minor_release=false
-    echo "$next_release_section" | grep -Eq '#7|#8|#9|#10' || has_backlog_window=false
+    echo "$next_release_heading" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || has_semver_heading=false
+    echo "$next_release_section" | grep -Eqi 'pilot repos|pilot rollout|default use|default path' || has_pilot_rollout=false
+    echo "$next_release_section" | grep -Eqi 'reusable wizard bug|stabiliz|only if pilots surface' || has_stabilization_rule=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_minor_release" = "true" ] &&
-       [ "$has_backlog_window" = "true" ]; then
+       [ "$has_semver_heading" = "true" ] &&
+       [ "$has_pilot_rollout" = "true" ] &&
+       [ "$has_stabilization_rule" = "true" ]; then
         pass "Roadmap lists the next release proof and main engineering item"
     else
         fail "Roadmap does not list the next release sequence clearly"
@@ -86,9 +95,10 @@ test_roadmap_lists_next_release_cycle() {
 
 test_roadmap_calls_out_stale_issue_cleanup() {
     local has_heading=true
-    local has_issue14=true
     local has_issue7=true
     local has_issue8=true
+    local has_issue9=true
+    local has_issue10=true
     local cleanup_section
 
     cleanup_section=$(awk '
@@ -98,14 +108,16 @@ test_roadmap_calls_out_stale_issue_cleanup() {
     ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    echo "$cleanup_section" | grep -q '#14' || has_issue14=false
     echo "$cleanup_section" | grep -q '#7' || has_issue7=false
     echo "$cleanup_section" | grep -q '#8' || has_issue8=false
+    echo "$cleanup_section" | grep -q '#9' || has_issue9=false
+    echo "$cleanup_section" | grep -q '#10' || has_issue10=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_issue14" = "true" ] &&
        [ "$has_issue7" = "true" ] &&
-       [ "$has_issue8" = "true" ]; then
+       [ "$has_issue8" = "true" ] &&
+       [ "$has_issue9" = "true" ] &&
+       [ "$has_issue10" = "true" ]; then
         pass "Roadmap calls out the consumer-path release issues for cleanup"
     else
         fail "Roadmap does not call out tracker cleanup clearly"
@@ -134,14 +146,17 @@ test_roadmap_tracks_review_model_experiment() {
     local has_mini=true
     local has_xhigh_review=true
     local has_experiment_language=true
+    local has_toggle_language=true
 
     grep -qi 'gpt-5\.4-mini' "$ROADMAP" || has_mini=false
     grep -Eqi 'xhigh review|review.*xhigh|cross-model review.*xhigh' "$ROADMAP" || has_xhigh_review=false
     grep -Eqi 'experiment|test against|compare' "$ROADMAP" || has_experiment_language=false
+    grep -Eqi 'toggle|profile|switch between|all-xhigh|everything at xhigh' "$ROADMAP" || has_toggle_language=false
 
     if [ "$has_mini" = "true" ] &&
        [ "$has_xhigh_review" = "true" ] &&
-       [ "$has_experiment_language" = "true" ]; then
+       [ "$has_experiment_language" = "true" ] &&
+       [ "$has_toggle_language" = "true" ]; then
         pass "Roadmap tracks the gpt-5.4-mini vs xhigh-review experiment as later work"
     else
         fail "Roadmap does not track the gpt-5.4-mini vs xhigh-review experiment"
@@ -193,9 +208,9 @@ test_roadmap_tracks_default_use_pilot_gate() {
     fi
 }
 
-test_roadmap_prioritizes_discovery_bridge_before_docs_process_backlog() {
+test_roadmap_prioritizes_pilot_rollout_before_creator_investigation() {
     local order_section
-    local line_docs_backlog
+    local line_pilot_rollout
     local line_creator_investigation
 
     order_section=$(awk '
@@ -204,15 +219,15 @@ test_roadmap_prioritizes_discovery_bridge_before_docs_process_backlog() {
         in_section { print }
     ' "$ROADMAP")
 
-    line_docs_backlog=$(echo "$order_section" | nl -ba | grep '#7.*#10' | awk '{print $1}' | head -n1)
+    line_pilot_rollout=$(echo "$order_section" | nl -ba | grep -Ei 'pilot repos|pilot rollout|default use' | awk '{print $1}' | head -n1)
     line_creator_investigation=$(echo "$order_section" | nl -ba | grep -Ei 'creator-tool|creator' | awk '{print $1}' | head -n1)
 
-    if [ -n "${line_docs_backlog:-}" ] &&
+    if [ -n "${line_pilot_rollout:-}" ] &&
        [ -n "${line_creator_investigation:-}" ] &&
-       [ "$line_docs_backlog" -lt "$line_creator_investigation" ]; then
-        pass "Roadmap prioritizes the Codex discovery bridge (#14) before the docs/process backlog (#7-#10)"
+       [ "$line_pilot_rollout" -lt "$line_creator_investigation" ]; then
+        pass "Roadmap prioritizes pilot rollout before later creator-tool investigation"
     else
-        fail "Roadmap does not prioritize #14 ahead of the remaining docs/process backlog"
+        fail "Roadmap does not prioritize pilot rollout ahead of later creator-tool investigation"
     fi
 }
 
@@ -224,7 +239,7 @@ test_roadmap_tracks_late_creator_investigation
 test_roadmap_tracks_review_model_experiment
 test_roadmap_sets_numeric_model_experiment_targets
 test_roadmap_tracks_default_use_pilot_gate
-test_roadmap_prioritizes_discovery_bridge_before_docs_process_backlog
+test_roadmap_prioritizes_pilot_rollout_before_creator_investigation
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
