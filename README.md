@@ -176,6 +176,7 @@ git clone --branch v0.7.2 --depth 1 https://github.com/BaseInfinity/codex-sdlc-w
 ### Maintainer Release Flow
 
 This adapter should follow the same semver-tag plus GitHub Release rhythm as the upstream wizard.
+Use [RELEASE.md](RELEASE.md) as the mandatory pre-tag checklist: sync to latest `origin/main`, run the full proof suite, and only then tag.
 
 ```bash
 # After tests pass on main
@@ -232,7 +233,7 @@ bash tests/test-packaging.sh
 # Codex skill package smoke test
 bash tests/test-skill.sh
 
-# npm / npx packaging smoke test
+# npm / npx packaging smoke test, including the packed-tarball scratch smoke
 bash tests/test-npm.sh
 
 # Unit tests (no API calls, fast)
