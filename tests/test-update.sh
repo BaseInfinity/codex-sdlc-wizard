@@ -54,7 +54,7 @@ json_text_equals() {
 
 run_setup_local() {
     local project_dir="$1"
-    (cd "$project_dir" && CODEX_HOME="$project_dir/.codex-home" bash "$SETUP_SH" --yes >/dev/null 2>&1)
+    (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 CODEX_HOME="$project_dir/.codex-home" bash "$SETUP_SH" --yes >/dev/null 2>&1)
 }
 
 run_update() {

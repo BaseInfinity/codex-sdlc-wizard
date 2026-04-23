@@ -145,7 +145,7 @@ test_local_npx_installs_into_clean_repo() {
         mkdir -p "$target_repo/src"
         (
             cd "$target_repo"
-            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard --yes >/dev/null 2>&1
+            CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard --yes >/dev/null 2>&1
         ) || installed=false
     fi
 
@@ -185,7 +185,7 @@ test_local_npx_setup_honors_model_profile_flag() {
     else
         (
             cd "$target_repo"
-            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
+            CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
         ) || configured=false
     fi
 
@@ -228,7 +228,7 @@ test_packed_tarball_scratch_smoke() {
 
         setup_output=$(
             cd "$target_repo" && \
-            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
                 codex-sdlc-wizard setup --yes 2>&1
         ) || valid=false
 
