@@ -798,7 +798,7 @@ prompt_inferred_value() {
     printf -v "$var_name" '%s' "$updated_value"
 }
 
-confirm_inferred_values() {
+review_inferred_values_one_by_one() {
     prompt_inferred_value "source directory" "Source directory" SOURCE_DIR "$SOURCE_DIR_STATE"
     prompt_inferred_value "test directory" "Test directory" TEST_DIR "$TEST_DIR_STATE"
     prompt_inferred_value "test framework" "Test framework" TEST_FRAMEWORK "$TEST_FRAMEWORK_STATE"
@@ -810,6 +810,39 @@ confirm_inferred_values() {
     prompt_inferred_value "test duration expectation" "Test duration expectation" TEST_DURATION "$TEST_DURATION_STATE"
     prompt_inferred_value "coverage config" "Coverage config" COVERAGE_CONFIG "$COVERAGE_CONFIG_STATE"
     prompt_inferred_value "project domain" "Project domain" DOMAIN "$DOMAIN_STATE"
+}
+
+has_inferred_values() {
+    local state=""
+    for state in \
+        "$SOURCE_DIR_STATE" \
+        "$TEST_DIR_STATE" \
+        "$TEST_FRAMEWORK_STATE" \
+        "$TEST_COMMAND_STATE" \
+        "$LINT_COMMAND_STATE" \
+        "$TYPECHECK_COMMAND_STATE" \
+        "$SINGLE_TEST_COMMAND_STATE" \
+        "$BUILD_COMMAND_STATE" \
+        "$TEST_DURATION_STATE" \
+        "$COVERAGE_CONFIG_STATE" \
+        "$DOMAIN_STATE"; do
+        [ "$state" = "inferred" ] && return 0
+    done
+    return 1
+}
+
+confirm_inferred_values() {
+    local answer=""
+
+    has_inferred_values || return 0
+
+    printf "Press Enter to keep the inferred values above, or type edit to review them one by one: " >&2
+    IFS= read -r answer || answer=""
+    case "$answer" in
+        edit|EDIT|Edit|e|E)
+            review_inferred_values_one_by_one
+            ;;
+    esac
 }
 
 prompt_missing_core_value() {
@@ -865,6 +898,38 @@ apply_auto_yes_defaults() {
     return 0
 }
 
+customize_workflow_preferences() {
+    choose_model_profile
+    GIT_WORKFLOW=$(prompt_with_default "Git workflow preference [solo/prs]" "$GIT_WORKFLOW")
+    RESPONSE_DETAIL=$(prompt_with_default "Response detail preference [concise/detailed]" "$RESPONSE_DETAIL")
+    TESTING_APPROACH=$(prompt_with_default "Testing approach preference [strict-tdd/mixed/test-after/minimal]" "$TESTING_APPROACH")
+    MOCKING_PHILOSOPHY=$(prompt_with_default "Mocking philosophy preference [minimal/heavy/none/not-sure]" "$MOCKING_PHILOSOPHY")
+
+    if [ -n "$CI" ]; then
+        CI_SHEPHERD=$(prompt_with_default "CI shepherd preference [enabled/disabled]" "$CI_SHEPHERD")
+    fi
+}
+
+confirm_workflow_defaults() {
+    local answer=""
+    local defaults_line=""
+
+    echo ""
+    echo "Last thing: I can tailor the generated docs, but the workflow defaults are usually fine."
+    defaults_line="Defaults: model profile=$MODEL_PROFILE, git workflow=$GIT_WORKFLOW, response detail=$RESPONSE_DETAIL, testing approach=$TESTING_APPROACH, mocking=$MOCKING_PHILOSOPHY"
+    if [ -n "$CI" ]; then
+        defaults_line="$defaults_line, ci shepherd=$CI_SHEPHERD"
+    fi
+    echo "$defaults_line"
+    printf "Press Enter to keep these workflow defaults, or type edit to customize them: " >&2
+    IFS= read -r answer || answer=""
+    case "$answer" in
+        edit|EDIT|Edit|e|E)
+            customize_workflow_preferences
+            ;;
+    esac
+}
+
 collect_setup_answers() {
     if [ "$AUTO_YES" = "true" ]; then
         apply_auto_yes_defaults
@@ -875,18 +940,7 @@ collect_setup_answers() {
     confirm_inferred_values
     collect_missing_core_facts
     offer_detected_review
-
-    echo ""
-    echo "Last thing: a few workflow preferences so I can tailor the generated docs."
-    choose_model_profile
-    GIT_WORKFLOW=$(prompt_with_default "Git workflow preference [solo/prs]" "$GIT_WORKFLOW")
-    RESPONSE_DETAIL=$(prompt_with_default "Response detail preference [concise/detailed]" "$RESPONSE_DETAIL")
-    TESTING_APPROACH=$(prompt_with_default "Testing approach preference [strict-tdd/mixed/test-after/minimal]" "$TESTING_APPROACH")
-    MOCKING_PHILOSOPHY=$(prompt_with_default "Mocking philosophy preference [minimal/heavy/none/not-sure]" "$MOCKING_PHILOSOPHY")
-
-    if [ -n "$CI" ]; then
-        CI_SHEPHERD=$(prompt_with_default "CI shepherd preference [enabled/disabled]" "$CI_SHEPHERD")
-    fi
+    confirm_workflow_defaults
 }
 
 # ---- Step 2: Confirm and fill gaps ----
