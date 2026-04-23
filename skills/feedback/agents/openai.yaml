@@ -1,0 +1,5 @@
+version: 1
+interface:
+  display_name: Feedback
+  short_description: Capture bug reports, feature requests, and useful SDLC patterns without violating repo privacy.
+  default_prompt: Run the Codex feedback workflow. Ask permission before scanning SDLC files, then capture the issue or pattern in a concise, reusable form.

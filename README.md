@@ -12,7 +12,16 @@ npx codex-sdlc-wizard@latest setup --yes
 codex --full-auto
 ```
 
-`codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing/runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
+`codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing and runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
+
+Generic npm entrypoint examples: `npx codex-sdlc-wizard setup --yes`, `npx codex-sdlc-wizard check`, and `npx codex-sdlc-wizard update`.
+
+Useful follow-ups after install:
+
+```bash
+npx codex-sdlc-wizard@0.7.2 check
+npx codex-sdlc-wizard@0.7.2 update
+```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
 
@@ -35,14 +44,15 @@ This repo is now a **Codex skill plus installer-style adapter** for Codex projec
 This adapter brings the SDLC Wizard discipline into Codex today with hard guardrails, repo-local guidance, and setup/install flows that work in existing projects.
 
 **What works today:**
-- Hard enforcement hooks that block bad habits (git commit without tests, push without review)
-- AGENTS.md guidance for TDD, planning, and confidence tracking
+- Hard enforcement hooks that block bad habits (`git commit` without proof, `git push` without review)
+- AGENTS.md guidance for planning, confidence tracking, TDD, and review
 - Non-destructive installer that merges into your existing Codex config
+- Adaptive `setup.sh` that scans the repo and records manifest state
+- `check` / `update` flows for drift detection and selective repair
 
-**What's coming (inherited from upstream):**
-- Project-adaptive setup wizard (reads your repo, generates tailored AGENTS.md)
-- Scoring mechanisms and self-improvement from E2E evaluation
-- Domain-adaptive testing guidance (firmware, web, data science, etc.)
+**What's still coming from upstream:**
+- richer scoring mechanisms and self-improvement from E2E evaluation
+- more domain-adaptive guidance refinements beyond the current templates
 
 ## Self-Evolving
 
@@ -52,29 +62,29 @@ This adapter tracks the upstream [SDLC Wizard](https://github.com/BaseInfinity/a
 
 | SDLC Goal | Enforcement | Level |
 |-----------|-------------|-------|
-| TDD workflow | AGENTS.md guidance | Soft (Codex has no file-edit tools to hook) |
-| git commit gate | PreToolUse blocks `git commit` | **Hard** (stronger than CC wizard!) |
-| git push gate | PreToolUse blocks `git push` | **Hard** (stronger than CC wizard!) |
-| SDLC baseline | UserPromptSubmit hook | Context injection every prompt |
-| Session init | SessionStart hook | Warns if AGENTS.md missing |
+| TDD workflow | AGENTS.md guidance | Soft (Codex has no file-edit hooks) |
+| git commit gate | PreToolUse blocks `git commit` | **Hard** |
+| git push gate | PreToolUse blocks `git push` | **Hard** |
+| SDLC baseline | repo docs + installed skills | **Hard/Soft mix** |
+| Session init | SessionStart hook | Warns if AGENTS.md is missing |
 
 ## Model Profiles
 
-The wizard now supports two wizard-owned model profiles:
+The wizard supports two wizard-owned model profiles:
 
 - `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.4` at `xhigh` for review.
   Tradeoff: better speed, lower latency, and lower token usage on routine work after bootstrap.
 - `maximum`: `gpt-5.4` at `xhigh` throughout.
-  Tradeoff: higher latency and token usage in exchange for the most stable and thorough "ultimate mode." Prefer this for setup/update bootstrap work.
+  Tradeoff: higher latency and token usage in exchange for the most stable and thorough "ultimate mode."
 
 How to choose:
 
 ```bash
 # recommended bootstrap path
-npx codex-sdlc-wizard@0.7.1 setup --yes --model-profile maximum
+npx codex-sdlc-wizard@0.7.2 setup --yes --model-profile maximum
 
 # routine work can switch back to the efficiency-first profile later
-npx codex-sdlc-wizard@0.7.1 setup --yes
+npx codex-sdlc-wizard@0.7.2 setup --yes --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest setup --yes --model-profile maximum
@@ -83,11 +93,12 @@ npx codex-sdlc-wizard@latest setup --yes --model-profile maximum
 Interactive `setup` should ask which profile you want when you do not pass `--yes` or `--model-profile`, and it should recommend `maximum` as the safer bootstrap default.
 
 Low-confidence rule:
+- Default to `xhigh` in this repo when the work is meta, setup-heavy, or otherwise high-blast-radius.
 - if confidence is below `95%`, research more first
 - if it still stays below `95%`, escalate review to `xhigh`
 - prefer `maximum` for abstract, complex, or high-blast-radius work
 
-The wizard stores the selected profile in `.codex-sdlc/model-profile.json` so the repo can keep that choice explicit. The profile toggle ships before the experiment is finished, but the long-term default recommendation still stays gated on the 20-slice model experiment.
+The wizard stores the selected profile in `.codex-sdlc/model-profile.json` so the repo can keep that choice explicit.
 
 Bootstrap recommendation:
 - setup/update should use `maximum`; routine work after bootstrap should use `mixed`
@@ -98,17 +109,9 @@ Repo-specific maintainer rule:
 - consumer repos can choose `mixed` or `maximum`
 - this repo stays on `maximum`; `codex-sdlc-wizard` itself is unusually meta and high-blast-radius
 
-For adaptive setup instead of the basic installer:
-
-```bash
-npx codex-sdlc-wizard@0.7.1 setup --yes
-```
-
-If you want Codex to discover this as a reusable skill, install this repository through the normal GitHub skill-install flow. The repo root now contains `SKILL.md` and `agents/openai.yaml`, while the bundled skill behavior still delegates real repo mutation to `install.sh` / `setup.sh`.
-
 ## Repo-Scoped Skills
 
-`install.sh` and `setup.sh` now scaffold repo-local Codex skills under `.agents/skills`.
+`install.sh` and `setup.sh` scaffold repo-local Codex skills under `.agents/skills`.
 
 Repo-scoped skill coverage is still a work in progress:
 
@@ -117,7 +120,7 @@ Repo-scoped skill coverage is still a work in progress:
 
 These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so repo-scoped skills are loaded cleanly.
 
-The bridge here is explicit, not magical: this adapter ships the Codex-native skill copies that target repos consume. It does not depend on local `.claude/skills/*` paths being present in the target repo. Some additional internal or experimental repo-scoped skill support may still exist under the hood, but `$sdlc` is the main public contract today.
+The bridge here is explicit, not magical: this adapter ships the Codex-native skill copies that target repos consume. It does not depend on local `.claude/skills/*` paths being present in the target repo.
 
 ## Honest Codex SDLC Shape
 
@@ -157,7 +160,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.1
+npx codex-sdlc-wizard@0.7.2
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -167,7 +170,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.1 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.2 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow
@@ -197,31 +200,25 @@ The workflow uses GitHub OIDC trusted publishing, validates that the tag matches
 
 ### What `install.sh` Changes
 
-1. Copies `AGENTS.md` (skips if exists — your customizations are safe)
-2. Creates/merges `.codex/config.toml` with `codex_hooks = true`
-3. Installs `.codex/hooks.json` (backs up existing)
-4. Copies hook scripts to `.codex/hooks/`
+1. Copies `AGENTS.md` (skips if exists, so your customizations are safe)
+2. Copies `SDLC-LOOP.md`, `START-SDLC.md`, and `PROVE-IT.md` if missing
+3. Creates or merges `.codex/config.toml` with `codex_hooks = true`
+4. Installs `.codex/hooks.json` (backs up existing)
+5. Copies hook scripts to `.codex/hooks/`
+6. Installs repo-scoped skills at `.agents/skills/sdlc/SKILL.md` and `.agents/skills/adlc/SKILL.md`
+7. Installs the current global Codex skill set under `~/.codex/skills`
 
-In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, and `.codex/hooks/*.sh`.
-It also scaffolds repo-scope Codex skills at `.agents/skills/sdlc/SKILL.md` and `.agents/skills/adlc/SKILL.md`.
+In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/*`, and the repo-scoped skills. It also writes `.codex-sdlc/model-profile.json` so the chosen profile is explicit.
 
 ### Requirements
 
 - Codex CLI (`npm i -g @openai/codex`)
-- `bash` (3.x+ macOS, 4.x+ Linux)
-- `jq` (for hook JSON parsing)
+- `bash` (3.x+ macOS, 4.x+ Linux, Git Bash on Windows for the shell path)
+- Node.js 18+
 
 ## E2E Proven
 
-All hooks are verified in real Codex CLI sessions — not just unit tested in isolation:
-
-```
-PASS: E2E: Codex session completed with hooks loaded
-PASS: E2E: git commit was blocked — HEAD is still 'init'
-PASS: E2E: git push was blocked by hook
-PASS: E2E: Normal commands execute with hooks active
-PASS: E2E: Session works without AGENTS.md (hook warns, doesn't crash)
-```
+All hooks are verified in real Codex CLI sessions, not just unit tested in isolation.
 
 ## Testing
 
@@ -240,6 +237,8 @@ bash tests/test-npm.sh
 
 # Unit tests (no API calls, fast)
 bash tests/test-adapter.sh
+bash tests/test-setup.sh
+bash tests/test-update.sh
 
 # E2E tests (requires codex CLI + auth, costs tokens)
 bash tests/test-e2e.sh
@@ -249,12 +248,12 @@ bash tests/test-e2e.sh
 - Packaging smoke tests for the documented installer path and README packaging contract
 - Skill packaging tests for SKILL.md, agents/openai.yaml, and dual-distribution docs
 - npm packaging smoke tests for package metadata, packed contents, and npm exec
-- 15 behavioral unit tests (hook behavior, payload format, config merge, install)
-- 5 E2E integration tests (real Codex sessions proving hooks fire)
+- Adapter, setup, and update tests for the Codex-specific behavior surface
+- E2E integration tests for real Codex sessions proving hooks fire
 
 ## Upstream
 
-Based on [agentic-ai-sdlc-wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard) v1.31.0. Same SDLC philosophy, translated to Codex's Bash-only tool model (~70% parity).
+Based on [agentic-ai-sdlc-wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard). Same SDLC philosophy, translated to Codex's current tool model with Codex-native skills, repo hooks, and adaptive setup/update flows.
 
 ## Community
 
