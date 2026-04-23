@@ -745,8 +745,36 @@ fi
 mkdir -p .codex-sdlc
 
 compute_hash() {
-    if [ -f "$1" ]; then
-        echo "sha256:$(shasum -a 256 "$1" | cut -d' ' -f1)"
+    local target="$1"
+    local hash=""
+
+    if [ ! -f "$target" ]; then
+        echo ""
+        return 0
+    fi
+
+    if command -v shasum >/dev/null 2>&1; then
+        hash=$(shasum -a 256 "$target" 2>/dev/null | cut -d' ' -f1 || true)
+    fi
+
+    if ! printf '%s' "$hash" | grep -Eqi '^[0-9a-f]{64}$'; then
+        if command -v sha256sum >/dev/null 2>&1; then
+            hash=$(sha256sum "$target" 2>/dev/null | cut -d' ' -f1 || true)
+        fi
+    fi
+
+    if ! printf '%s' "$hash" | grep -Eqi '^[0-9a-f]{64}$'; then
+        hash=$(FILE_TO_HASH="$target" node -e '
+const crypto = require("crypto");
+const fs = require("fs");
+const file = process.env.FILE_TO_HASH;
+const digest = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+process.stdout.write(digest);
+' 2>/dev/null || true)
+    fi
+
+    if printf '%s' "$hash" | grep -Eqi '^[0-9a-f]{64}$'; then
+        printf 'sha256:%s\n' "$(printf '%s' "$hash" | tr '[:upper:]' '[:lower:]')"
     else
         echo ""
     fi

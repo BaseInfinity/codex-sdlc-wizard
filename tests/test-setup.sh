@@ -924,6 +924,40 @@ fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
     fi
 }
 
+# ---- Test 32: setup falls back to Node hashing when shell hash tools are unavailable ----
+test_setup_hashes_manifest_without_shell_hash_tools() {
+    local ws
+    local fakebin
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    printf '#!/bin/sh\nexit 127\n' > "$fakebin/shasum"
+    printf '#!/bin/sh\nexit 127\n' > "$fakebin/sha256sum"
+    chmod +x "$fakebin/shasum" "$fakebin/sha256sum"
+
+    local output status hash valid=true
+    set +e
+    output=$(cd "$ws" && PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    [ -f "$ws/.codex-sdlc/manifest.json" ] || valid=false
+    hash=$(json_eval_stdin 'data.managed_files["AGENTS.md"]' < "$ws/.codex-sdlc/manifest.json" || true)
+    printf '%s' "$hash" | grep -Eq '^sha256:[0-9a-f]{64}$' || valid=false
+    echo "$output" | grep -q 'command not found' && valid=false
+
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup falls back to Node hashing when shell hash tools are unavailable"
+    else
+        fail "setup did not produce valid manifest hashes without shell hash tools"
+    fi
+}
+
 # ---- Run all tests ----
 test_detect_nodejs
 test_detect_rust
@@ -956,6 +990,7 @@ test_setup_generates_extended_setup_docs
 test_setup_interactive_allows_overriding_detected_values
 test_setup_verify_only_reports_missing_files
 test_setup_regenerate_rebuilds_docs_from_manifest
+test_setup_hashes_manifest_without_shell_hash_tools
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

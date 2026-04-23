@@ -5,8 +5,9 @@
 2. LOW confidence? Research more or ASK USER
 3. Reasoning policy - default to XHIGH for this repo
 4. Keep XHIGH as the normal path in this repo unless the user explicitly asks for less
-5. Write failing test FIRST (TDD RED), then implement (TDD GREEN)
-6. ALL tests must pass before commit - no exceptions
+5. Keep this repo on maximum because codex-sdlc-wizard is unusually meta and high-blast-radius
+6. Write failing test FIRST (TDD RED), then implement (TDD GREEN)
+7. ALL tests must pass before commit - no exceptions
 
 ## TDD Workflow (MANDATORY)
 1. Write the test file FIRST - the test MUST FAIL initially
