@@ -10,6 +10,7 @@ SKILL_MD="$REPO_DIR/SKILL.md"
 OPENAI_YAML="$REPO_DIR/agents/openai.yaml"
 REPO_SDLC_SKILL="$REPO_DIR/.agents/skills/sdlc/SKILL.md"
 REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
+REPO_AGENTS="$REPO_DIR/AGENTS.md"
 PASSED=0
 FAILED=0
 
@@ -128,19 +129,43 @@ test_skill_documents_model_profiles() {
     local has_maximum=true
     local has_tradeoff=true
     local has_interactive_setup=true
+    local has_repo_maximum_rule=true
+    local has_bootstrap_maximum_rule=true
+    local has_routine_mixed_rule=true
 
     grep -q '`mixed`' "$SKILL_MD" || has_mixed=false
     grep -q '`maximum`' "$SKILL_MD" || has_maximum=false
     grep -Eqi 'speed|latency|token|stability|ultimate' "$SKILL_MD" || has_tradeoff=false
     grep -Eqi 'ask|interactive `setup` should ask|does not pass `--yes`' "$SKILL_MD" || has_interactive_setup=false
+    grep -Eqi 'this repo.*maximum|wizard repo.*maximum|maintaining codex-sdlc-wizard.*maximum' "$SKILL_MD" || has_repo_maximum_rule=false
+    grep -Eqi 'setup/update.*maximum|bootstrap.*maximum' "$SKILL_MD" || has_bootstrap_maximum_rule=false
+    grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' "$SKILL_MD" || has_routine_mixed_rule=false
 
     if [ "$has_mixed" = "true" ] &&
        [ "$has_maximum" = "true" ] &&
        [ "$has_tradeoff" = "true" ] &&
-       [ "$has_interactive_setup" = "true" ]; then
-        pass "SKILL.md documents the mixed versus maximum model-profile tradeoff"
+       [ "$has_interactive_setup" = "true" ] &&
+       [ "$has_repo_maximum_rule" = "true" ] &&
+       [ "$has_bootstrap_maximum_rule" = "true" ] &&
+       [ "$has_routine_mixed_rule" = "true" ]; then
+        pass "SKILL.md documents bootstrap maximum, routine mixed, and keeps this repo on maximum"
     else
-        fail "SKILL.md does not document the model-profile tradeoff clearly enough"
+        fail "SKILL.md does not document bootstrap maximum, routine mixed, and this repo's maximum-only policy clearly enough"
+    fi
+}
+
+test_repo_contract_keeps_this_repo_on_maximum() {
+    local has_maximum_rule=true
+    local has_meta_reason=true
+
+    grep -Eqi 'this repo.*maximum|codex-sdlc-wizard itself.*maximum|maintaining this wizard repo.*maximum' "$REPO_AGENTS" || has_maximum_rule=false
+    grep -Eqi 'meta|high-blast-radius|too meta' "$REPO_AGENTS" || has_meta_reason=false
+
+    if [ "$has_maximum_rule" = "true" ] &&
+       [ "$has_meta_reason" = "true" ]; then
+        pass "AGENTS.md keeps this wizard repo on maximum because the work is meta/high-blast-radius"
+    else
+        fail "AGENTS.md does not keep this wizard repo on maximum clearly enough"
     fi
 }
 
@@ -188,6 +213,7 @@ test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus() {
     local has_direct_issue=true
     local has_product_repo=true
     local has_blocked_boundary=true
+    local avoids_pilot_rollout_note=true
 
     grep -q 'skills = explicit workflow layer' "$REPO_SDLC_SKILL" || has_shape=false
     grep -q 'hooks = silent event enforcement' "$REPO_SDLC_SKILL" || has_shape=false
@@ -196,12 +222,14 @@ test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus() {
     grep -qi 'direct GitHub issue' "$REPO_SDLC_SKILL" || has_direct_issue=false
     grep -qi 'product repo' "$REPO_SDLC_SKILL" || has_product_repo=false
     grep -qi 'actually blocked' "$REPO_SDLC_SKILL" || has_blocked_boundary=false
+    grep -qi 'pilot-rollout.csv' "$REPO_SDLC_SKILL" && avoids_pilot_rollout_note=false
 
     if [ "$has_shape" = "true" ] &&
        [ "$has_confidence" = "true" ] &&
        [ "$has_direct_issue" = "true" ] &&
        [ "$has_product_repo" = "true" ] &&
-       [ "$has_blocked_boundary" = "true" ]; then
+       [ "$has_blocked_boundary" = "true" ] &&
+       [ "$avoids_pilot_rollout_note" = "true" ]; then
         pass "Repo-scoped sdlc skill documents the Codex shape and repo-focus feedback loop"
     else
         fail "Repo-scoped sdlc skill does not document the Codex shape and repo-focus feedback loop clearly enough"
@@ -214,6 +242,7 @@ test_readme_documents_dual_distribution
 test_readme_recommends_full_auto
 test_skill_recommends_full_auto_after_install
 test_skill_documents_model_profiles
+test_repo_contract_keeps_this_repo_on_maximum
 test_repo_scoped_skills_exist
 test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus

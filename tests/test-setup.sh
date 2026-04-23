@@ -569,7 +569,7 @@ test_manifest_tracks_repo_scope_skills() {
     fi
 }
 
-test_setup_writes_default_model_profile() {
+test_setup_writes_bootstrap_maximum_model_profile_by_default() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
@@ -581,7 +581,7 @@ test_setup_writes_default_model_profile() {
     if [ ! -f "$ws/.codex-sdlc/model-profile.json" ]; then
         valid=false
     else
-        if ! jq -e '.selected_profile == "mixed"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+        if ! jq -e '.selected_profile == "maximum"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
             valid=false
         fi
         if ! jq -e '.profiles.mixed.main_model == "gpt-5.4-mini"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
@@ -594,9 +594,9 @@ test_setup_writes_default_model_profile() {
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "setup.sh writes the default mixed model profile with a maximum option"
+        pass "setup.sh defaults bootstrap work to the maximum model profile while keeping mixed available"
     else
-        fail "setup.sh did not write the expected default model profile"
+        fail "setup.sh did not default bootstrap work to the maximum model profile"
     fi
 }
 
@@ -638,6 +638,9 @@ test_setup_interactive_prompts_for_model_profile() {
     if ! echo "$output" | grep -qi 'model profile'; then
         valid=false
     fi
+    if ! echo "$output" | grep -Eqi 'default: maximum|recommended: maximum|setup.*maximum|maximum.*setup|bootstrap.*maximum|maximum.*bootstrap'; then
+        valid=false
+    fi
     if [ ! -f "$ws/.codex-sdlc/model-profile.json" ] ||
        ! jq -e '.selected_profile == "maximum"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
         valid=false
@@ -646,9 +649,63 @@ test_setup_interactive_prompts_for_model_profile() {
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "interactive setup prompts for a model profile and honors the user's choice"
+        pass "interactive setup prompts for a model profile, recommends maximum, and honors the user's choice"
     else
-        fail "interactive setup did not prompt for or honor the model-profile choice"
+        fail "interactive setup did not recommend maximum or honor the model-profile choice"
+    fi
+}
+
+test_setup_output_recommends_mixed_after_bootstrap() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    local output
+    output=$(run_setup_capture "$ws")
+
+    local valid=true
+    echo "$output" | grep -Eqi 'setup/update.*maximum|bootstrap.*maximum' || valid=false
+    echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' || valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup.sh output recommends maximum for bootstrap and mixed for routine work"
+    else
+        fail "setup.sh output does not explain the bootstrap-versus-routine profile policy clearly enough"
+    fi
+}
+
+test_setup_offers_issue_ready_feedback_on_wizard_failure() {
+    local adapter_clone
+    local ws
+    local output
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+    rm -f "$adapter_clone/install.sh"
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    output=$(
+        cd "$ws" &&
+        bash "$adapter_clone/setup.sh" --yes 2>&1
+    ) || true
+
+    rm -rf "$adapter_clone" "$ws"
+
+    if echo "$output" | grep -qi 'Likely wizard-level failure' &&
+       echo "$output" | grep -qi 'codex-sdlc-wizard' &&
+       echo "$output" | grep -qi 'No issue will be posted automatically' &&
+       echo "$output" | grep -qi 'wizard version:' &&
+       echo "$output" | grep -qi 'command:' &&
+       echo "$output" | grep -qi 'repo shape:' &&
+       echo "$output" | grep -qi 'failure point:'; then
+        pass "setup.sh offers issue-ready feedback when wizard bootstrap files are missing"
+    else
+        fail "setup.sh does not offer issue-ready feedback for obvious wizard-level failures"
     fi
 }
 
@@ -761,9 +818,11 @@ test_generated_agents_md_encourages_capability_detectors
 test_setup_output_encourages_capability_detectors
 test_setup_scaffolds_repo_scope_skills
 test_manifest_tracks_repo_scope_skills
-test_setup_writes_default_model_profile
+test_setup_writes_bootstrap_maximum_model_profile_by_default
 test_setup_accepts_maximum_model_profile
 test_setup_interactive_prompts_for_model_profile
+test_setup_output_recommends_mixed_after_bootstrap
+test_setup_offers_issue_ready_feedback_on_wizard_failure
 test_manifest_tracks_selected_model_profile
 test_generated_agents_md_documents_profile_policy
 test_generated_agents_md_documents_codex_shape_and_repo_focus

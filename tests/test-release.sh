@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
 WORKFLOW="$REPO_DIR/.github/workflows/release.yml"
+PACKAGE_JSON="$REPO_DIR/package.json"
+CURRENT_VERSION="$(jq -r '.version' "$PACKAGE_JSON")"
 PASSED=0
 FAILED=0
 
@@ -94,7 +96,7 @@ test_readme_documents_versioned_release_path() {
 
     grep -q '^## Releases$' "$README" || has_section=false
     grep -q 'https://github.com/BaseInfinity/codex-sdlc-wizard/releases' "$README" || has_releases_url=false
-    grep -Eq 'git clone --branch vX\.Y\.Z|git checkout vX\.Y\.Z' "$README" || has_versioned_install=false
+    grep -Eq "git clone --branch v$CURRENT_VERSION|git checkout v$CURRENT_VERSION" "$README" || has_versioned_install=false
 
     if [ "$has_section" = "true" ] &&
        [ "$has_releases_url" = "true" ] &&

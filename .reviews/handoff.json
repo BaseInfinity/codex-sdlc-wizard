@@ -1,0 +1,22 @@
+{
+  "review_id": "setup-command-001",
+  "status": "PENDING_RECHECK",
+  "round": 2,
+  "mission": "Added setup.sh — adaptive project setup. Round 1 found 2 bugs: TESTING.md generation lost template content (sed pipe), notebook detection non-recursive on bash 3.x. Both fixed.",
+  "success": "Verify both fixes resolve the original findings. No new P0s.",
+  "failure": "Reviewer doesn't actually run the fixed code to verify.",
+  "files_changed": ["setup.sh", "lib/scan.sh"],
+  "fixes_applied": [
+    "1. HIGH FIXED: setup.sh:107 — replaced sed r/stdin pipe with bash parameter expansion. TESTING.md now contains full template + domain section.",
+    "2. MEDIUM FIXED: lib/scan.sh:169 — replaced ** glob with find -maxdepth 3 for bash 3.x compat."
+  ],
+  "previous_score": 6,
+  "previous_review": "Codex round 1 inline output",
+  "verification_checklist": [
+    "(a) Run 'bash tests/test-setup.sh' — all 15 must pass",
+    "(b) Create a temp Node.js project, run setup.sh --yes, verify TESTING.md has BOTH the template header (# Testing Guide, ## Stack) AND the domain section (## Web-Specific Testing)",
+    "(c) Create a temp project with a nested .ipynb (e.g. notebooks/analysis.ipynb), run scan.sh, verify domain is data-science",
+    "(d) Verify no new P0s introduced by the fixes"
+  ],
+  "review_instructions": "TARGETED RECHECK — verify 2 fixes only. Run the tests and the specific verification steps. Do NOT raise new findings unless P0."
+}

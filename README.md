@@ -47,11 +47,14 @@ This adapter evolves automatically with the upstream [SDLC Wizard](https://githu
 ## Quick Start
 
 ```bash
-# Install from npm via npx
-npx codex-sdlc-wizard@X.Y.Z
+# Install the current pinned release from npm via npx
+npx codex-sdlc-wizard@0.7.0
+
+# Or float on the latest published release
+npx codex-sdlc-wizard@latest
 
 # Or clone the adapter release directly
-git clone --branch vX.Y.Z --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.0 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 cd your-project
 bash /tmp/codex-sdlc-wizard/install.sh
 
@@ -88,22 +91,25 @@ The current default-use gate is:
 
 The wizard now supports two wizard-owned model profiles:
 
-- `mixed` (default): `gpt-5.4-mini` for the main pass plus `gpt-5.4` at `xhigh` for review.
-  Tradeoff: better speed, lower latency, and lower token usage on routine work.
+- `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.4` at `xhigh` for review.
+  Tradeoff: better speed, lower latency, and lower token usage on routine work after bootstrap.
 - `maximum`: `gpt-5.4` at `xhigh` throughout.
-  Tradeoff: higher latency and token usage in exchange for the most stable and thorough "ultimate mode."
+  Tradeoff: higher latency and token usage in exchange for the most stable and thorough "ultimate mode." Prefer this for setup/update bootstrap work.
 
 How to choose:
 
 ```bash
-# default efficiency-first path
-npx codex-sdlc-wizard@X.Y.Z setup --yes
+# recommended bootstrap path
+npx codex-sdlc-wizard@0.7.0 setup --yes --model-profile maximum
 
-# explicit maximum / ultimate mode
-npx codex-sdlc-wizard@X.Y.Z setup --yes --model-profile maximum
+# routine work can switch back to the efficiency-first profile later
+npx codex-sdlc-wizard@0.7.0 setup --yes
+
+# floating latest release with the same bootstrap recommendation
+npx codex-sdlc-wizard@latest setup --yes --model-profile maximum
 ```
 
-Interactive `setup` should ask which profile you want when you do not pass `--yes` or `--model-profile`.
+Interactive `setup` should ask which profile you want when you do not pass `--yes` or `--model-profile`, and it should recommend `maximum` as the safer bootstrap default.
 
 Low-confidence rule:
 - if confidence is below `95%`, research more first
@@ -112,10 +118,19 @@ Low-confidence rule:
 
 The wizard stores the selected profile in `.codex-sdlc/model-profile.json` so the repo can keep that choice explicit. The profile toggle ships before the experiment is finished, but the long-term default recommendation still stays gated on the 20-slice model experiment.
 
+Bootstrap recommendation:
+- setup/update should use `maximum`; routine work after bootstrap should use `mixed`
+- use `maximum` for setup/update because bootstrap work has higher blast radius
+- switch back to `mixed` for routine day-to-day work after the repo is stable
+
+Repo-specific maintainer rule:
+- consumer repos can choose `mixed` or `maximum`
+- this repo stays on `maximum`; `codex-sdlc-wizard` itself is unusually meta and high-blast-radius
+
 For adaptive setup instead of the basic installer:
 
 ```bash
-npx codex-sdlc-wizard@X.Y.Z setup --yes
+npx codex-sdlc-wizard@0.7.0 setup --yes
 ```
 
 If you want Codex to discover this as a reusable skill, install this repository through the normal GitHub skill-install flow. The repo root now contains `SKILL.md` and `agents/openai.yaml`, while the bundled skill behavior still delegates real repo mutation to `install.sh` / `setup.sh`.
@@ -155,6 +170,7 @@ What not to do:
 When you dogfood this wizard in a product repo, keep the active session focused on that product repo.
 
 - if you discover a **proven reusable** wizard lesson, prefer filing a **direct GitHub issue** in `codex-sdlc-wizard` right away
+- if you are reporting a consumer-facing failure, use the repo's **Consumer bug report** template so command, repo shape, failed step, and auth context are captured consistently
 - keep building the **product repo** in the current session
 - only switch into live wizard work when the product repo is **actually blocked**
 
@@ -203,15 +219,18 @@ https://github.com/BaseInfinity/codex-sdlc-wizard/releases
 If you are consuming this repo in a real project, prefer a tagged release over `main`.
 
 ```bash
-# npm / npx
-npx codex-sdlc-wizard@X.Y.Z
+# npm / npx pinned to the current release
+npx codex-sdlc-wizard@0.7.0
+
+# npm / npx floating on the newest published release
+npx codex-sdlc-wizard@latest
 
 # Codex skill install
 # Install this repository through the normal GitHub skill-install flow
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch vX.Y.Z --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.0 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow

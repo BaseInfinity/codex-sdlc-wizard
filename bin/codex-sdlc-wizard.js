@@ -16,8 +16,9 @@ Commands:
 Options:
   --setup        Alias for the setup command
   --model-profile <mixed|maximum>
-                Wizard-owned profile toggle. 'mixed' favors speed/token
-                efficiency with xhigh review; 'maximum' favors stability.
+                Wizard-owned profile toggle. Use 'maximum' for setup/bootstrap
+                work, then switch routine work back to 'mixed' for better
+                speed/token efficiency with xhigh review.
   --help, -h     Show this help
 
 Examples:
