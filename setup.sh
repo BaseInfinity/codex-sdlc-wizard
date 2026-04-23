@@ -695,17 +695,6 @@ refresh_setup_template_values() {
     fi
 }
 
-confirm_detected_values() {
-    local answer=""
-
-    printf "Use scan results above and continue? [Y/n]: " >&2
-    IFS= read -r answer || answer=""
-    case "$answer" in
-        [nN]*) return 1 ;;
-    esac
-    return 0
-}
-
 show_setup_resolution_map() {
     echo "Resolved (detected):"
     echo "  - Language: ${LANGUAGE:-<none>}"
@@ -761,6 +750,11 @@ show_setup_resolution_map() {
     echo "  - Mocking philosophy preference"
     [ -n "$CI" ] && echo "  - CI shepherd preference"
     echo ""
+
+    echo "I'll keep detected values automatically."
+    echo "I'll ask only about inferred guesses or missing core repo facts."
+    echo "Optional unknowns stay blank for now unless you choose to review everything."
+    echo ""
 }
 
 collect_detected_overrides() {
@@ -783,6 +777,82 @@ collect_detected_overrides() {
     return 0
 }
 
+prompt_inferred_value() {
+    local description="$1"
+    local label="$2"
+    local var_name="$3"
+    local state="$4"
+    local current_value="${!var_name}"
+    local updated_value=""
+
+    [ "$state" = "inferred" ] || return 0
+
+    echo "I inferred the $description from the repo. Press Enter to keep it or type a different value."
+    updated_value=$(prompt_with_default "$label" "$current_value")
+    case "$updated_value" in
+        edit|EDIT|Edit|e|E)
+            collect_detected_overrides
+            updated_value="${!var_name}"
+            ;;
+    esac
+    printf -v "$var_name" '%s' "$updated_value"
+}
+
+confirm_inferred_values() {
+    prompt_inferred_value "source directory" "Source directory" SOURCE_DIR "$SOURCE_DIR_STATE"
+    prompt_inferred_value "test directory" "Test directory" TEST_DIR "$TEST_DIR_STATE"
+    prompt_inferred_value "test framework" "Test framework" TEST_FRAMEWORK "$TEST_FRAMEWORK_STATE"
+    prompt_inferred_value "test command" "Test command" TEST_COMMAND "$TEST_COMMAND_STATE"
+    prompt_inferred_value "lint command" "Lint command" LINT_COMMAND "$LINT_COMMAND_STATE"
+    prompt_inferred_value "type-check command" "Type-check command" TYPECHECK_COMMAND "$TYPECHECK_COMMAND_STATE"
+    prompt_inferred_value "single test command" "Single test command" SINGLE_TEST_COMMAND "$SINGLE_TEST_COMMAND_STATE"
+    prompt_inferred_value "build command" "Build command" BUILD_COMMAND "$BUILD_COMMAND_STATE"
+    prompt_inferred_value "test duration expectation" "Test duration expectation" TEST_DURATION "$TEST_DURATION_STATE"
+    prompt_inferred_value "coverage config" "Coverage config" COVERAGE_CONFIG "$COVERAGE_CONFIG_STATE"
+    prompt_inferred_value "project domain" "Project domain" DOMAIN "$DOMAIN_STATE"
+}
+
+prompt_missing_core_value() {
+    local description="$1"
+    local label="$2"
+    local var_name="$3"
+    local current_value="${!var_name}"
+    local updated_value=""
+
+    [ -z "$current_value" ] || return 0
+
+    echo "I couldn't determine the $description from the repo, so I need your input."
+    updated_value=$(prompt_with_default "$label")
+    case "$updated_value" in
+        edit|EDIT|Edit|e|E)
+            collect_detected_overrides
+            updated_value="${!var_name}"
+            ;;
+    esac
+    printf -v "$var_name" '%s' "$updated_value"
+}
+
+collect_missing_core_facts() {
+    if [ -z "$SOURCE_DIR" ] && [ -z "$TEST_DIR" ] && [ -z "$TEST_FRAMEWORK" ] && [ -z "$TEST_COMMAND" ]; then
+        prompt_missing_core_value "source directory" "Source directory" SOURCE_DIR
+    fi
+    prompt_missing_core_value "test directory" "Test directory" TEST_DIR
+    prompt_missing_core_value "test framework" "Test framework" TEST_FRAMEWORK
+    prompt_missing_core_value "test command" "Test command" TEST_COMMAND
+}
+
+offer_detected_review() {
+    local answer=""
+
+    printf "If any detected values are wrong, type edit to review them now. Otherwise press Enter to keep them: " >&2
+    IFS= read -r answer || answer=""
+    case "$answer" in
+        edit|EDIT|Edit|e|E)
+            collect_detected_overrides
+            ;;
+    esac
+}
+
 apply_auto_yes_defaults() {
     [ -z "$TYPECHECK_COMMAND" ] && TYPECHECK_COMMAND="none"
     [ -z "$SINGLE_TEST_COMMAND" ] && SINGLE_TEST_COMMAND="none"
@@ -796,36 +866,18 @@ apply_auto_yes_defaults() {
 }
 
 collect_setup_answers() {
-    local edit_mode=false
-
     if [ "$AUTO_YES" = "true" ]; then
         apply_auto_yes_defaults
         return 0
     fi
 
     show_setup_resolution_map
-    if ! confirm_detected_values; then
-        edit_mode=true
-        collect_detected_overrides
-    fi
+    confirm_inferred_values
+    collect_missing_core_facts
+    offer_detected_review
 
-    if [ "$edit_mode" = "true" ]; then
-        [ -z "$SOURCE_DIR" ] && SOURCE_DIR=$(prompt_with_default "Set source directory")
-        [ -z "$TEST_DIR" ] && TEST_DIR=$(prompt_with_default "Set test directory")
-        [ -z "$TEST_FRAMEWORK" ] && TEST_FRAMEWORK=$(prompt_with_default "Set test framework")
-        [ -z "$TEST_COMMAND" ] && TEST_COMMAND=$(prompt_with_default "Set test command")
-        [ -z "$LINT_COMMAND" ] && LINT_COMMAND=$(prompt_with_default "Set lint command")
-        [ -z "$TYPECHECK_COMMAND" ] && TYPECHECK_COMMAND=$(prompt_with_default "Set type-check command" "none")
-        [ -z "$SINGLE_TEST_COMMAND" ] && SINGLE_TEST_COMMAND=$(prompt_with_default "Set single test command" "none")
-        [ -z "$BUILD_COMMAND" ] && BUILD_COMMAND=$(prompt_with_default "Set build command")
-        [ -z "$DEPLOYMENT_SETUP" ] && DEPLOYMENT_SETUP=$(prompt_with_default "Deployment setup" "none")
-        [ -z "$DATABASES" ] && DATABASES=$(prompt_with_default "Database(s)" "none")
-        [ -z "$CACHE_LAYER" ] && CACHE_LAYER=$(prompt_with_default "Caching layer" "none")
-        [ -z "$TEST_DURATION" ] && TEST_DURATION=$(prompt_with_default "Test duration expectation" "unknown")
-        [ -z "$TEST_TYPES" ] && TEST_TYPES=$(prompt_with_default "Test types present" "none")
-        [ -z "$COVERAGE_CONFIG" ] && COVERAGE_CONFIG=$(prompt_with_default "Coverage config" "none")
-    fi
-
+    echo ""
+    echo "Last thing: a few workflow preferences so I can tailor the generated docs."
     choose_model_profile
     GIT_WORKFLOW=$(prompt_with_default "Git workflow preference [solo/prs]" "$GIT_WORKFLOW")
     RESPONSE_DETAIL=$(prompt_with_default "Response detail preference [concise/detailed]" "$RESPONSE_DETAIL")
