@@ -7,7 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
 PACKAGE_JSON="$REPO_DIR/package.json"
-CURRENT_VERSION="$(jq -r '.version' "$PACKAGE_JSON")"
+JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
+source "$JSON_HELPERS"
+require_node
+CURRENT_VERSION="$(json_get_file "$PACKAGE_JSON" 'data.version')"
 PASSED=0
 FAILED=0
 MKTEMP_DIR="${TMPDIR:-/tmp}"
@@ -108,9 +111,9 @@ test_installer_writes_default_model_profile() {
     local has_profile=true
     if [ ! -f "$target_repo/.codex-sdlc/model-profile.json" ]; then
         has_profile=false
-    elif ! jq -e '.selected_profile == "mixed"' "$target_repo/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.selected_profile === "mixed"'; then
         has_profile=false
-    elif ! jq -e '.profiles.maximum.main_model == "gpt-5.4"' "$target_repo/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.maximum && data.profiles.maximum.main_model === "gpt-5.4"'; then
         has_profile=false
     fi
 

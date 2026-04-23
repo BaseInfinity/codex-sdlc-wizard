@@ -1,9 +1,14 @@
 #!/bin/bash
 # Project scanner — detects language, dirs, framework, domain
-# Pure bash + jq. Runs from project root, outputs JSON to stdout.
+# Bash + Node. Runs from project root, outputs JSON to stdout.
 # No API tokens needed. Deterministic.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/json-node.sh"
+
+require_node
 
 # ---- Language Detection ----
 detect_language() {
@@ -55,6 +60,10 @@ detect_test_framework() {
         echo "jest"
     elif ls vitest.config.* 2>/dev/null | head -1 | grep -q .; then
         echo "vitest"
+    elif ls playwright.config.* 2>/dev/null | head -1 | grep -q .; then
+        echo "playwright"
+    elif ls cypress.config.* 2>/dev/null | head -1 | grep -q .; then
+        echo "cypress"
     elif [ -f "pytest.ini" ] || { [ -f "pyproject.toml" ] && grep -q "pytest" "pyproject.toml" 2>/dev/null; }; then
         echo "pytest"
     elif [ -f ".rspec" ]; then
@@ -62,10 +71,12 @@ detect_test_framework() {
     elif [ -f "package.json" ]; then
         # Fallback: check scripts.test in package.json
         local test_script
-        test_script=$(jq -r '.scripts.test // ""' package.json 2>/dev/null)
+        test_script=$(json_get_file "package.json" 'typeof data.scripts?.test === "string" ? data.scripts.test : ""')
         case "$test_script" in
             *jest*) echo "jest" ;;
             *vitest*) echo "vitest" ;;
+            *playwright*) echo "playwright" ;;
+            *cypress*) echo "cypress" ;;
             *mocha*) echo "mocha" ;;
             *ava*) echo "ava" ;;
             *) echo "" ;;
@@ -86,7 +97,7 @@ detect_test_command() {
 
     if [ -f "package.json" ]; then
         local test_script
-        test_script=$(jq -r '.scripts.test // ""' package.json 2>/dev/null)
+        test_script=$(json_get_file "package.json" 'typeof data.scripts?.test === "string" ? data.scripts.test : ""')
         if [ -n "$test_script" ]; then
             echo "npm test"
             return
@@ -94,6 +105,8 @@ detect_test_command() {
     fi
 
     case "$framework" in
+        playwright) echo "npx playwright test" ;;
+        cypress) echo "npx cypress run" ;;
         pytest) echo "pytest" ;;
         rspec) echo "bundle exec rspec" ;;
         cargo-test) echo "cargo test" ;;
@@ -106,7 +119,7 @@ detect_test_command() {
 detect_lint_command() {
     if [ -f "package.json" ]; then
         local lint_script
-        lint_script=$(jq -r '.scripts.lint // ""' package.json 2>/dev/null)
+        lint_script=$(json_get_file "package.json" 'typeof data.scripts?.lint === "string" ? data.scripts.lint : ""')
         if [ -n "$lint_script" ]; then
             echo "npm run lint"
             return
@@ -123,11 +136,62 @@ detect_lint_command() {
     fi
 }
 
+# ---- Typecheck Command ----
+detect_typecheck_command() {
+    if [ -f "package.json" ]; then
+        local typecheck_script check_types_script
+        typecheck_script=$(json_get_file "package.json" 'typeof data.scripts?.typecheck === "string" ? data.scripts.typecheck : ""')
+        check_types_script=$(json_get_file "package.json" 'typeof data.scripts?.["check-types"] === "string" ? data.scripts["check-types"] : ""')
+
+        if [ -n "$typecheck_script" ]; then
+            echo "npm run typecheck"
+            return
+        fi
+
+        if [ -n "$check_types_script" ]; then
+            echo "npm run check-types"
+            return
+        fi
+    fi
+
+    if [ -f "tsconfig.json" ]; then
+        echo "npx tsc --noEmit"
+    elif [ -f "mypy.ini" ] || { [ -f "pyproject.toml" ] && grep -q "mypy" "pyproject.toml" 2>/dev/null; }; then
+        echo "mypy ."
+    elif [ -f "Cargo.toml" ]; then
+        echo "cargo check"
+    else
+        echo ""
+    fi
+}
+
+# ---- Single Test Command ----
+detect_single_test_command() {
+    local framework="$1"
+
+    case "$framework" in
+        jest|vitest|mocha|ava)
+            if [ -f "package.json" ]; then
+                echo "npm test -- <test-file>"
+            else
+                echo "npx $framework <test-file>"
+            fi
+            ;;
+        playwright) echo "npx playwright test <test-file>" ;;
+        cypress) echo "npx cypress run --spec <test-file>" ;;
+        pytest) echo "pytest path/to/test_file.py" ;;
+        rspec) echo "bundle exec rspec path/to/spec.rb" ;;
+        cargo-test) echo "cargo test <test_name>" ;;
+        go-test) echo "go test ./... -run TestName" ;;
+        *) echo "" ;;
+    esac
+}
+
 # ---- Build Command ----
 detect_build_command() {
     if [ -f "package.json" ]; then
         local build_script
-        build_script=$(jq -r '.scripts.build // ""' package.json 2>/dev/null)
+        build_script=$(json_get_file "package.json" 'typeof data.scripts?.build === "string" ? data.scripts.build : ""')
         if [ -n "$build_script" ]; then
             echo "npm run build"
             return
@@ -139,6 +203,181 @@ detect_build_command() {
         echo "cargo build"
     elif [ -f "go.mod" ]; then
         echo "go build ./..."
+    else
+        echo ""
+    fi
+}
+
+# ---- Deployment Detection ----
+detect_deployment_setup() {
+    local deployments=()
+    local item joined
+
+    [ -f "Dockerfile" ] && deployments+=("docker")
+    { [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; } && deployments+=("docker-compose")
+    [ -f "vercel.json" ] && deployments+=("vercel")
+    [ -f "fly.toml" ] && deployments+=("fly.io")
+    [ -f "netlify.toml" ] && deployments+=("netlify")
+    [ -f "Procfile" ] && deployments+=("procfile")
+    { [ -d "k8s" ] || [ -d "kubernetes" ]; } && deployments+=("kubernetes")
+    if find .github/workflows -maxdepth 1 -type f \( -iname '*deploy*.yml' -o -iname '*deploy*.yaml' \) -print -quit 2>/dev/null | grep -q .; then
+        deployments+=("github-actions")
+    fi
+
+    if [ "${#deployments[@]}" -eq 0 ]; then
+        echo ""
+        return
+    fi
+
+    joined=$(IFS=', '; echo "${deployments[*]}")
+    printf '%s\n' "$joined"
+}
+
+# ---- Database Detection ----
+detect_databases() {
+    local databases=()
+    local provider joined compose_file
+
+    if [ -f "prisma/schema.prisma" ]; then
+        provider=$(sed -n 's/.*provider *= *"\([^"]*\)".*/\1/p' "prisma/schema.prisma" | head -1)
+        case "$provider" in
+            postgresql|postgres) databases+=("postgresql") ;;
+            mysql|sqlite|mongodb) databases+=("$provider") ;;
+        esac
+    fi
+
+    if [ -f ".env" ]; then
+        grep -Eqi 'DATABASE_URL=.*postgres(ql)?://' ".env" && databases+=("postgresql")
+        grep -Eqi 'DATABASE_URL=.*mysql://' ".env" && databases+=("mysql")
+        grep -Eqi 'DATABASE_URL=.*sqlite:' ".env" && databases+=("sqlite")
+        grep -Eqi 'DATABASE_URL=.*mongodb(\+srv)?://' ".env" && databases+=("mongodb")
+    fi
+
+    for compose_file in docker-compose.yml docker-compose.yaml; do
+        if [ -f "$compose_file" ]; then
+            grep -Eqi 'image:\s*postgres' "$compose_file" && databases+=("postgresql")
+            grep -Eqi 'image:\s*mysql|image:\s*mariadb' "$compose_file" && databases+=("mysql")
+            grep -Eqi 'image:\s*mongo' "$compose_file" && databases+=("mongodb")
+        fi
+    done
+
+    if [ "${#databases[@]}" -eq 0 ]; then
+        echo ""
+        return
+    fi
+
+    joined=$(printf '%s\n' "${databases[@]}" | awk '!seen[$0]++ { printf("%s%s", sep, $0); sep=", " }')
+    printf '%s\n' "$joined"
+}
+
+# ---- Cache Detection ----
+detect_cache_layer() {
+    local caches=()
+    local joined compose_file
+
+    if [ -f ".env" ]; then
+        grep -Eqi 'REDIS_URL=|REDIS_HOST=' ".env" && caches+=("redis")
+        grep -Eqi 'MEMCACHED_URL=|MEMCACHED_HOST=' ".env" && caches+=("memcached")
+    fi
+
+    for compose_file in docker-compose.yml docker-compose.yaml; do
+        if [ -f "$compose_file" ]; then
+            grep -Eqi 'image:\s*redis' "$compose_file" && caches+=("redis")
+            grep -Eqi 'image:\s*memcached' "$compose_file" && caches+=("memcached")
+        fi
+    done
+
+    if [ "${#caches[@]}" -eq 0 ]; then
+        echo ""
+        return
+    fi
+
+    joined=$(printf '%s\n' "${caches[@]}" | awk '!seen[$0]++ { printf("%s%s", sep, $0); sep=", " }')
+    printf '%s\n' "$joined"
+}
+
+# ---- Test Duration ----
+detect_test_duration() {
+    local test_count
+
+    test_count=$(find . -maxdepth 5 -type f \( -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*.e2e.*' -o -name '*.integration.*' \) | wc -l | tr -d ' ')
+
+    if [ "$test_count" -eq 0 ]; then
+        echo ""
+    elif [ "$test_count" -le 25 ]; then
+        echo "<1 minute"
+    elif [ "$test_count" -le 150 ]; then
+        echo "1-5 minutes"
+    else
+        echo "5+ minutes"
+    fi
+}
+
+# ---- Test Types ----
+detect_test_types() {
+    local test_types=()
+    local joined
+
+    if find . -maxdepth 5 -type f \( -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' \) \
+        ! -path '*/integration/*' ! -path '*/e2e/*' ! -name '*.integration.*' ! -name '*.e2e.*' -print -quit 2>/dev/null | grep -q .; then
+        test_types+=("unit")
+    fi
+
+    if find . -maxdepth 5 \( -type d -name 'integration' -o -type f -name '*.integration.*' \) -print -quit 2>/dev/null | grep -q .; then
+        test_types+=("integration")
+    fi
+
+    if find . -maxdepth 5 \( -type d -name 'e2e' -o -type f -name '*.e2e.*' \) -print -quit 2>/dev/null | grep -q . \
+        || ls playwright.config.* 2>/dev/null | head -1 | grep -q . \
+        || ls cypress.config.* 2>/dev/null | head -1 | grep -q .; then
+        test_types+=("e2e")
+    fi
+
+    if find . -maxdepth 5 \( -type d -name 'api' -o -type f -name '*.api.*' \) -print -quit 2>/dev/null | grep -q .; then
+        test_types+=("api")
+    fi
+
+    if [ "${#test_types[@]}" -eq 0 ]; then
+        echo ""
+        return
+    fi
+
+    joined=$(printf '%s\n' "${test_types[@]}" | awk '{ printf("%s%s", sep, $0); sep=", " }')
+    printf '%s\n' "$joined"
+}
+
+# ---- Coverage Detection ----
+detect_coverage_config() {
+    if [ -f "package.json" ]; then
+        local coverage_script test_script
+        coverage_script=$(json_get_file "package.json" 'typeof data.scripts?.coverage === "string" ? data.scripts.coverage : ""')
+        test_script=$(json_get_file "package.json" 'typeof data.scripts?.test === "string" ? data.scripts.test : ""')
+
+        if [ -n "$coverage_script" ]; then
+            echo "npm run coverage"
+            return
+        fi
+
+        case "$test_script" in
+            *--coverage*)
+                if printf '%s' "$test_script" | grep -qi 'jest'; then
+                    echo "jest --coverage"
+                elif printf '%s' "$test_script" | grep -qi 'vitest'; then
+                    echo "vitest --coverage"
+                else
+                    echo "$test_script"
+                fi
+                return
+                ;;
+        esac
+    fi
+
+    if ls .nycrc* 2>/dev/null | head -1 | grep -q .; then
+        echo "nyc"
+    elif [ -f "coverage.py" ] || [ -f ".coveragerc" ]; then
+        echo "coverage.py"
+    elif [ -f "pyproject.toml" ] && grep -q "pytest-cov" "pyproject.toml" 2>/dev/null; then
+        echo "pytest --cov"
     else
         echo ""
     fi
@@ -174,8 +413,8 @@ detect_domain() {
     # CLI: package.json with bin field and no React
     if [ -f "package.json" ]; then
         local has_bin="no" has_react="no"
-        jq -e '.bin' package.json >/dev/null 2>&1 && has_bin="yes"
-        jq -e '.dependencies.react // .devDependencies.react' package.json >/dev/null 2>&1 && has_react="yes"
+        json_has_truthy_file "package.json" 'data.bin' && has_bin="yes"
+        json_has_truthy_file "package.json" 'data.dependencies?.react || data.devDependencies?.react' && has_react="yes"
         if [ "$has_bin" = "yes" ] && [ "$has_react" = "no" ]; then
             echo "cli"
             return
@@ -187,128 +426,25 @@ detect_domain() {
 
 # ---- Existing Docs ----
 detect_existing_docs() {
-    local docs=""
-    [ -f "AGENTS.md" ] && docs="$docs AGENTS.md"
-    [ -f "TESTING.md" ] && docs="$docs TESTING.md"
-    [ -f "ARCHITECTURE.md" ] && docs="$docs ARCHITECTURE.md"
+    local docs=()
+    [ -f "AGENTS.md" ] && docs+=('"AGENTS.md"')
+    [ -f "TESTING.md" ] && docs+=('"TESTING.md"')
+    [ -f "ARCHITECTURE.md" ] && docs+=('"ARCHITECTURE.md"')
 
-    if [ -z "$docs" ]; then
+    if [ "${#docs[@]}" -eq 0 ]; then
         echo "[]"
     else
-        echo "$docs" | tr ' ' '\n' | grep . | jq -R . | jq -s .
+        local joined
+        joined=$(IFS=,; echo "${docs[*]}")
+        printf '[%s]\n' "$joined"
     fi
-}
-
-# ---- File Counts ----
-count_files_under() {
-    local dir="${1:-}"
-
-    if [ -z "$dir" ] || [ ! -d "$dir" ]; then
-        echo "0"
-        return
-    fi
-
-    find "$dir" -type f \
-        ! -path '*/.git/*' \
-        ! -path '*/node_modules/*' \
-        2>/dev/null | wc -l | tr -d ' '
-}
-
-# ---- Repo Shape ----
-detect_repo_shape() {
-    local existing_docs="$1"
-    local source_dir="$2"
-    local test_dir="$3"
-    local docs_count source_file_count test_file_count
-
-    docs_count=$(printf '%s\n' "$existing_docs" | jq 'length')
-    source_file_count=$(count_files_under "$source_dir")
-    test_file_count=$(count_files_under "$test_dir")
-
-    if [ "$docs_count" -ge 3 ] &&
-       [ "$source_file_count" -le 3 ] &&
-       [ "$test_file_count" -le 1 ]; then
-        echo "docs-strong-scaffold"
-    elif [ "$docs_count" -ge 3 ]; then
-        echo "docs-strong"
-    elif [ "$source_file_count" -le 1 ] && [ "$test_file_count" -eq 0 ]; then
-        echo "scaffold"
-    else
-        echo "standard"
-    fi
-}
-
-# ---- Confidence Map ----
-build_confidence_map() {
-    local repo_shape="$1"
-    local test_command="$2"
-    local overall known unresolved
-
-    case "$repo_shape" in
-        docs-strong-scaffold)
-            overall="medium"
-            known=$(jq -cn '[
-                "Planning/docs already exist",
-                "Code/test tree is still mostly scaffold"
-            ]')
-            if [ -n "$test_command" ]; then
-                unresolved=$(jq -cn '[
-                    "Test harness shape needs explicit repo-specific interpretation"
-                ]')
-            else
-                unresolved=$(jq -cn '[
-                    "Test command is still missing",
-                    "Test harness shape needs explicit repo-specific interpretation"
-                ]')
-            fi
-            ;;
-        docs-strong)
-            overall="high"
-            known=$(jq -cn '[
-                "Planning/docs already exist",
-                "Implementation tree looks more substantial than a pure scaffold"
-            ]')
-            unresolved=$(jq -cn '[]')
-            ;;
-        scaffold)
-            overall="medium"
-            known=$(jq -cn '[
-                "Repository is still mostly scaffold"
-            ]')
-            if [ -n "$test_command" ]; then
-                unresolved=$(jq -cn '[
-                    "Detected test command likely needs confirmation against the scaffolded repo shape"
-                ]')
-            else
-                unresolved=$(jq -cn '[
-                    "Test command is still missing"
-                ]')
-            fi
-            ;;
-        *)
-            overall="high"
-            known=$(jq -cn '[
-                "Repository shape looks standard"
-            ]')
-            unresolved=$(jq -cn '[]')
-            ;;
-    esac
-
-    jq -cn \
-        --arg overall "$overall" \
-        --argjson known "$known" \
-        --argjson unresolved "$unresolved" \
-        '{
-            overall: $overall,
-            known: $known,
-            unresolved: $unresolved
-        }'
 }
 
 # ---- Main: run all detections, output JSON ----
 main() {
     local language source_dir test_dir test_framework test_command
-    local lint_command build_command ci domain existing_docs repo_shape confidence_map
+    local lint_command typecheck_command single_test_command build_command deployment_setup
+    local databases cache_layer test_duration test_types coverage_config ci domain existing_docs
 
     language=$(detect_language)
     source_dir=$(detect_source_dir)
@@ -316,40 +452,61 @@ main() {
     test_framework=$(detect_test_framework)
     test_command=$(detect_test_command "$language" "$test_framework")
     lint_command=$(detect_lint_command)
+    typecheck_command=$(detect_typecheck_command)
+    single_test_command=$(detect_single_test_command "$test_framework")
     build_command=$(detect_build_command)
+    deployment_setup=$(detect_deployment_setup)
+    databases=$(detect_databases)
+    cache_layer=$(detect_cache_layer)
+    test_duration=$(detect_test_duration)
+    test_types=$(detect_test_types)
+    coverage_config=$(detect_coverage_config)
     ci=$(detect_ci)
     domain=$(detect_domain)
     existing_docs=$(detect_existing_docs)
-    repo_shape=$(detect_repo_shape "$existing_docs" "$source_dir" "$test_dir")
-    confidence_map=$(build_confidence_map "$repo_shape" "$test_command")
 
-    jq -n \
-        --arg language "$language" \
-        --arg source_dir "$source_dir" \
-        --arg test_dir "$test_dir" \
-        --arg test_framework "$test_framework" \
-        --arg test_command "$test_command" \
-        --arg lint_command "$lint_command" \
-        --arg build_command "$build_command" \
-        --arg ci "$ci" \
-        --arg domain "$domain" \
-        --arg repo_shape "$repo_shape" \
-        --argjson existing_docs "$existing_docs" \
-        --argjson confidence_map "$confidence_map" \
-        '{
-            language: $language,
-            source_dir: $source_dir,
-            test_dir: $test_dir,
-            test_framework: $test_framework,
-            test_command: $test_command,
-            lint_command: $lint_command,
-            build_command: $build_command,
-            ci: $ci,
-            domain: $domain,
-            existing_docs: $existing_docs,
-            repo_shape: $repo_shape,
-            confidence_map: $confidence_map
-        }'
+    SCAN_LANGUAGE="$language" \
+    SCAN_SOURCE_DIR="$source_dir" \
+    SCAN_TEST_DIR="$test_dir" \
+    SCAN_TEST_FRAMEWORK="$test_framework" \
+    SCAN_TEST_COMMAND="$test_command" \
+    SCAN_LINT_COMMAND="$lint_command" \
+    SCAN_TYPECHECK_COMMAND="$typecheck_command" \
+    SCAN_SINGLE_TEST_COMMAND="$single_test_command" \
+    SCAN_BUILD_COMMAND="$build_command" \
+    SCAN_DEPLOYMENT_SETUP="$deployment_setup" \
+    SCAN_DATABASES="$databases" \
+    SCAN_CACHE_LAYER="$cache_layer" \
+    SCAN_TEST_DURATION="$test_duration" \
+    SCAN_TEST_TYPES="$test_types" \
+    SCAN_COVERAGE_CONFIG="$coverage_config" \
+    SCAN_CI="$ci" \
+    SCAN_DOMAIN="$domain" \
+    SCAN_EXISTING_DOCS="$existing_docs" \
+    node -e '
+const data = {
+  language: process.env.SCAN_LANGUAGE || "",
+  source_dir: process.env.SCAN_SOURCE_DIR || "",
+  test_dir: process.env.SCAN_TEST_DIR || "",
+  test_framework: process.env.SCAN_TEST_FRAMEWORK || "",
+  test_command: process.env.SCAN_TEST_COMMAND || "",
+  lint_command: process.env.SCAN_LINT_COMMAND || "",
+  typecheck_command: process.env.SCAN_TYPECHECK_COMMAND || "",
+  single_test_command: process.env.SCAN_SINGLE_TEST_COMMAND || "",
+  build_command: process.env.SCAN_BUILD_COMMAND || "",
+  deployment_setup: process.env.SCAN_DEPLOYMENT_SETUP || "",
+  databases: process.env.SCAN_DATABASES || "",
+  cache_layer: process.env.SCAN_CACHE_LAYER || "",
+  test_duration: process.env.SCAN_TEST_DURATION || "",
+  test_types: process.env.SCAN_TEST_TYPES || "",
+  coverage_config: process.env.SCAN_COVERAGE_CONFIG || "",
+  ci: process.env.SCAN_CI || "",
+  domain: process.env.SCAN_DOMAIN || "",
+  existing_docs: JSON.parse(process.env.SCAN_EXISTING_DOCS || "[]")
+};
+
+process.stdout.write(`${JSON.stringify(data)}\n`);
+'
 }
 
 main

@@ -1,0 +1,5 @@
+version: 1
+interface:
+  display_name: Update Wizard
+  short_description: Compare a repo against the Codex SDLC wizard and adopt updates without flattening customizations.
+  default_prompt: Run the Codex update wizard for this repo. Show missing, customized, and drifted SDLC files, then update selectively while preserving intentional local changes.
