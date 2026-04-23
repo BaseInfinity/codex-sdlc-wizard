@@ -1,0 +1,19 @@
+{
+  "review_id": "setup-command-001",
+  "round": 2,
+  "responding_to": "Codex round 1 (6/10, NOT CERTIFIED)",
+  "responses": [
+    {
+      "finding": "1",
+      "severity": "HIGH",
+      "action": "FIXED",
+      "summary": "TESTING.md generation broken — sed pipe lost template content. Replaced sed r/stdin with bash parameter expansion: ${content//{{DOMAIN_SECTION}}/$domain_section}. Verified full template + domain section now renders."
+    },
+    {
+      "finding": "2",
+      "severity": "MEDIUM",
+      "action": "FIXED",
+      "summary": "** glob not recursive on bash 3.2. Replaced with find -maxdepth 3 -name '*.ipynb'. Portable across bash 3.x and 4.x+."
+    }
+  ]
+}

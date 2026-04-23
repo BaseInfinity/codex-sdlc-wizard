@@ -95,10 +95,9 @@ test_roadmap_lists_next_release_cycle() {
 
 test_roadmap_calls_out_stale_issue_cleanup() {
     local has_heading=true
-    local has_issue7=true
-    local has_issue8=true
-    local has_issue9=true
-    local has_issue10=true
+    local has_issue15=true
+    local has_issue16=true
+    local has_issue17=true
     local cleanup_section
 
     cleanup_section=$(awk '
@@ -108,16 +107,14 @@ test_roadmap_calls_out_stale_issue_cleanup() {
     ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    echo "$cleanup_section" | grep -q '#7' || has_issue7=false
-    echo "$cleanup_section" | grep -q '#8' || has_issue8=false
-    echo "$cleanup_section" | grep -q '#9' || has_issue9=false
-    echo "$cleanup_section" | grep -q '#10' || has_issue10=false
+    echo "$cleanup_section" | grep -q '#15' || has_issue15=false
+    echo "$cleanup_section" | grep -q '#16' || has_issue16=false
+    echo "$cleanup_section" | grep -q '#17' || has_issue17=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_issue7" = "true" ] &&
-       [ "$has_issue8" = "true" ] &&
-       [ "$has_issue9" = "true" ] &&
-       [ "$has_issue10" = "true" ]; then
+       [ "$has_issue15" = "true" ] &&
+       [ "$has_issue16" = "true" ] &&
+       [ "$has_issue17" = "true" ]; then
         pass "Roadmap calls out the consumer-path release issues for cleanup"
     else
         fail "Roadmap does not call out tracker cleanup clearly"

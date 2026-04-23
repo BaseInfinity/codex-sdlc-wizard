@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODEL_PROFILE="mixed"
+WIZARD_VERSION="$(jq -r '.version // "unknown"' "$SCRIPT_DIR/package.json" 2>/dev/null || echo unknown)"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -28,6 +29,40 @@ case "$MODEL_PROFILE" in
     exit 1
     ;;
 esac
+
+print_feedback_guidance() {
+  local command_name="$1"
+  local failure_point="$2"
+  local repo_shape="${3:-unknown}"
+
+  echo ""
+  echo "Likely wizard-level failure detected."
+  echo "Report bugs or improvements back to codex-sdlc-wizard."
+  echo "No issue will be posted automatically."
+  echo "Issue-ready details:"
+  echo "  wizard version: $WIZARD_VERSION"
+  echo "  command: $command_name"
+  echo "  repo shape: $repo_shape"
+  echo "  failure point: $failure_point"
+}
+
+require_bundle_file() {
+  local path="$1"
+  local label="$2"
+  if [ ! -f "$path" ]; then
+    print_feedback_guidance "install" "missing bundled runtime file: $label" "unknown"
+    exit 1
+  fi
+}
+
+require_bundle_file "$SCRIPT_DIR/AGENTS.md" "AGENTS.md"
+require_bundle_file "$SCRIPT_DIR/.codex/config.toml" ".codex/config.toml"
+require_bundle_file "$SCRIPT_DIR/.codex/hooks.json" ".codex/hooks.json"
+require_bundle_file "$SCRIPT_DIR/.codex/hooks/bash-guard.sh" ".codex/hooks/bash-guard.sh"
+require_bundle_file "$SCRIPT_DIR/.codex/hooks/sdlc-prompt-check.sh" ".codex/hooks/sdlc-prompt-check.sh"
+require_bundle_file "$SCRIPT_DIR/.codex/hooks/session-start.sh" ".codex/hooks/session-start.sh"
+require_bundle_file "$SCRIPT_DIR/.agents/skills/sdlc/SKILL.md" ".agents/skills/sdlc/SKILL.md"
+require_bundle_file "$SCRIPT_DIR/.agents/skills/adlc/SKILL.md" ".agents/skills/adlc/SKILL.md"
 
 write_model_profile() {
   mkdir -p .codex-sdlc

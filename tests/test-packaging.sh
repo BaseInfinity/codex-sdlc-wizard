@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
+PACKAGE_JSON="$REPO_DIR/package.json"
+CURRENT_VERSION="$(jq -r '.version' "$PACKAGE_JSON")"
 PASSED=0
 FAILED=0
 MKTEMP_DIR="${TMPDIR:-/tmp}"
@@ -195,6 +197,36 @@ test_installer_calls_out_auth_heavy_boundary() {
     fi
 }
 
+test_installer_offers_issue_ready_feedback_on_wizard_failure() {
+    local adapter_clone
+    local target_repo
+    local output
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+    rm -f "$adapter_clone/.codex/hooks.json"
+
+    output=$(
+        cd "$target_repo" &&
+        bash "$adapter_clone/install.sh" 2>&1
+    ) || true
+
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if echo "$output" | grep -qi 'Likely wizard-level failure' &&
+       echo "$output" | grep -qi 'codex-sdlc-wizard' &&
+       echo "$output" | grep -qi 'No issue will be posted automatically' &&
+       echo "$output" | grep -qi 'wizard version:' &&
+       echo "$output" | grep -qi 'command:' &&
+       echo "$output" | grep -qi 'failure point:' &&
+       echo "$output" | grep -qi 'repo shape:'; then
+        pass "Installer offers issue-ready feedback when bundled wizard runtime is broken"
+    else
+        fail "Installer does not offer issue-ready feedback for obvious wizard-level failures"
+    fi
+}
+
 test_readme_explains_distribution_model() {
     local has_section=true
     local has_adapter=true
@@ -364,20 +396,30 @@ test_readme_documents_honest_codex_shape() {
 }
 
 test_readme_documents_feedback_flow_and_repo_focus() {
+    local feedback_section
     local has_direct_issue=true
     local has_proven_finding=true
     local has_product_repo=true
     local has_blocked_boundary=true
+    local avoids_pilot_rollout_note=true
 
-    grep -qi 'direct GitHub issue' "$README" || has_direct_issue=false
-    grep -qi 'proven reusable' "$README" || has_proven_finding=false
-    grep -qi 'product repo' "$README" || has_product_repo=false
-    grep -qi 'actually blocked' "$README" || has_blocked_boundary=false
+    feedback_section=$(awk '
+        /^## Feedback Flow and Repo Focus$/ { in_section=1; next }
+        /^## / && in_section { exit }
+        in_section { print }
+    ' "$README")
+
+    echo "$feedback_section" | grep -qi 'direct GitHub issue' || has_direct_issue=false
+    echo "$feedback_section" | grep -qi 'proven reusable' || has_proven_finding=false
+    echo "$feedback_section" | grep -qi 'product repo' || has_product_repo=false
+    echo "$feedback_section" | grep -qi 'actually blocked' || has_blocked_boundary=false
+    echo "$feedback_section" | grep -qi 'pilot-rollout.csv' && avoids_pilot_rollout_note=false
 
     if [ "$has_direct_issue" = "true" ] &&
        [ "$has_proven_finding" = "true" ] &&
        [ "$has_product_repo" = "true" ] &&
-       [ "$has_blocked_boundary" = "true" ]; then
+       [ "$has_blocked_boundary" = "true" ] &&
+       [ "$avoids_pilot_rollout_note" = "true" ]; then
         pass "README documents the feedback flow and repo-focus rule"
     else
         fail "README does not document the feedback flow and repo-focus rule clearly enough"
@@ -390,6 +432,9 @@ test_readme_documents_model_profiles() {
     local has_maximum=true
     local has_tradeoff=true
     local has_confidence_rule=true
+    local has_repo_maximum_rule=true
+    local has_bootstrap_maximum_rule=true
+    local has_routine_mixed_rule=true
 
     grep -q '^## Model Profiles$' "$README" || has_heading=false
     grep -q '`mixed`' "$README" || has_mixed=false
@@ -397,15 +442,95 @@ test_readme_documents_model_profiles() {
     grep -Eqi 'speed|latency|token' "$README" || has_tradeoff=false
     grep -Eqi 'stability|ultimate' "$README" || has_tradeoff=false
     grep -Eqi '95%|xhigh review|research more first' "$README" || has_confidence_rule=false
+    grep -Eqi 'this repo.*maximum|wizard repo.*maximum|codex-sdlc-wizard itself.*maximum' "$README" || has_repo_maximum_rule=false
+    grep -Eqi 'setup/update.*maximum|bootstrap.*maximum' "$README" || has_bootstrap_maximum_rule=false
+    grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' "$README" || has_routine_mixed_rule=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$has_mixed" = "true" ] &&
        [ "$has_maximum" = "true" ] &&
        [ "$has_tradeoff" = "true" ] &&
-       [ "$has_confidence_rule" = "true" ]; then
-        pass "README documents the mixed versus maximum model profiles and the confidence escalation rule"
+       [ "$has_confidence_rule" = "true" ] &&
+       [ "$has_repo_maximum_rule" = "true" ] &&
+       [ "$has_bootstrap_maximum_rule" = "true" ] &&
+       [ "$has_routine_mixed_rule" = "true" ]; then
+        pass "README documents the bootstrap maximum rule, routine mixed guidance, and this repo's maximum-only policy"
     else
-        fail "README does not document the model profiles and escalation rule clearly enough"
+        fail "README does not document the bootstrap maximum rule, routine mixed guidance, and this repo's maximum-only policy clearly enough"
+    fi
+}
+
+test_readme_uses_real_release_examples() {
+    local has_current_npx=true
+    local has_latest_npx=true
+    local has_current_git=true
+    local has_no_placeholder_npx=true
+    local has_no_placeholder_git=true
+
+    grep -q "npx codex-sdlc-wizard@$CURRENT_VERSION" "$README" || has_current_npx=false
+    grep -q 'npx codex-sdlc-wizard@latest' "$README" || has_latest_npx=false
+    grep -q "git clone --branch v$CURRENT_VERSION" "$README" || has_current_git=false
+    if grep -q 'npx codex-sdlc-wizard@X.Y.Z' "$README"; then
+        has_no_placeholder_npx=false
+    fi
+    if grep -q 'git clone --branch vX.Y.Z' "$README"; then
+        has_no_placeholder_git=false
+    fi
+
+    if [ "$has_current_npx" = "true" ] &&
+       [ "$has_latest_npx" = "true" ] &&
+       [ "$has_current_git" = "true" ] &&
+       [ "$has_no_placeholder_npx" = "true" ] &&
+       [ "$has_no_placeholder_git" = "true" ]; then
+        pass "README uses real current release install examples and keeps @latest as the floating option"
+    else
+        fail "README still uses placeholder install examples or does not show the current release plus @latest"
+    fi
+}
+
+test_consumer_bug_report_template_exists() {
+    local template="$REPO_DIR/.github/ISSUE_TEMPLATE/consumer-bug-report.yml"
+    local has_file=true
+    local has_name=true
+    local has_description=true
+    local has_wizard_version=true
+    local has_command=true
+    local has_repo_shape=true
+    local has_failed_step=true
+    local has_visible_output=true
+    local has_auth_boundary=true
+    local has_expected_behavior=true
+    local has_no_secrets_warning=true
+    local avoids_benchmark_prompt=true
+
+    [ -f "$template" ] || has_file=false
+    grep -q '^name:' "$template" || has_name=false
+    grep -qi 'consumer bug report' "$template" || has_description=false
+    grep -qi 'wizard version' "$template" || has_wizard_version=false
+    grep -qi 'command used' "$template" || has_command=false
+    grep -Eqi 'repo shape|repo stack|repo type' "$template" || has_repo_shape=false
+    grep -qi 'failed step' "$template" || has_failed_step=false
+    grep -qi 'visible output' "$template" || has_visible_output=false
+    grep -Eqi 'auth|mfa|browser sign-in|wam' "$template" || has_auth_boundary=false
+    grep -qi 'expected behavior' "$template" || has_expected_behavior=false
+    grep -Eqi 'do not include secrets|do not paste tokens|never paste tokens' "$template" || has_no_secrets_warning=false
+    grep -Eqi 'benchmark|pilot-rollout\.csv|model-experiment\.csv' "$template" && avoids_benchmark_prompt=false
+
+    if [ "$has_file" = "true" ] &&
+       [ "$has_name" = "true" ] &&
+       [ "$has_description" = "true" ] &&
+       [ "$has_wizard_version" = "true" ] &&
+       [ "$has_command" = "true" ] &&
+       [ "$has_repo_shape" = "true" ] &&
+       [ "$has_failed_step" = "true" ] &&
+       [ "$has_visible_output" = "true" ] &&
+       [ "$has_auth_boundary" = "true" ] &&
+       [ "$has_expected_behavior" = "true" ] &&
+       [ "$has_no_secrets_warning" = "true" ] &&
+       [ "$avoids_benchmark_prompt" = "true" ]; then
+        pass "Consumer bug report template exists and asks for the right issue details without benchmark noise"
+    else
+        fail "Consumer bug report template is missing, incomplete, or asks for benchmark-style logging"
     fi
 }
 
@@ -415,6 +540,7 @@ test_installer_writes_default_model_profile
 test_installer_recommends_full_auto
 test_installer_mentions_model_profile_tradeoff
 test_installer_calls_out_auth_heavy_boundary
+test_installer_offers_issue_ready_feedback_on_wizard_failure
 test_readme_explains_distribution_model
 test_readme_has_install_choice_table
 test_readme_explains_install_side_effects
@@ -426,6 +552,8 @@ test_readme_documents_repo_scope_skills
 test_readme_documents_honest_codex_shape
 test_readme_documents_feedback_flow_and_repo_focus
 test_readme_documents_model_profiles
+test_readme_uses_real_release_examples
+test_consumer_bug_report_template_exists
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

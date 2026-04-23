@@ -199,11 +199,29 @@ test_local_npx_setup_honors_model_profile_flag() {
     fi
 }
 
+test_cli_help_documents_bootstrap_profile_policy() {
+    local output
+    output=$(node "$REPO_DIR/bin/codex-sdlc-wizard.js" --help 2>&1) || true
+
+    local valid=true
+    echo "$output" | grep -qi 'mixed' || valid=false
+    echo "$output" | grep -qi 'maximum' || valid=false
+    echo "$output" | grep -Eqi 'setup.*maximum|bootstrap.*maximum' || valid=false
+    echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "CLI help documents maximum for bootstrap and mixed for routine work"
+    else
+        fail "CLI help does not document the bootstrap-versus-routine profile policy clearly enough"
+    fi
+}
+
 test_package_metadata_exists
 test_package_version_matches_roadmap_current_release
 test_npm_pack_includes_runtime_files
 test_local_npx_installs_into_clean_repo
 test_local_npx_setup_honors_model_profile_flag
+test_cli_help_documents_bootstrap_profile_policy
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

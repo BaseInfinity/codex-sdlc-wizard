@@ -4,14 +4,41 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WIZARD_VERSION="$(jq -r '.version // "unknown"' "$SCRIPT_DIR/package.json" 2>/dev/null || echo unknown)"
+
+print_feedback_guidance() {
+    local command_name="$1"
+    local failure_point="$2"
+    local repo_shape="${3:-unknown}"
+
+    echo ""
+    echo "Likely wizard-level failure detected."
+    echo "Report bugs or improvements back to codex-sdlc-wizard."
+    echo "No issue will be posted automatically."
+    echo "Issue-ready details:"
+    echo "  wizard version: $WIZARD_VERSION"
+    echo "  command: $command_name"
+    echo "  repo shape: $repo_shape"
+    echo "  failure point: $failure_point"
+}
+
+require_setup_file() {
+    local path="$1"
+    local label="$2"
+    if [ ! -f "$path" ]; then
+        print_feedback_guidance "setup" "missing bundled setup file: $label" "unknown"
+        exit 1
+    fi
+}
 
 # Source dependencies
+require_setup_file "$SCRIPT_DIR/templates/domain-testing-sections.sh" "templates/domain-testing-sections.sh"
 source "$SCRIPT_DIR/templates/domain-testing-sections.sh"
 
 # ---- Parse args ----
 AUTO_YES=false
 FORCE=false
-MODEL_PROFILE="mixed"
+MODEL_PROFILE="maximum"
 MODEL_PROFILE_SET=false
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -41,6 +68,11 @@ case "$MODEL_PROFILE" in
         exit 1
         ;;
 esac
+
+require_setup_file "$SCRIPT_DIR/lib/scan.sh" "lib/scan.sh"
+require_setup_file "$SCRIPT_DIR/templates/AGENTS.md.tmpl" "templates/AGENTS.md.tmpl"
+require_setup_file "$SCRIPT_DIR/templates/ARCHITECTURE.md.tmpl" "templates/ARCHITECTURE.md.tmpl"
+require_setup_file "$SCRIPT_DIR/templates/TESTING.md.tmpl" "templates/TESTING.md.tmpl"
 
 # ---- Step 1: Scan project ----
 echo "Scanning project..."
@@ -93,10 +125,12 @@ echo ""
 # ---- Step 2: Confirm ----
 if [ "$AUTO_YES" = "false" ]; then
     if [ "$MODEL_PROFILE_SET" = "false" ]; then
-        read -rp "Model profile [mixed/maximum] (default: mixed): " model_choice
+        echo "Model profile choice: [maximum/mixed]"
+        echo "Bootstrap recommendation: use 'maximum' for setup/update. Switch back to 'mixed' for routine work after bootstrap."
+        read -rp "Model profile [maximum/mixed] (recommended/default for setup: maximum): " model_choice
         case "$model_choice" in
-            ""|mixed) MODEL_PROFILE="mixed" ;;
-            maximum) MODEL_PROFILE="maximum" ;;
+            ""|maximum) MODEL_PROFILE="maximum" ;;
+            mixed) MODEL_PROFILE="mixed" ;;
             *)
                 echo "Unsupported model profile: $model_choice (expected: mixed or maximum)" >&2
                 exit 1
@@ -173,6 +207,10 @@ generate_testing_md
 
 # ---- Step 4: Run install.sh (hooks + config) ----
 echo ""
+if [ ! -f "$SCRIPT_DIR/install.sh" ]; then
+    print_feedback_guidance "setup" "missing bundled setup file: install.sh" "$REPO_SHAPE"
+    exit 1
+fi
 bash "$SCRIPT_DIR/install.sh" --model-profile "$MODEL_PROFILE"
 
 # ---- Step 5: Write manifest ----
@@ -263,6 +301,8 @@ if [ "$ERRORS" -eq 0 ]; then
     echo "Model profile: '$MODEL_PROFILE'."
     echo "  - mixed: gpt-5.4-mini main pass + gpt-5.4 xhigh review for better speed, lower latency, and lower token usage."
     echo "  - maximum: gpt-5.4 xhigh throughout for maximum stability and the most thorough \"ultimate mode\"."
+    echo "Bootstrap policy: prefer 'maximum' for setup/update because bootstrap work has higher blast radius."
+    echo "Routine work after bootstrap can switch back to 'mixed' when you want better speed and lower token usage."
     echo "If confidence drops below 95%, research more first. If it still stays below 95%, escalate review to xhigh."
     echo "Repo-scoped skills are still a work in progress. Today the supported public workflow skill is '\$sdlc'."
     echo "Future repo-scoped skills like 'gdlc' and 'rdlc' are planned next."
@@ -273,5 +313,6 @@ if [ "$ERRORS" -eq 0 ]; then
 else
     echo ""
     echo "WARNING: $ERRORS file(s) missing — setup may be incomplete."
+    print_feedback_guidance "setup" "verification found missing expected files after setup" "$REPO_SHAPE"
     exit 1
 fi

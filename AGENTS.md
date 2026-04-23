@@ -38,3 +38,4 @@
 ## Model Profiles
 - `mixed`: `gpt-5.4-mini` main pass plus `gpt-5.4` `xhigh` review for better speed and lower token usage
 - `maximum`: `gpt-5.4` `xhigh` throughout for maximum stability and depth
+- This repo stays on `maximum`. `codex-sdlc-wizard` is meta and high-blast-radius enough that maintainers should not dogfood `mixed` here.
