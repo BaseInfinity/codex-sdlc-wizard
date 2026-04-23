@@ -2,9 +2,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MODEL_PROFILE="mixed"
-WIZARD_VERSION="$(jq -r '.version // "unknown"' "$SCRIPT_DIR/package.json" 2>/dev/null || echo unknown)"
+source "$SCRIPT_DIR/lib/json-node.sh"
+require_node
 
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;;
+    *) IS_WINDOWS=false ;;
+esac
+
+MODEL_PROFILE="mixed"
 while [ $# -gt 0 ]; do
   case "$1" in
     --model-profile)
@@ -29,6 +35,9 @@ case "$MODEL_PROFILE" in
     exit 1
     ;;
 esac
+
+WIZARD_VERSION="$(json_get_file "$SCRIPT_DIR/package.json" 'data.version || "unknown"')"
+[ -z "$WIZARD_VERSION" ] && WIZARD_VERSION="unknown"
 
 print_feedback_guidance() {
   local command_name="$1"
@@ -55,14 +64,72 @@ require_bundle_file() {
   fi
 }
 
-require_bundle_file "$SCRIPT_DIR/AGENTS.md" "AGENTS.md"
-require_bundle_file "$SCRIPT_DIR/.codex/config.toml" ".codex/config.toml"
-require_bundle_file "$SCRIPT_DIR/.codex/hooks.json" ".codex/hooks.json"
-require_bundle_file "$SCRIPT_DIR/.codex/hooks/bash-guard.sh" ".codex/hooks/bash-guard.sh"
-require_bundle_file "$SCRIPT_DIR/.codex/hooks/sdlc-prompt-check.sh" ".codex/hooks/sdlc-prompt-check.sh"
-require_bundle_file "$SCRIPT_DIR/.codex/hooks/session-start.sh" ".codex/hooks/session-start.sh"
-require_bundle_file "$SCRIPT_DIR/.agents/skills/sdlc/SKILL.md" ".agents/skills/sdlc/SKILL.md"
-require_bundle_file "$SCRIPT_DIR/.agents/skills/adlc/SKILL.md" ".agents/skills/adlc/SKILL.md"
+for required in \
+  "AGENTS.md" \
+  "SDLC-LOOP.md" \
+  "START-SDLC.md" \
+  "PROVE-IT.md" \
+  "start-sdlc.sh" \
+  "start-sdlc.ps1" \
+  ".codex/config.toml" \
+  ".codex/hooks.json" \
+  ".codex/unix-hooks.json" \
+  ".codex/windows-hooks.json" \
+  ".codex/hooks/bash-guard.sh" \
+  ".codex/hooks/session-start.sh" \
+  ".codex/hooks/sdlc-prompt-check.sh" \
+  ".codex/hooks/git-guard.ps1" \
+  ".codex/hooks/session-start.ps1" \
+  ".agents/skills/sdlc/SKILL.md" \
+  ".agents/skills/adlc/SKILL.md"; do
+  require_bundle_file "$SCRIPT_DIR/$required" "$required"
+done
+
+CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
+SKILLS_ROOT="$CODEX_HOME_DIR/skills"
+SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
+
+copy_if_missing() {
+  local source="$1"
+  local target="$2"
+  local label="$3"
+  if [ ! -f "$target" ]; then
+    cp "$source" "$target"
+    echo "Created $label"
+  else
+    echo "$label already exists - skipping (review manually)"
+  fi
+}
+
+install_repo_skill() {
+  local name="$1"
+  local source="$SCRIPT_DIR/.agents/skills/$name/SKILL.md"
+  local target=".agents/skills/$name/SKILL.md"
+
+  mkdir -p "$(dirname "$target")"
+  if [ -f "$target" ]; then
+    echo "$target already exists - skipping (review manually)"
+  else
+    cp "$source" "$target"
+    echo "Installed $target"
+  fi
+}
+
+install_global_skill() {
+  local skill_path="$1"
+  local skill_name
+
+  [ -d "$skill_path" ] || return 0
+
+  skill_name="$(basename "$skill_path")"
+  if [ -d "$SKILLS_ROOT/$skill_name" ]; then
+    cp -R "$SKILLS_ROOT/$skill_name" "$SKILLS_BACKUP_ROOT/$skill_name.bak.$(date +%s)"
+    rm -rf "$SKILLS_ROOT/$skill_name"
+    echo "Backed up existing Codex skill: $skill_name"
+  fi
+  cp -R "$skill_path" "$SKILLS_ROOT/"
+  echo "Installed Codex skill: $skill_name"
+}
 
 write_model_profile() {
   mkdir -p .codex-sdlc
@@ -96,74 +163,63 @@ EOF
 
 echo "Installing SDLC Wizard for Codex CLI..."
 
-# AGENTS.md — skip if exists
-if [ ! -f "AGENTS.md" ]; then
-  cp "$SCRIPT_DIR/AGENTS.md" .
-  echo "Created AGENTS.md"
-else
-  echo "AGENTS.md already exists — skipping (review manually)"
-fi
+copy_if_missing "$SCRIPT_DIR/AGENTS.md" "AGENTS.md" "AGENTS.md"
+copy_if_missing "$SCRIPT_DIR/SDLC-LOOP.md" "SDLC-LOOP.md" "SDLC-LOOP.md"
+copy_if_missing "$SCRIPT_DIR/START-SDLC.md" "START-SDLC.md" "START-SDLC.md"
+copy_if_missing "$SCRIPT_DIR/PROVE-IT.md" "PROVE-IT.md" "PROVE-IT.md"
 
-install_repo_skill() {
-  local name="$1"
-  local source="$SCRIPT_DIR/.agents/skills/$name/SKILL.md"
-  local target=".agents/skills/$name/SKILL.md"
-
-  if [ ! -f "$source" ]; then
-    echo "Skill source missing for $name — skipping"
-    return
-  fi
-
-  mkdir -p "$(dirname "$target")"
-
-  if [ -f "$target" ]; then
-    echo "$target already exists — skipping (review manually)"
-  else
-    cp "$source" "$target"
-    echo "Installed $target"
-  fi
-}
+mkdir -p "$SKILLS_ROOT" "$SKILLS_BACKUP_ROOT"
+for skill_path in "$SCRIPT_DIR"/skills/*; do
+  install_global_skill "$skill_path"
+done
 
 mkdir -p .codex/hooks
 
-# config.toml — ensure codex_hooks = true, TOML-safe
 if [ -f ".codex/config.toml" ]; then
   if grep -v '^[[:space:]]*#' .codex/config.toml | grep -qE 'codex_hooks[[:space:]]*=[[:space:]]*false'; then
-    # Flip false to true (only uncommented lines)
     sed -i.bak -E 's/^([^#]*codex_hooks[[:space:]]*=[[:space:]]*)false/\1true/' .codex/config.toml
     rm -f .codex/config.toml.bak
     echo "Set codex_hooks = true in existing config.toml"
   elif grep -v '^[[:space:]]*#' .codex/config.toml | grep -q 'codex_hooks[[:space:]]*=[[:space:]]*true'; then
-    echo "config.toml already has codex_hooks = true — skipping"
+    echo "config.toml already has codex_hooks = true - skipping"
   elif grep -q '^\[features\]' .codex/config.toml; then
-    # [features] table exists but no codex_hooks — insert after it (awk for macOS compat)
     awk '/^\[features\]/{print; print "codex_hooks = true"; next}1' .codex/config.toml > .codex/config.toml.tmp
     mv .codex/config.toml.tmp .codex/config.toml
     echo "Added codex_hooks = true to existing [features] table"
   else
-    # No [features] table at all — append new section
     printf '\n[features]\ncodex_hooks = true\n' >> .codex/config.toml
     echo "Added [features] codex_hooks = true to config.toml"
   fi
 else
+  mkdir -p .codex
   cp "$SCRIPT_DIR/.codex/config.toml" .codex/
   echo "Created .codex/config.toml"
 fi
 
-# hooks.json — back up if exists, then install
 if [ -f ".codex/hooks.json" ]; then
   cp .codex/hooks.json ".codex/hooks.json.bak.$(date +%s)"
   echo "Backed up existing hooks.json"
 fi
-cp "$SCRIPT_DIR/.codex/hooks.json" .codex/
-echo "Installed .codex/hooks.json"
 
-# Hook scripts — always overwrite (these are ours)
 cp "$SCRIPT_DIR/.codex/hooks/"*.sh .codex/hooks/
 chmod +x .codex/hooks/*.sh
-echo "Installed hook scripts"
 
-# Repo-scoped Codex skills
+if [ "$IS_WINDOWS" = "true" ]; then
+  cp "$SCRIPT_DIR/.codex/hooks.json" .codex/hooks.json
+  cp "$SCRIPT_DIR/.codex/hooks/git-guard.ps1" .codex/hooks/
+  cp "$SCRIPT_DIR/.codex/hooks/session-start.ps1" .codex/hooks/
+  copy_if_missing "$SCRIPT_DIR/start-sdlc.ps1" "start-sdlc.ps1" "start-sdlc.ps1"
+  echo "Installed .codex/hooks.json (Windows PowerShell hooks)"
+  echo "Installed PowerShell hook scripts"
+else
+  cp "$SCRIPT_DIR/.codex/unix-hooks.json" .codex/hooks.json
+  copy_if_missing "$SCRIPT_DIR/start-sdlc.sh" "start-sdlc.sh" "start-sdlc.sh"
+  chmod +x start-sdlc.sh
+  echo "Installed .codex/hooks.json"
+fi
+
+echo "Installed shell hook scripts"
+
 install_repo_skill sdlc
 install_repo_skill adlc
 write_model_profile

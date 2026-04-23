@@ -1,49 +1,148 @@
 #!/bin/bash
 # Adaptive setup — scans project, generates tailored docs, installs hooks
-# Pure bash + jq. No API tokens needed.
+# Bash + Node. No API tokens needed.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WIZARD_VERSION="$(jq -r '.version // "unknown"' "$SCRIPT_DIR/package.json" 2>/dev/null || echo unknown)"
-
-print_feedback_guidance() {
-    local command_name="$1"
-    local failure_point="$2"
-    local repo_shape="${3:-unknown}"
-
-    echo ""
-    echo "Likely wizard-level failure detected."
-    echo "Report bugs or improvements back to codex-sdlc-wizard."
-    echo "No issue will be posted automatically."
-    echo "Issue-ready details:"
-    echo "  wizard version: $WIZARD_VERSION"
-    echo "  command: $command_name"
-    echo "  repo shape: $repo_shape"
-    echo "  failure point: $failure_point"
-}
-
-require_setup_file() {
-    local path="$1"
-    local label="$2"
-    if [ ! -f "$path" ]; then
-        print_feedback_guidance "setup" "missing bundled setup file: $label" "unknown"
-        exit 1
-    fi
-}
 
 # Source dependencies
-require_setup_file "$SCRIPT_DIR/templates/domain-testing-sections.sh" "templates/domain-testing-sections.sh"
+source "$SCRIPT_DIR/lib/json-node.sh"
 source "$SCRIPT_DIR/templates/domain-testing-sections.sh"
+
+require_node
+
+verify_installation() {
+    local errors=0
+
+    echo ""
+    echo "Verifying installation..."
+    for f in AGENTS.md SDLC.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .codex-sdlc/model-profile.json .agents/skills/sdlc/SKILL.md .agents/skills/adlc/SKILL.md; do
+        if [ ! -f "$f" ]; then
+            echo "  MISSING: $f"
+            errors=$((errors + 1))
+        fi
+    done
+
+    if [ "$errors" -eq 0 ]; then
+        echo "  All files present."
+        echo ""
+        echo "Setup complete. Trust this repo in Codex, then run 'codex' to start."
+        return 0
+    fi
+
+    echo ""
+    echo "WARNING: $errors file(s) missing — setup may be incomplete."
+    return 1
+}
+
+load_regenerate_state() {
+    local manifest=".codex-sdlc/manifest.json"
+
+    if [ ! -f "$manifest" ]; then
+        echo "Error: $manifest is required for regenerate mode." >&2
+        return 1
+    fi
+
+    LANGUAGE=$(json_get_file "$manifest" 'data.scan?.language || ""')
+    SOURCE_DIR=$(json_get_file "$manifest" 'data.resolved_values?.source_dir || data.scan?.source_dir || ""')
+    TEST_DIR=$(json_get_file "$manifest" 'data.resolved_values?.test_dir || data.scan?.test_dir || ""')
+    TEST_FRAMEWORK=$(json_get_file "$manifest" 'data.resolved_values?.test_framework || data.scan?.test_framework || ""')
+    TEST_COMMAND=$(json_get_file "$manifest" 'data.resolved_values?.test_command || data.scan?.test_command || ""')
+    LINT_COMMAND=$(json_get_file "$manifest" 'data.resolved_values?.lint_command || data.scan?.lint_command || ""')
+    TYPECHECK_COMMAND=$(json_get_file "$manifest" 'data.resolved_values?.typecheck_command || data.scan?.typecheck_command || ""')
+    SINGLE_TEST_COMMAND=$(json_get_file "$manifest" 'data.resolved_values?.single_test_command || data.scan?.single_test_command || ""')
+    BUILD_COMMAND=$(json_get_file "$manifest" 'data.resolved_values?.build_command || data.scan?.build_command || ""')
+    DEPLOYMENT_SETUP=$(json_get_file "$manifest" 'data.resolved_values?.deployment_setup || data.scan?.deployment_setup || ""')
+    DATABASES=$(json_get_file "$manifest" 'data.resolved_values?.databases || data.scan?.databases || ""')
+    CACHE_LAYER=$(json_get_file "$manifest" 'data.resolved_values?.cache_layer || data.scan?.cache_layer || ""')
+    TEST_DURATION=$(json_get_file "$manifest" 'data.resolved_values?.test_duration || data.scan?.test_duration || ""')
+    TEST_TYPES=$(json_get_file "$manifest" 'data.resolved_values?.test_types || data.scan?.test_types || ""')
+    COVERAGE_CONFIG=$(json_get_file "$manifest" 'data.resolved_values?.coverage_config || data.scan?.coverage_config || ""')
+    CI=$(json_get_file "$manifest" 'data.resolved_values?.ci || data.scan?.ci || ""')
+    DOMAIN=$(json_get_file "$manifest" 'data.resolved_values?.domain || data.scan?.domain || "web"')
+
+    SCAN_SOURCE_DIR_RAW=$(json_get_file "$manifest" 'data.scan?.source_dir || ""')
+    SCAN_TEST_DIR_RAW=$(json_get_file "$manifest" 'data.scan?.test_dir || ""')
+    SCAN_TEST_FRAMEWORK_RAW=$(json_get_file "$manifest" 'data.scan?.test_framework || ""')
+    SCAN_TEST_COMMAND_RAW=$(json_get_file "$manifest" 'data.scan?.test_command || ""')
+    SCAN_LINT_COMMAND_RAW=$(json_get_file "$manifest" 'data.scan?.lint_command || ""')
+    SCAN_TYPECHECK_COMMAND_RAW=$(json_get_file "$manifest" 'data.scan?.typecheck_command || ""')
+    SCAN_SINGLE_TEST_COMMAND_RAW=$(json_get_file "$manifest" 'data.scan?.single_test_command || ""')
+    SCAN_BUILD_COMMAND_RAW=$(json_get_file "$manifest" 'data.scan?.build_command || ""')
+    SCAN_DEPLOYMENT_SETUP_RAW=$(json_get_file "$manifest" 'data.scan?.deployment_setup || ""')
+    SCAN_DATABASES_RAW=$(json_get_file "$manifest" 'data.scan?.databases || ""')
+    SCAN_CACHE_LAYER_RAW=$(json_get_file "$manifest" 'data.scan?.cache_layer || ""')
+    SCAN_TEST_DURATION_RAW=$(json_get_file "$manifest" 'data.scan?.test_duration || ""')
+    SCAN_TEST_TYPES_RAW=$(json_get_file "$manifest" 'data.scan?.test_types || ""')
+    SCAN_COVERAGE_CONFIG_RAW=$(json_get_file "$manifest" 'data.scan?.coverage_config || ""')
+    SCAN_CI_RAW=$(json_get_file "$manifest" 'data.scan?.ci || ""')
+    SCAN_DOMAIN_RAW=$(json_get_file "$manifest" 'data.scan?.domain || ""')
+
+    ADAPTER_VERSION=$(cat "$SCRIPT_DIR/UPSTREAM_VERSION" 2>/dev/null | tr -d '[:space:]')
+    [ -z "$ADAPTER_VERSION" ] && ADAPTER_VERSION=$(json_get_file "$manifest" 'data.adapter_version || ""')
+    INSTALLED_AT_VALUE=$(json_get_file "$manifest" 'data.installed_at || ""')
+    [ -z "$INSTALLED_AT_VALUE" ] && INSTALLED_AT_VALUE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    SETUP_DATE="${INSTALLED_AT_VALUE%%T*}"
+    COMPLETED_STEPS="step-0.4, step-1, step-9"
+    GIT_WORKFLOW=$(json_get_file "$manifest" 'data.setup_answers?.git_workflow || "solo"')
+    RESPONSE_DETAIL=$(json_get_file "$manifest" 'data.setup_answers?.response_detail || "concise"')
+    TESTING_APPROACH=$(json_get_file "$manifest" 'data.setup_answers?.testing_approach || "strict-tdd"')
+    MOCKING_PHILOSOPHY=$(json_get_file "$manifest" 'data.setup_answers?.mocking_philosophy || "minimal"')
+    CI_SHEPHERD=$(json_get_file "$manifest" 'data.setup_answers?.ci_shepherd || "disabled"')
+    MODEL_PROFILE=$(json_get_file "$manifest" 'data.model_profile?.selected_profile || ""')
+    [ -n "$MODEL_PROFILE" ] || MODEL_PROFILE=$(json_get_file ".codex-sdlc/model-profile.json" 'data.selected_profile || ""')
+    [ -n "$MODEL_PROFILE" ] || MODEL_PROFILE="maximum"
+    MODEL_PROFILE_SET=true
+
+    SOURCE_DIR_STATE=$(json_get_file "$manifest" 'data.confidence_map?.source_dir || ""')
+    TEST_DIR_STATE=$(json_get_file "$manifest" 'data.confidence_map?.test_dir || ""')
+    TEST_FRAMEWORK_STATE=$(json_get_file "$manifest" 'data.confidence_map?.test_framework || ""')
+    TEST_COMMAND_STATE=$(json_get_file "$manifest" 'data.confidence_map?.test_command || ""')
+    LINT_COMMAND_STATE=$(json_get_file "$manifest" 'data.confidence_map?.lint_command || ""')
+    TYPECHECK_COMMAND_STATE=$(json_get_file "$manifest" 'data.confidence_map?.typecheck_command || ""')
+    SINGLE_TEST_COMMAND_STATE=$(json_get_file "$manifest" 'data.confidence_map?.single_test_command || ""')
+    BUILD_COMMAND_STATE=$(json_get_file "$manifest" 'data.confidence_map?.build_command || ""')
+    DEPLOYMENT_SETUP_STATE=$(json_get_file "$manifest" 'data.confidence_map?.deployment_setup || ""')
+    DATABASES_STATE=$(json_get_file "$manifest" 'data.confidence_map?.databases || ""')
+    CACHE_LAYER_STATE=$(json_get_file "$manifest" 'data.confidence_map?.cache_layer || ""')
+    TEST_DURATION_STATE=$(json_get_file "$manifest" 'data.confidence_map?.test_duration || ""')
+    TEST_TYPES_STATE=$(json_get_file "$manifest" 'data.confidence_map?.test_types || ""')
+    COVERAGE_CONFIG_STATE=$(json_get_file "$manifest" 'data.confidence_map?.coverage_config || ""')
+    CI_STATE=$(json_get_file "$manifest" 'data.confidence_map?.ci || ""')
+    DOMAIN_STATE=$(json_get_file "$manifest" 'data.confidence_map?.domain || ""')
+
+    [ -n "$SOURCE_DIR_STATE" ] || SOURCE_DIR_STATE=$([ -n "$SOURCE_DIR" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$TEST_DIR_STATE" ] || TEST_DIR_STATE=$([ -n "$TEST_DIR" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$TEST_FRAMEWORK_STATE" ] || TEST_FRAMEWORK_STATE=$([ -n "$TEST_FRAMEWORK" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$TEST_COMMAND_STATE" ] || TEST_COMMAND_STATE=$([ -n "$TEST_COMMAND" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$LINT_COMMAND_STATE" ] || LINT_COMMAND_STATE=$([ -n "$LINT_COMMAND" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$TYPECHECK_COMMAND_STATE" ] || TYPECHECK_COMMAND_STATE=$([ -n "$TYPECHECK_COMMAND" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$SINGLE_TEST_COMMAND_STATE" ] || SINGLE_TEST_COMMAND_STATE=$([ -n "$SINGLE_TEST_COMMAND" ] && printf 'inferred' || printf 'unresolved')
+    [ -n "$BUILD_COMMAND_STATE" ] || BUILD_COMMAND_STATE=$([ -n "$BUILD_COMMAND" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$DEPLOYMENT_SETUP_STATE" ] || DEPLOYMENT_SETUP_STATE=$([ -n "$DEPLOYMENT_SETUP" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$DATABASES_STATE" ] || DATABASES_STATE=$([ -n "$DATABASES" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$CACHE_LAYER_STATE" ] || CACHE_LAYER_STATE=$([ -n "$CACHE_LAYER" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$TEST_DURATION_STATE" ] || TEST_DURATION_STATE=$([ -n "$TEST_DURATION" ] && printf 'inferred' || printf 'unresolved')
+    [ -n "$TEST_TYPES_STATE" ] || TEST_TYPES_STATE=$([ -n "$TEST_TYPES" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$COVERAGE_CONFIG_STATE" ] || COVERAGE_CONFIG_STATE=$([ -n "$COVERAGE_CONFIG" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$CI_STATE" ] || CI_STATE=$([ -n "$CI" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$DOMAIN_STATE" ] || DOMAIN_STATE=$([ "$DOMAIN" = "web" ] && printf 'inferred' || printf 'detected')
+
+    return 0
+}
 
 # ---- Parse args ----
 AUTO_YES=false
 FORCE=false
+SETUP_MODE="normal"
 MODEL_PROFILE="maximum"
 MODEL_PROFILE_SET=false
 while [ $# -gt 0 ]; do
     case "$1" in
         --yes|-y) AUTO_YES=true ;;
         --force) FORCE=true ;;
+        regenerate) SETUP_MODE="regenerate" ;;
+        verify-only) SETUP_MODE="verify-only" ;;
         --model-profile)
             shift
             if [ $# -eq 0 ]; then
@@ -69,79 +168,488 @@ case "$MODEL_PROFILE" in
         ;;
 esac
 
-require_setup_file "$SCRIPT_DIR/lib/scan.sh" "lib/scan.sh"
-require_setup_file "$SCRIPT_DIR/templates/AGENTS.md.tmpl" "templates/AGENTS.md.tmpl"
-require_setup_file "$SCRIPT_DIR/templates/ARCHITECTURE.md.tmpl" "templates/ARCHITECTURE.md.tmpl"
-require_setup_file "$SCRIPT_DIR/templates/TESTING.md.tmpl" "templates/TESTING.md.tmpl"
+if [ "$SETUP_MODE" = "verify-only" ]; then
+    verify_installation
+    exit $?
+fi
 
 # ---- Step 1: Scan project ----
-echo "Scanning project..."
-SCAN_JSON=$(cd "$(pwd)" && bash "$SCRIPT_DIR/lib/scan.sh")
+if [ "$SETUP_MODE" = "regenerate" ]; then
+    echo "Regenerating setup docs from .codex-sdlc/manifest.json..."
+    load_regenerate_state
+else
+    echo "Scanning project..."
+    SCAN_JSON=$(cd "$(pwd)" && bash "$SCRIPT_DIR/lib/scan.sh")
 
-# Extract scan values
-LANGUAGE=$(echo "$SCAN_JSON" | jq -r '.language')
-SOURCE_DIR=$(echo "$SCAN_JSON" | jq -r '.source_dir')
-TEST_DIR=$(echo "$SCAN_JSON" | jq -r '.test_dir')
-TEST_FRAMEWORK=$(echo "$SCAN_JSON" | jq -r '.test_framework')
-TEST_COMMAND=$(echo "$SCAN_JSON" | jq -r '.test_command')
-LINT_COMMAND=$(echo "$SCAN_JSON" | jq -r '.lint_command')
-BUILD_COMMAND=$(echo "$SCAN_JSON" | jq -r '.build_command')
-CI=$(echo "$SCAN_JSON" | jq -r '.ci')
-DOMAIN=$(echo "$SCAN_JSON" | jq -r '.domain')
-REPO_SHAPE=$(echo "$SCAN_JSON" | jq -r '.repo_shape')
-CONFIDENCE_OVERALL=$(echo "$SCAN_JSON" | jq -r '.confidence_map.overall')
-CONFIDENCE_KNOWN_SUMMARY=$(echo "$SCAN_JSON" | jq -r '.confidence_map.known | join("; ")')
-CONFIDENCE_UNRESOLVED_SUMMARY=$(echo "$SCAN_JSON" | jq -r '.confidence_map.unresolved | join("; ")')
+    # Extract scan values
+    LANGUAGE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.language')
+    SOURCE_DIR=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.source_dir')
+    TEST_DIR=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.test_dir')
+    TEST_FRAMEWORK=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.test_framework')
+    TEST_COMMAND=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.test_command')
+    LINT_COMMAND=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.lint_command')
+    TYPECHECK_COMMAND=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.typecheck_command')
+    SINGLE_TEST_COMMAND=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.single_test_command')
+    BUILD_COMMAND=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.build_command')
+    DEPLOYMENT_SETUP=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.deployment_setup')
+    DATABASES=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.databases')
+    CACHE_LAYER=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.cache_layer')
+    TEST_DURATION=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.test_duration')
+    TEST_TYPES=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.test_types')
+    COVERAGE_CONFIG=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.coverage_config')
+    CI=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.ci')
+    DOMAIN=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.domain')
+    SCAN_SOURCE_DIR_RAW="$SOURCE_DIR"
+    SCAN_TEST_DIR_RAW="$TEST_DIR"
+    SCAN_TEST_FRAMEWORK_RAW="$TEST_FRAMEWORK"
+    SCAN_TEST_COMMAND_RAW="$TEST_COMMAND"
+    SCAN_LINT_COMMAND_RAW="$LINT_COMMAND"
+    SCAN_TYPECHECK_COMMAND_RAW="$TYPECHECK_COMMAND"
+    SCAN_SINGLE_TEST_COMMAND_RAW="$SINGLE_TEST_COMMAND"
+    SCAN_BUILD_COMMAND_RAW="$BUILD_COMMAND"
+    SCAN_DEPLOYMENT_SETUP_RAW="$DEPLOYMENT_SETUP"
+    SCAN_DATABASES_RAW="$DATABASES"
+    SCAN_CACHE_LAYER_RAW="$CACHE_LAYER"
+    SCAN_TEST_DURATION_RAW="$TEST_DURATION"
+    SCAN_TEST_TYPES_RAW="$TEST_TYPES"
+    SCAN_COVERAGE_CONFIG_RAW="$COVERAGE_CONFIG"
+    SCAN_CI_RAW="$CI"
+    SCAN_DOMAIN_RAW="$DOMAIN"
+    ADAPTER_VERSION=$(cat "$SCRIPT_DIR/UPSTREAM_VERSION" 2>/dev/null | tr -d '[:space:]')
+    INSTALLED_AT_VALUE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    SETUP_DATE=$(date -u +%Y-%m-%d)
+    COMPLETED_STEPS="step-0.4, step-1, step-9"
+    GIT_WORKFLOW="solo"
+    RESPONSE_DETAIL="concise"
+    TESTING_APPROACH="strict-tdd"
+    MOCKING_PHILOSOPHY="minimal"
+    CI_SHEPHERD="disabled"
+fi
+
+package_script_exists() {
+    local script_name="$1"
+
+    if [ ! -f "package.json" ]; then
+        return 1
+    fi
+
+    json_get_file "package.json" "typeof data.scripts?.[\"$script_name\"] === \"string\" ? data.scripts[\"$script_name\"] : \"\"" | grep -q .
+}
+
+package_script_matches() {
+    local script_name="$1"
+    local pattern="$2"
+
+    if [ ! -f "package.json" ]; then
+        return 1
+    fi
+
+    json_get_file "package.json" "typeof data.scripts?.[\"$script_name\"] === \"string\" ? data.scripts[\"$script_name\"] : \"\"" | grep -Eqi -- "$pattern"
+}
+
+test_framework_state() {
+    if [ -z "$TEST_FRAMEWORK" ]; then
+        printf 'unresolved'
+    elif ls jest.config.* 2>/dev/null | head -1 | grep -q . \
+        || ls vitest.config.* 2>/dev/null | head -1 | grep -q . \
+        || [ -f "pytest.ini" ] \
+        || [ -f ".rspec" ] \
+        || [ -f "Cargo.toml" ] \
+        || [ -f "go.mod" ]; then
+        printf 'detected'
+    else
+        printf 'inferred'
+    fi
+}
+
+test_command_state() {
+    if [ -z "$TEST_COMMAND" ]; then
+        printf 'unresolved'
+    elif package_script_exists "test"; then
+        printf 'detected'
+    else
+        printf 'inferred'
+    fi
+}
+
+lint_command_state() {
+    if [ -z "$LINT_COMMAND" ]; then
+        printf 'unresolved'
+    elif package_script_exists "lint"; then
+        printf 'detected'
+    else
+        printf 'inferred'
+    fi
+}
+
+typecheck_command_state() {
+    if [ -z "$TYPECHECK_COMMAND" ]; then
+        printf 'unresolved'
+    elif package_script_exists "typecheck" || package_script_exists "check-types" \
+        || [ -f "tsconfig.json" ] \
+        || [ -f "mypy.ini" ] \
+        || { [ -f "pyproject.toml" ] && grep -q "mypy" "pyproject.toml" 2>/dev/null; } \
+        || [ -f "Cargo.toml" ]; then
+        printf 'detected'
+    else
+        printf 'inferred'
+    fi
+}
+
+single_test_command_state() {
+    if [ -z "$SINGLE_TEST_COMMAND" ]; then
+        printf 'unresolved'
+    else
+        printf 'inferred'
+    fi
+}
+
+build_command_state() {
+    if [ -z "$BUILD_COMMAND" ]; then
+        printf 'unresolved'
+    elif package_script_exists "build" || [ -f "Makefile" ] || [ -f "Cargo.toml" ] || [ -f "go.mod" ]; then
+        printf 'detected'
+    else
+        printf 'inferred'
+    fi
+}
+
+deployment_setup_state() {
+    if [ -z "$DEPLOYMENT_SETUP" ]; then
+        printf 'unresolved'
+    else
+        printf 'detected'
+    fi
+}
+
+databases_state() {
+    if [ -z "$DATABASES" ]; then
+        printf 'unresolved'
+    else
+        printf 'detected'
+    fi
+}
+
+cache_layer_state() {
+    if [ -z "$CACHE_LAYER" ]; then
+        printf 'unresolved'
+    else
+        printf 'detected'
+    fi
+}
+
+test_duration_state() {
+    if [ -z "$TEST_DURATION" ]; then
+        printf 'unresolved'
+    else
+        printf 'inferred'
+    fi
+}
+
+test_types_state() {
+    if [ -z "$TEST_TYPES" ]; then
+        printf 'unresolved'
+    else
+        printf 'detected'
+    fi
+}
+
+coverage_config_state() {
+    if [ -z "$COVERAGE_CONFIG" ]; then
+        printf 'unresolved'
+    elif package_script_exists "coverage" || package_script_matches "test" '--coverage' \
+        || ls .nycrc* 2>/dev/null | head -1 | grep -q . \
+        || [ -f "coverage.py" ] \
+        || [ -f ".coveragerc" ] \
+        || { [ -f "pyproject.toml" ] && grep -q "pytest-cov" "pyproject.toml" 2>/dev/null; }; then
+        printf 'detected'
+    else
+        printf 'inferred'
+    fi
+}
+
+domain_state() {
+    if [ "$DOMAIN" = "web" ]; then
+        printf 'inferred'
+    else
+        printf 'detected'
+    fi
+}
+
+if [ "$SETUP_MODE" != "regenerate" ]; then
+    SOURCE_DIR_STATE=$([ -n "$SOURCE_DIR" ] && printf 'detected' || printf 'unresolved')
+    TEST_DIR_STATE=$([ -n "$TEST_DIR" ] && printf 'detected' || printf 'unresolved')
+    TEST_FRAMEWORK_STATE=$(test_framework_state)
+    TEST_COMMAND_STATE=$(test_command_state)
+    LINT_COMMAND_STATE=$(lint_command_state)
+    TYPECHECK_COMMAND_STATE=$(typecheck_command_state)
+    SINGLE_TEST_COMMAND_STATE=$(single_test_command_state)
+    BUILD_COMMAND_STATE=$(build_command_state)
+    DEPLOYMENT_SETUP_STATE=$(deployment_setup_state)
+    DATABASES_STATE=$(databases_state)
+    CACHE_LAYER_STATE=$(cache_layer_state)
+    TEST_DURATION_STATE=$(test_duration_state)
+    TEST_TYPES_STATE=$(test_types_state)
+    COVERAGE_CONFIG_STATE=$(coverage_config_state)
+    CI_STATE=$([ -n "$CI" ] && printf 'detected' || printf 'unresolved')
+    DOMAIN_STATE=$(domain_state)
+fi
 
 echo ""
-echo "Detected:"
+if [ "$SETUP_MODE" = "regenerate" ]; then
+    echo "Loaded setup state:"
+else
+    echo "Detected:"
+fi
 echo "  Language:       $LANGUAGE"
 echo "  Source dir:     ${SOURCE_DIR:-<none>}"
 echo "  Test dir:       ${TEST_DIR:-<none>}"
 echo "  Test framework: ${TEST_FRAMEWORK:-<none>}"
 echo "  Test command:   ${TEST_COMMAND:-<none>}"
 echo "  Lint command:   ${LINT_COMMAND:-<none>}"
+echo "  Typecheck:      ${TYPECHECK_COMMAND:-<none>}"
+echo "  Single test:    ${SINGLE_TEST_COMMAND:-<none>}"
 echo "  Build command:  ${BUILD_COMMAND:-<none>}"
+echo "  Deployment:     ${DEPLOYMENT_SETUP:-<none>}"
+echo "  Databases:      ${DATABASES:-<none>}"
+echo "  Cache layer:    ${CACHE_LAYER:-<none>}"
+echo "  Test duration:  ${TEST_DURATION:-<none>}"
+echo "  Test types:     ${TEST_TYPES:-<none>}"
+echo "  Coverage:       ${COVERAGE_CONFIG:-<none>}"
 echo "  CI:             ${CI:-<none>}"
 echo "  Domain:         $DOMAIN"
-echo "  Repo shape:     $REPO_SHAPE"
-echo ""
-echo "Confidence map:"
-echo "  Overall:        $(printf '%s' "$CONFIDENCE_OVERALL" | tr '[:lower:]' '[:upper:]')"
-echo "  Known:"
-if echo "$SCAN_JSON" | jq -e '.confidence_map.known | length > 0' >/dev/null 2>&1; then
-    echo "$SCAN_JSON" | jq -r '.confidence_map.known[] | "    - " + .'
-else
-    echo "    - none"
-fi
-echo "  Unresolved:"
-if echo "$SCAN_JSON" | jq -e '.confidence_map.unresolved | length > 0' >/dev/null 2>&1; then
-    echo "$SCAN_JSON" | jq -r '.confidence_map.unresolved[] | "    - " + .'
-else
-    echo "    - none"
-fi
 echo ""
 
-# ---- Step 2: Confirm ----
-if [ "$AUTO_YES" = "false" ]; then
-    if [ "$MODEL_PROFILE_SET" = "false" ]; then
-        echo "Model profile choice: [maximum/mixed]"
-        echo "Bootstrap recommendation: use 'maximum' for setup/update. Switch back to 'mixed' for routine work after bootstrap."
-        read -rp "Model profile [maximum/mixed] (recommended/default for setup: maximum): " model_choice
-        case "$model_choice" in
-            ""|maximum) MODEL_PROFILE="maximum" ;;
-            mixed) MODEL_PROFILE="mixed" ;;
-            *)
-                echo "Unsupported model profile: $model_choice (expected: mixed or maximum)" >&2
-                exit 1
-                ;;
-        esac
+prompt_with_default() {
+    local label="$1"
+    local default_value="${2-}"
+    local answer=""
+
+    if [ -n "$default_value" ]; then
+        printf "%s [%s]: " "$label" "$default_value" >&2
+    else
+        printf "%s: " "$label" >&2
     fi
-    read -rp "Proceed with setup? [Y/n] " confirm
-    case "$confirm" in
-        [nN]*) echo "Aborted."; exit 0 ;;
+
+    IFS= read -r answer || answer=""
+
+    if [ -n "$answer" ]; then
+        printf '%s' "$answer"
+    else
+        printf '%s' "$default_value"
+    fi
+}
+
+choose_model_profile() {
+    local answer=""
+
+    if [ "$MODEL_PROFILE_SET" = "true" ]; then
+        return 0
+    fi
+
+    printf "Model profile [maximum/mixed] (recommended/default for setup: maximum): " >&2
+    IFS= read -r answer || answer=""
+    case "$answer" in
+        ""|maximum)
+            MODEL_PROFILE="maximum"
+            ;;
+        mixed)
+            MODEL_PROFILE="mixed"
+            ;;
+        *)
+            echo "Unsupported model profile: $answer (expected: mixed or maximum)" >&2
+            exit 1
+            ;;
     esac
+}
+
+refresh_setup_template_values() {
+    local known=()
+    local unresolved=()
+    local joined=""
+
+    [ -n "$LANGUAGE" ] && known+=("language=$LANGUAGE") || unresolved+=("language")
+    [ -n "$SOURCE_DIR" ] && known+=("source_dir=$SOURCE_DIR") || unresolved+=("source_dir")
+    [ -n "$TEST_DIR" ] && known+=("test_dir=$TEST_DIR") || unresolved+=("test_dir")
+    [ -n "$TEST_FRAMEWORK" ] && known+=("test_framework=$TEST_FRAMEWORK") || unresolved+=("test_framework")
+    [ -n "$TEST_COMMAND" ] && known+=("test_command=$TEST_COMMAND") || unresolved+=("test_command")
+    [ -n "$LINT_COMMAND" ] && known+=("lint_command=$LINT_COMMAND") || unresolved+=("lint_command")
+    [ -n "$BUILD_COMMAND" ] && known+=("build_command=$BUILD_COMMAND") || unresolved+=("build_command")
+    [ -n "$DOMAIN" ] && known+=("domain=$DOMAIN") || unresolved+=("domain")
+
+    REPO_SHAPE="${LANGUAGE:-unknown}/${DOMAIN:-unknown}"
+    SETUP_CONFIDENCE=$([ "${#unresolved[@]}" -eq 0 ] && printf 'high' || printf 'partial')
+
+    if [ "${#known[@]}" -eq 0 ]; then
+        SETUP_KNOWN_SUMMARY="none"
+    else
+        joined=""
+        local item
+        for item in "${known[@]}"; do
+            if [ -n "$joined" ]; then
+                joined="$joined; "
+            fi
+            joined="$joined$item"
+        done
+        SETUP_KNOWN_SUMMARY="$joined"
+    fi
+
+    if [ "${#unresolved[@]}" -eq 0 ]; then
+        SETUP_UNRESOLVED_SUMMARY="none"
+    else
+        joined=""
+        local missing_item
+        for missing_item in "${unresolved[@]}"; do
+            if [ -n "$joined" ]; then
+                joined="$joined; "
+            fi
+            joined="$joined$missing_item"
+        done
+        SETUP_UNRESOLVED_SUMMARY="$joined"
+    fi
+}
+
+confirm_detected_values() {
+    local answer=""
+
+    printf "Use detected values above? [Y/n]: " >&2
+    IFS= read -r answer || answer=""
+    case "$answer" in
+        [nN]*) return 1 ;;
+    esac
+    return 0
+}
+
+show_setup_resolution_map() {
+    echo "Resolved (detected):"
+    echo "  - Language: ${LANGUAGE:-<none>}"
+    [ "$SOURCE_DIR_STATE" = "detected" ] && echo "  - Source dir: $SOURCE_DIR"
+    [ "$TEST_DIR_STATE" = "detected" ] && echo "  - Test dir: $TEST_DIR"
+    [ "$TEST_FRAMEWORK_STATE" = "detected" ] && echo "  - Test framework: $TEST_FRAMEWORK"
+    [ "$TEST_COMMAND_STATE" = "detected" ] && echo "  - Test command: $TEST_COMMAND"
+    [ "$LINT_COMMAND_STATE" = "detected" ] && echo "  - Lint command: $LINT_COMMAND"
+    [ "$TYPECHECK_COMMAND_STATE" = "detected" ] && echo "  - Type-check command: $TYPECHECK_COMMAND"
+    [ "$SINGLE_TEST_COMMAND_STATE" = "detected" ] && echo "  - Single test command: $SINGLE_TEST_COMMAND"
+    [ "$BUILD_COMMAND_STATE" = "detected" ] && echo "  - Build command: $BUILD_COMMAND"
+    [ "$DEPLOYMENT_SETUP_STATE" = "detected" ] && echo "  - Deployment setup: $DEPLOYMENT_SETUP"
+    [ "$DATABASES_STATE" = "detected" ] && echo "  - Databases: $DATABASES"
+    [ "$CACHE_LAYER_STATE" = "detected" ] && echo "  - Cache layer: $CACHE_LAYER"
+    [ "$TEST_DURATION_STATE" = "detected" ] && echo "  - Test duration: $TEST_DURATION"
+    [ "$TEST_TYPES_STATE" = "detected" ] && echo "  - Test types: $TEST_TYPES"
+    [ "$COVERAGE_CONFIG_STATE" = "detected" ] && echo "  - Coverage config: $COVERAGE_CONFIG"
+    [ "$CI_STATE" = "detected" ] && echo "  - CI: $CI"
+    [ "$DOMAIN_STATE" = "detected" ] && echo "  - Domain: $DOMAIN"
+    echo ""
+
+    echo "Resolved (inferred):"
+    [ "$TEST_FRAMEWORK_STATE" = "inferred" ] && echo "  - Test framework: $TEST_FRAMEWORK"
+    [ "$TEST_COMMAND_STATE" = "inferred" ] && echo "  - Test command: $TEST_COMMAND"
+    [ "$LINT_COMMAND_STATE" = "inferred" ] && echo "  - Lint command: $LINT_COMMAND"
+    [ "$TYPECHECK_COMMAND_STATE" = "inferred" ] && echo "  - Type-check command: $TYPECHECK_COMMAND"
+    [ "$SINGLE_TEST_COMMAND_STATE" = "inferred" ] && echo "  - Single test command: $SINGLE_TEST_COMMAND"
+    [ "$BUILD_COMMAND_STATE" = "inferred" ] && echo "  - Build command: $BUILD_COMMAND"
+    [ "$TEST_DURATION_STATE" = "inferred" ] && echo "  - Test duration: $TEST_DURATION"
+    [ "$COVERAGE_CONFIG_STATE" = "inferred" ] && echo "  - Coverage config: $COVERAGE_CONFIG"
+    [ "$DOMAIN_STATE" = "inferred" ] && echo "  - Domain: $DOMAIN"
+    echo ""
+
+    echo "Unresolved:"
+    [ -z "$SOURCE_DIR" ] && echo "  - Source directory"
+    [ -z "$TEST_DIR" ] && echo "  - Test directory"
+    [ -z "$TEST_FRAMEWORK" ] && echo "  - Test framework"
+    [ -z "$TEST_COMMAND" ] && echo "  - Test command"
+    [ -z "$LINT_COMMAND" ] && echo "  - Lint command"
+    [ -z "$TYPECHECK_COMMAND" ] && echo "  - Type-check command"
+    [ -z "$SINGLE_TEST_COMMAND" ] && echo "  - Single test command"
+    [ -z "$BUILD_COMMAND" ] && echo "  - Build command"
+    [ -z "$DEPLOYMENT_SETUP" ] && echo "  - Deployment setup"
+    [ -z "$DATABASES" ] && echo "  - Database(s)"
+    [ -z "$CACHE_LAYER" ] && echo "  - Cache layer"
+    [ -z "$TEST_DURATION" ] && echo "  - Test duration"
+    [ -z "$TEST_TYPES" ] && echo "  - Test types"
+    [ -z "$COVERAGE_CONFIG" ] && echo "  - Coverage config"
+    echo "  - Response detail preference"
+    echo "  - Testing approach preference"
+    echo "  - Mocking philosophy preference"
+    [ -n "$CI" ] && echo "  - CI shepherd preference"
+    echo ""
+}
+
+collect_detected_overrides() {
+    [ "$SOURCE_DIR_STATE" != "unresolved" ] && SOURCE_DIR=$(prompt_with_default "Source directory" "$SOURCE_DIR")
+    [ "$TEST_DIR_STATE" != "unresolved" ] && TEST_DIR=$(prompt_with_default "Test directory" "$TEST_DIR")
+    [ "$TEST_FRAMEWORK_STATE" != "unresolved" ] && TEST_FRAMEWORK=$(prompt_with_default "Test framework" "$TEST_FRAMEWORK")
+    [ "$TEST_COMMAND_STATE" != "unresolved" ] && TEST_COMMAND=$(prompt_with_default "Test command" "$TEST_COMMAND")
+    [ "$LINT_COMMAND_STATE" != "unresolved" ] && LINT_COMMAND=$(prompt_with_default "Lint command" "$LINT_COMMAND")
+    [ "$TYPECHECK_COMMAND_STATE" != "unresolved" ] && TYPECHECK_COMMAND=$(prompt_with_default "Type-check command" "$TYPECHECK_COMMAND")
+    [ "$SINGLE_TEST_COMMAND_STATE" != "unresolved" ] && SINGLE_TEST_COMMAND=$(prompt_with_default "Single test command" "$SINGLE_TEST_COMMAND")
+    [ "$BUILD_COMMAND_STATE" != "unresolved" ] && BUILD_COMMAND=$(prompt_with_default "Build command" "$BUILD_COMMAND")
+    [ "$DEPLOYMENT_SETUP_STATE" != "unresolved" ] && DEPLOYMENT_SETUP=$(prompt_with_default "Deployment setup" "$DEPLOYMENT_SETUP")
+    [ "$DATABASES_STATE" != "unresolved" ] && DATABASES=$(prompt_with_default "Database(s)" "$DATABASES")
+    [ "$CACHE_LAYER_STATE" != "unresolved" ] && CACHE_LAYER=$(prompt_with_default "Cache layer" "$CACHE_LAYER")
+    [ "$TEST_DURATION_STATE" != "unresolved" ] && TEST_DURATION=$(prompt_with_default "Test duration" "$TEST_DURATION")
+    [ "$TEST_TYPES_STATE" != "unresolved" ] && TEST_TYPES=$(prompt_with_default "Test types" "$TEST_TYPES")
+    [ "$COVERAGE_CONFIG_STATE" != "unresolved" ] && COVERAGE_CONFIG=$(prompt_with_default "Coverage config" "$COVERAGE_CONFIG")
+    [ "$CI_STATE" != "unresolved" ] && CI=$(prompt_with_default "CI provider" "$CI")
+    [ "$DOMAIN_STATE" != "unresolved" ] && DOMAIN=$(prompt_with_default "Project domain" "$DOMAIN")
+    return 0
+}
+
+apply_auto_yes_defaults() {
+    [ -z "$TYPECHECK_COMMAND" ] && TYPECHECK_COMMAND="none"
+    [ -z "$SINGLE_TEST_COMMAND" ] && SINGLE_TEST_COMMAND="none"
+    [ -z "$DEPLOYMENT_SETUP" ] && DEPLOYMENT_SETUP="none"
+    [ -z "$DATABASES" ] && DATABASES="none"
+    [ -z "$CACHE_LAYER" ] && CACHE_LAYER="none"
+    [ -z "$TEST_DURATION" ] && TEST_DURATION="unknown"
+    [ -z "$TEST_TYPES" ] && TEST_TYPES="none"
+    [ -z "$COVERAGE_CONFIG" ] && COVERAGE_CONFIG="none"
+    return 0
+}
+
+collect_setup_answers() {
+    if [ "$AUTO_YES" = "true" ]; then
+        apply_auto_yes_defaults
+        return 0
+    fi
+
+    show_setup_resolution_map
+    if ! confirm_detected_values; then
+        collect_detected_overrides
+    fi
+
+    [ -z "$SOURCE_DIR" ] && SOURCE_DIR=$(prompt_with_default "Set source directory")
+    [ -z "$TEST_DIR" ] && TEST_DIR=$(prompt_with_default "Set test directory")
+    [ -z "$TEST_FRAMEWORK" ] && TEST_FRAMEWORK=$(prompt_with_default "Set test framework")
+    [ -z "$TEST_COMMAND" ] && TEST_COMMAND=$(prompt_with_default "Set test command")
+    [ -z "$LINT_COMMAND" ] && LINT_COMMAND=$(prompt_with_default "Set lint command")
+    [ -z "$TYPECHECK_COMMAND" ] && TYPECHECK_COMMAND=$(prompt_with_default "Set type-check command" "none")
+    [ -z "$SINGLE_TEST_COMMAND" ] && SINGLE_TEST_COMMAND=$(prompt_with_default "Set single test command" "none")
+    [ -z "$BUILD_COMMAND" ] && BUILD_COMMAND=$(prompt_with_default "Set build command")
+    [ -z "$DEPLOYMENT_SETUP" ] && DEPLOYMENT_SETUP=$(prompt_with_default "Deployment setup" "none")
+    [ -z "$DATABASES" ] && DATABASES=$(prompt_with_default "Database(s)" "none")
+    [ -z "$CACHE_LAYER" ] && CACHE_LAYER=$(prompt_with_default "Caching layer" "none")
+    [ -z "$TEST_DURATION" ] && TEST_DURATION=$(prompt_with_default "Test duration expectation" "unknown")
+    [ -z "$TEST_TYPES" ] && TEST_TYPES=$(prompt_with_default "Test types present" "none")
+    [ -z "$COVERAGE_CONFIG" ] && COVERAGE_CONFIG=$(prompt_with_default "Coverage config" "none")
+
+    choose_model_profile
+    GIT_WORKFLOW=$(prompt_with_default "Git workflow preference [solo/prs]" "$GIT_WORKFLOW")
+    RESPONSE_DETAIL=$(prompt_with_default "Response detail preference [concise/detailed]" "$RESPONSE_DETAIL")
+    TESTING_APPROACH=$(prompt_with_default "Testing approach preference [strict-tdd/mixed/test-after/minimal]" "$TESTING_APPROACH")
+    MOCKING_PHILOSOPHY=$(prompt_with_default "Mocking philosophy preference [minimal/heavy/none/not-sure]" "$MOCKING_PHILOSOPHY")
+
+    if [ -n "$CI" ]; then
+        CI_SHEPHERD=$(prompt_with_default "CI shepherd preference [enabled/disabled]" "$CI_SHEPHERD")
+    fi
+}
+
+# ---- Step 2: Confirm and fill gaps ----
+if [ "$SETUP_MODE" = "normal" ]; then
+    collect_setup_answers
 fi
+
+refresh_setup_template_values
 
 # ---- Step 3: Generate docs from templates ----
 
@@ -155,14 +663,30 @@ substitute_template() {
         -e "s|{{TEST_FRAMEWORK}}|${TEST_FRAMEWORK:-N/A}|g" \
         -e "s|{{TEST_COMMAND}}|${TEST_COMMAND:-N/A}|g" \
         -e "s|{{LINT_COMMAND}}|${LINT_COMMAND:-N/A}|g" \
+        -e "s|{{TYPECHECK_COMMAND}}|${TYPECHECK_COMMAND:-N/A}|g" \
+        -e "s|{{SINGLE_TEST_COMMAND}}|${SINGLE_TEST_COMMAND:-N/A}|g" \
         -e "s|{{BUILD_COMMAND}}|${BUILD_COMMAND:-N/A}|g" \
+        -e "s|{{DEPLOYMENT_SETUP}}|${DEPLOYMENT_SETUP:-N/A}|g" \
+        -e "s|{{DATABASES}}|${DATABASES:-N/A}|g" \
+        -e "s|{{CACHE_LAYER}}|${CACHE_LAYER:-N/A}|g" \
+        -e "s|{{TEST_DURATION}}|${TEST_DURATION:-N/A}|g" \
+        -e "s|{{TEST_TYPES}}|${TEST_TYPES:-N/A}|g" \
+        -e "s|{{COVERAGE_CONFIG}}|${COVERAGE_CONFIG:-N/A}|g" \
         -e "s|{{CI}}|${CI:-N/A}|g" \
         -e "s|{{DOMAIN}}|${DOMAIN}|g" \
         -e "s|{{REPO_SHAPE}}|${REPO_SHAPE}|g" \
-        -e "s|{{SETUP_CONFIDENCE}}|${CONFIDENCE_OVERALL}|g" \
-        -e "s|{{SETUP_KNOWN_SUMMARY}}|${CONFIDENCE_KNOWN_SUMMARY:-none}|g" \
-        -e "s|{{SETUP_UNRESOLVED_SUMMARY}}|${CONFIDENCE_UNRESOLVED_SUMMARY:-none}|g" \
+        -e "s|{{SETUP_CONFIDENCE}}|${SETUP_CONFIDENCE}|g" \
+        -e "s|{{SETUP_KNOWN_SUMMARY}}|${SETUP_KNOWN_SUMMARY}|g" \
+        -e "s|{{SETUP_UNRESOLVED_SUMMARY}}|${SETUP_UNRESOLVED_SUMMARY}|g" \
         -e "s|{{MODEL_PROFILE}}|${MODEL_PROFILE}|g" \
+        -e "s|{{WIZARD_VERSION}}|${ADAPTER_VERSION}|g" \
+        -e "s|{{SETUP_DATE}}|${SETUP_DATE}|g" \
+        -e "s|{{COMPLETED_STEPS}}|${COMPLETED_STEPS}|g" \
+        -e "s|{{GIT_WORKFLOW}}|${GIT_WORKFLOW}|g" \
+        -e "s|{{RESPONSE_DETAIL}}|${RESPONSE_DETAIL}|g" \
+        -e "s|{{TESTING_APPROACH}}|${TESTING_APPROACH}|g" \
+        -e "s|{{MOCKING_PHILOSOPHY}}|${MOCKING_PHILOSOPHY}|g" \
+        -e "s|{{CI_SHEPHERD}}|${CI_SHEPHERD}|g" \
         "$template"
 }
 
@@ -171,8 +695,13 @@ generate_file() {
     local target="$1"
     local template="$2"
     local label="$3"
+    local allow_overwrite=false
 
-    if [ -f "$target" ] && [ "$FORCE" = "false" ]; then
+    if [ "$FORCE" = "true" ]; then
+        allow_overwrite=true
+    fi
+
+    if [ -f "$target" ] && [ "$allow_overwrite" = "false" ]; then
         echo "$label exists — skipping (pass --force to overwrite)"
         return
     fi
@@ -182,6 +711,7 @@ generate_file() {
 
 generate_file "AGENTS.md" "$SCRIPT_DIR/templates/AGENTS.md.tmpl" "AGENTS.md"
 generate_file "ARCHITECTURE.md" "$SCRIPT_DIR/templates/ARCHITECTURE.md.tmpl" "ARCHITECTURE.md"
+generate_file "SDLC.md" "$SCRIPT_DIR/templates/SDLC.md.tmpl" "SDLC.md"
 
 # TESTING.md needs domain section injection
 generate_testing_md() {
@@ -206,12 +736,10 @@ generate_testing_md() {
 generate_testing_md
 
 # ---- Step 4: Run install.sh (hooks + config) ----
-echo ""
-if [ ! -f "$SCRIPT_DIR/install.sh" ]; then
-    print_feedback_guidance "setup" "missing bundled setup file: install.sh" "$REPO_SHAPE"
-    exit 1
+if [ "$SETUP_MODE" != "regenerate" ]; then
+    echo ""
+    bash "$SCRIPT_DIR/install.sh" --model-profile "$MODEL_PROFILE"
 fi
-bash "$SCRIPT_DIR/install.sh" --model-profile "$MODEL_PROFILE"
 
 # ---- Step 5: Write manifest ----
 mkdir -p .codex-sdlc
@@ -225,94 +753,170 @@ compute_hash() {
 }
 
 MANIFEST=".codex-sdlc/manifest.json"
-ADAPTER_VERSION=$(cat "$SCRIPT_DIR/UPSTREAM_VERSION" 2>/dev/null | tr -d '[:space:]')
 
-jq -n \
-    --arg adapter_version "$ADAPTER_VERSION" \
-    --arg installed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --arg language "$LANGUAGE" \
-    --arg domain "$DOMAIN" \
-    --arg test_command "$TEST_COMMAND" \
-    --arg repo_shape "$REPO_SHAPE" \
-    --arg confidence_overall "$CONFIDENCE_OVERALL" \
-    --argjson confidence_known "$(echo "$SCAN_JSON" | jq -c '.confidence_map.known')" \
-    --argjson confidence_unresolved "$(echo "$SCAN_JSON" | jq -c '.confidence_map.unresolved')" \
-    --arg model_profile "$MODEL_PROFILE" \
-    --arg agents_hash "$(compute_hash AGENTS.md)" \
-    --arg testing_hash "$(compute_hash TESTING.md)" \
-    --arg arch_hash "$(compute_hash ARCHITECTURE.md)" \
-    --arg model_profile_hash "$(compute_hash .codex-sdlc/model-profile.json)" \
-    --arg hooks_json_hash "$(compute_hash .codex/hooks.json)" \
-    --arg bash_guard_hash "$(compute_hash .codex/hooks/bash-guard.sh)" \
-    --arg prompt_check_hash "$(compute_hash .codex/hooks/sdlc-prompt-check.sh)" \
-    --arg session_start_hash "$(compute_hash .codex/hooks/session-start.sh)" \
-    --arg sdlc_skill_hash "$(compute_hash .agents/skills/sdlc/SKILL.md)" \
-    --arg adlc_skill_hash "$(compute_hash .agents/skills/adlc/SKILL.md)" \
-    '{
-        adapter_version: $adapter_version,
-        installed_at: $installed_at,
-        scan: {
-            language: $language,
-            domain: $domain,
-            test_command: $test_command,
-            repo_shape: $repo_shape
-        },
-        confidence_map: {
-            overall: $confidence_overall,
-            known: $confidence_known,
-            unresolved: $confidence_unresolved
-        },
-        model_profile: {
-            selected_profile: $model_profile
-        },
-        managed_files: {
-            "AGENTS.md": $agents_hash,
-            "TESTING.md": $testing_hash,
-            "ARCHITECTURE.md": $arch_hash,
-            ".codex-sdlc/model-profile.json": $model_profile_hash,
-            ".codex/hooks.json": $hooks_json_hash,
-            ".codex/hooks/bash-guard.sh": $bash_guard_hash,
-            ".codex/hooks/sdlc-prompt-check.sh": $prompt_check_hash,
-            ".codex/hooks/session-start.sh": $session_start_hash,
-            ".agents/skills/sdlc/SKILL.md": $sdlc_skill_hash,
-            ".agents/skills/adlc/SKILL.md": $adlc_skill_hash
-        }
-    }' > "$MANIFEST"
+ADAPTER_VERSION="$ADAPTER_VERSION" \
+INSTALLED_AT="$INSTALLED_AT_VALUE" \
+SCAN_LANGUAGE="$LANGUAGE" \
+SCAN_SOURCE_DIR="$SCAN_SOURCE_DIR_RAW" \
+SCAN_TEST_DIR="$SCAN_TEST_DIR_RAW" \
+SCAN_TEST_FRAMEWORK="$SCAN_TEST_FRAMEWORK_RAW" \
+SCAN_TEST_COMMAND="$SCAN_TEST_COMMAND_RAW" \
+SCAN_LINT_COMMAND="$SCAN_LINT_COMMAND_RAW" \
+SCAN_TYPECHECK_COMMAND="$SCAN_TYPECHECK_COMMAND_RAW" \
+SCAN_SINGLE_TEST_COMMAND="$SCAN_SINGLE_TEST_COMMAND_RAW" \
+SCAN_BUILD_COMMAND="$SCAN_BUILD_COMMAND_RAW" \
+SCAN_DEPLOYMENT_SETUP="$SCAN_DEPLOYMENT_SETUP_RAW" \
+SCAN_DATABASES="$SCAN_DATABASES_RAW" \
+SCAN_CACHE_LAYER="$SCAN_CACHE_LAYER_RAW" \
+SCAN_TEST_DURATION="$SCAN_TEST_DURATION_RAW" \
+SCAN_TEST_TYPES="$SCAN_TEST_TYPES_RAW" \
+SCAN_COVERAGE_CONFIG="$SCAN_COVERAGE_CONFIG_RAW" \
+SCAN_CI="$SCAN_CI_RAW" \
+SCAN_DOMAIN="$SCAN_DOMAIN_RAW" \
+SETUP_RESPONSE_DETAIL="$RESPONSE_DETAIL" \
+SETUP_TESTING_APPROACH="$TESTING_APPROACH" \
+SETUP_MOCKING_PHILOSOPHY="$MOCKING_PHILOSOPHY" \
+SETUP_CI_SHEPHERD="$CI_SHEPHERD" \
+SETUP_GIT_WORKFLOW="$GIT_WORKFLOW" \
+RESOLVED_SOURCE_DIR="$SOURCE_DIR" \
+RESOLVED_TEST_DIR="$TEST_DIR" \
+RESOLVED_TEST_FRAMEWORK="$TEST_FRAMEWORK" \
+RESOLVED_TEST_COMMAND="$TEST_COMMAND" \
+RESOLVED_LINT_COMMAND="$LINT_COMMAND" \
+RESOLVED_TYPECHECK_COMMAND="$TYPECHECK_COMMAND" \
+RESOLVED_SINGLE_TEST_COMMAND="$SINGLE_TEST_COMMAND" \
+RESOLVED_BUILD_COMMAND="$BUILD_COMMAND" \
+RESOLVED_DEPLOYMENT_SETUP="$DEPLOYMENT_SETUP" \
+RESOLVED_DATABASES="$DATABASES" \
+RESOLVED_CACHE_LAYER="$CACHE_LAYER" \
+RESOLVED_TEST_DURATION="$TEST_DURATION" \
+RESOLVED_TEST_TYPES="$TEST_TYPES" \
+RESOLVED_COVERAGE_CONFIG="$COVERAGE_CONFIG" \
+RESOLVED_CI="$CI" \
+RESOLVED_DOMAIN="$DOMAIN" \
+CONF_SOURCE_DIR="$SOURCE_DIR_STATE" \
+CONF_TEST_DIR="$TEST_DIR_STATE" \
+CONF_TEST_FRAMEWORK="$TEST_FRAMEWORK_STATE" \
+CONF_TEST_COMMAND="$TEST_COMMAND_STATE" \
+CONF_LINT_COMMAND="$LINT_COMMAND_STATE" \
+CONF_TYPECHECK_COMMAND="$TYPECHECK_COMMAND_STATE" \
+CONF_SINGLE_TEST_COMMAND="$SINGLE_TEST_COMMAND_STATE" \
+CONF_BUILD_COMMAND="$BUILD_COMMAND_STATE" \
+CONF_DEPLOYMENT_SETUP="$DEPLOYMENT_SETUP_STATE" \
+CONF_DATABASES="$DATABASES_STATE" \
+CONF_CACHE_LAYER="$CACHE_LAYER_STATE" \
+CONF_TEST_DURATION="$TEST_DURATION_STATE" \
+CONF_TEST_TYPES="$TEST_TYPES_STATE" \
+CONF_COVERAGE_CONFIG="$COVERAGE_CONFIG_STATE" \
+CONF_CI="$CI_STATE" \
+CONF_DOMAIN="$DOMAIN_STATE" \
+MODEL_PROFILE_SELECTED="$MODEL_PROFILE" \
+AGENTS_HASH="$(compute_hash AGENTS.md)" \
+SDLC_HASH="$(compute_hash SDLC.md)" \
+TESTING_HASH="$(compute_hash TESTING.md)" \
+ARCH_HASH="$(compute_hash ARCHITECTURE.md)" \
+SDLC_LOOP_HASH="$(compute_hash SDLC-LOOP.md)" \
+START_SDLC_HASH="$(compute_hash START-SDLC.md)" \
+PROVE_IT_HASH="$(compute_hash PROVE-IT.md)" \
+CONFIG_HASH="$(compute_hash .codex/config.toml)" \
+HOOKS_JSON_HASH="$(compute_hash .codex/hooks.json)" \
+MODEL_PROFILE_HASH="$(compute_hash .codex-sdlc/model-profile.json)" \
+BASH_GUARD_HASH="$(compute_hash .codex/hooks/bash-guard.sh)" \
+SESSION_START_HASH="$(compute_hash .codex/hooks/session-start.sh)" \
+GIT_GUARD_PS1_HASH="$(compute_hash .codex/hooks/git-guard.ps1)" \
+SESSION_START_PS1_HASH="$(compute_hash .codex/hooks/session-start.ps1)" \
+node -e '
+const manifest = {
+  adapter_version: process.env.ADAPTER_VERSION || "",
+  installed_at: process.env.INSTALLED_AT || "",
+  scan: {
+    language: process.env.SCAN_LANGUAGE || "",
+    source_dir: process.env.SCAN_SOURCE_DIR || "",
+    test_dir: process.env.SCAN_TEST_DIR || "",
+    test_framework: process.env.SCAN_TEST_FRAMEWORK || "",
+    domain: process.env.SCAN_DOMAIN || "",
+    test_command: process.env.SCAN_TEST_COMMAND || "",
+    lint_command: process.env.SCAN_LINT_COMMAND || "",
+    build_command: process.env.SCAN_BUILD_COMMAND || "",
+    typecheck_command: process.env.SCAN_TYPECHECK_COMMAND || "",
+    single_test_command: process.env.SCAN_SINGLE_TEST_COMMAND || "",
+    deployment_setup: process.env.SCAN_DEPLOYMENT_SETUP || "",
+    databases: process.env.SCAN_DATABASES || "",
+    cache_layer: process.env.SCAN_CACHE_LAYER || "",
+    test_duration: process.env.SCAN_TEST_DURATION || "",
+    test_types: process.env.SCAN_TEST_TYPES || "",
+    coverage_config: process.env.SCAN_COVERAGE_CONFIG || "",
+    ci: process.env.SCAN_CI || ""
+  },
+  setup_answers: {
+    git_workflow: process.env.SETUP_GIT_WORKFLOW || "",
+    response_detail: process.env.SETUP_RESPONSE_DETAIL || "",
+    testing_approach: process.env.SETUP_TESTING_APPROACH || "",
+    mocking_philosophy: process.env.SETUP_MOCKING_PHILOSOPHY || "",
+    ci_shepherd: process.env.SETUP_CI_SHEPHERD || ""
+  },
+  resolved_values: {
+    source_dir: process.env.RESOLVED_SOURCE_DIR || "",
+    test_dir: process.env.RESOLVED_TEST_DIR || "",
+    test_framework: process.env.RESOLVED_TEST_FRAMEWORK || "",
+    test_command: process.env.RESOLVED_TEST_COMMAND || "",
+    lint_command: process.env.RESOLVED_LINT_COMMAND || "",
+    typecheck_command: process.env.RESOLVED_TYPECHECK_COMMAND || "",
+    single_test_command: process.env.RESOLVED_SINGLE_TEST_COMMAND || "",
+    build_command: process.env.RESOLVED_BUILD_COMMAND || "",
+    deployment_setup: process.env.RESOLVED_DEPLOYMENT_SETUP || "",
+    databases: process.env.RESOLVED_DATABASES || "",
+    cache_layer: process.env.RESOLVED_CACHE_LAYER || "",
+    test_duration: process.env.RESOLVED_TEST_DURATION || "",
+    test_types: process.env.RESOLVED_TEST_TYPES || "",
+    coverage_config: process.env.RESOLVED_COVERAGE_CONFIG || "",
+    ci: process.env.RESOLVED_CI || "",
+    domain: process.env.RESOLVED_DOMAIN || ""
+  },
+  confidence_map: {
+    source_dir: process.env.CONF_SOURCE_DIR || "",
+    test_dir: process.env.CONF_TEST_DIR || "",
+    test_framework: process.env.CONF_TEST_FRAMEWORK || "",
+    test_command: process.env.CONF_TEST_COMMAND || "",
+    lint_command: process.env.CONF_LINT_COMMAND || "",
+    typecheck_command: process.env.CONF_TYPECHECK_COMMAND || "",
+    single_test_command: process.env.CONF_SINGLE_TEST_COMMAND || "",
+    build_command: process.env.CONF_BUILD_COMMAND || "",
+    deployment_setup: process.env.CONF_DEPLOYMENT_SETUP || "",
+    databases: process.env.CONF_DATABASES || "",
+    cache_layer: process.env.CONF_CACHE_LAYER || "",
+    test_duration: process.env.CONF_TEST_DURATION || "",
+    test_types: process.env.CONF_TEST_TYPES || "",
+    coverage_config: process.env.CONF_COVERAGE_CONFIG || "",
+    ci: process.env.CONF_CI || "",
+    domain: process.env.CONF_DOMAIN || ""
+  },
+  model_profile: {
+    selected_profile: process.env.MODEL_PROFILE_SELECTED || ""
+  },
+  managed_files: {
+    "AGENTS.md": process.env.AGENTS_HASH || "",
+    "SDLC.md": process.env.SDLC_HASH || "",
+    "TESTING.md": process.env.TESTING_HASH || "",
+    "ARCHITECTURE.md": process.env.ARCH_HASH || "",
+    "SDLC-LOOP.md": process.env.SDLC_LOOP_HASH || "",
+    "START-SDLC.md": process.env.START_SDLC_HASH || "",
+    "PROVE-IT.md": process.env.PROVE_IT_HASH || "",
+    ".codex/config.toml": process.env.CONFIG_HASH || "",
+    ".codex/hooks.json": process.env.HOOKS_JSON_HASH || "",
+    ".codex-sdlc/model-profile.json": process.env.MODEL_PROFILE_HASH || "",
+    ".codex/hooks/bash-guard.sh": process.env.BASH_GUARD_HASH || "",
+    ".codex/hooks/session-start.sh": process.env.SESSION_START_HASH || "",
+    ".codex/hooks/git-guard.ps1": process.env.GIT_GUARD_PS1_HASH || "",
+    ".codex/hooks/session-start.ps1": process.env.SESSION_START_PS1_HASH || ""
+  }
+};
+
+process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
+' > "$MANIFEST"
 
 echo ""
 echo "Created $MANIFEST"
 
 # ---- Step 6: Verify ----
-echo ""
-echo "Verifying installation..."
-ERRORS=0
-for f in AGENTS.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .codex-sdlc/model-profile.json .agents/skills/sdlc/SKILL.md .agents/skills/adlc/SKILL.md; do
-    if [ ! -f "$f" ]; then
-        echo "  MISSING: $f"
-        ERRORS=$((ERRORS + 1))
-    fi
-done
-
-if [ "$ERRORS" -eq 0 ]; then
-    echo "  All files present."
-    echo ""
-    echo "Setup complete. Trust this repo in Codex, then start with 'codex --full-auto'."
-    echo "Use plain 'codex' instead if you want more manual confirmation."
-    echo "Model profile: '$MODEL_PROFILE'."
-    echo "  - mixed: gpt-5.4-mini main pass + gpt-5.4 xhigh review for better speed, lower latency, and lower token usage."
-    echo "  - maximum: gpt-5.4 xhigh throughout for maximum stability and the most thorough \"ultimate mode\"."
-    echo "Bootstrap policy: prefer 'maximum' for setup/update because bootstrap work has higher blast radius."
-    echo "Routine work after bootstrap can switch back to 'mixed' when you want better speed and lower token usage."
-    echo "If confidence drops below 95%, research more first. If it still stays below 95%, escalate review to xhigh."
-    echo "Repo-scoped skills are still a work in progress. Today the supported public workflow skill is '\$sdlc'."
-    echo "Future repo-scoped skills like 'gdlc' and 'rdlc' are planned next."
-    echo "If a repo hits Windows / WAM / MFA sign-in, the live prompt remains user-owned in your session."
-    echo "Let Codex handle the wrapped checks, then resume with the verify step after you complete sign-in."
-    echo "For auth / license-sensitive repos, add a repo-local doctor / check-capability / Test-*Access helper."
-    echo "Bias toward one-command classification instead of raw provider commands when account, license, or permission state decides the lane."
-else
-    echo ""
-    echo "WARNING: $ERRORS file(s) missing — setup may be incomplete."
-    print_feedback_guidance "setup" "verification found missing expected files after setup" "$REPO_SHAPE"
-    exit 1
-fi
+verify_installation

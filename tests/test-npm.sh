@@ -7,6 +7,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 PACKAGE_JSON="$REPO_DIR/package.json"
 ROADMAP="$REPO_DIR/ROADMAP.md"
+JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
+source "$JSON_HELPERS"
+require_node
 PASSED=0
 FAILED=0
 MKTEMP_DIR="${TMPDIR:-/tmp}"
@@ -34,9 +37,9 @@ test_package_metadata_exists() {
     local has_bin=true
 
     [ -f "$PACKAGE_JSON" ] || has_name=false
-    jq -e '.name == "codex-sdlc-wizard"' "$PACKAGE_JSON" >/dev/null 2>&1 || has_name=false
-    jq -e '.version | type == "string"' "$PACKAGE_JSON" >/dev/null 2>&1 || has_version=false
-    jq -e '.bin["codex-sdlc-wizard"] == "bin/codex-sdlc-wizard.js"' "$PACKAGE_JSON" >/dev/null 2>&1 || has_bin=false
+    json_has_truthy_file "$PACKAGE_JSON" 'data.name === "codex-sdlc-wizard"' || has_name=false
+    json_has_truthy_file "$PACKAGE_JSON" 'typeof data.version === "string"' || has_version=false
+    json_has_truthy_file "$PACKAGE_JSON" 'data.bin && data.bin["codex-sdlc-wizard"] === "bin/codex-sdlc-wizard.js"' || has_bin=false
 
     if [ "$has_name" = "true" ] &&
        [ "$has_version" = "true" ] &&
@@ -49,7 +52,7 @@ test_package_metadata_exists() {
 
 test_package_version_matches_roadmap_current_release() {
     local package_version current_state_section
-    package_version=$(jq -r '.version' "$PACKAGE_JSON" 2>/dev/null || true)
+    package_version=$(json_get_file "$PACKAGE_JSON" 'data.version')
     current_state_section=$(awk '
         /^## Current State$/ { in_section=1; next }
         /^## / && in_section { exit }
@@ -71,7 +74,7 @@ test_npm_pack_includes_runtime_files() {
 
     local tarball json tarball_name
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
-    tarball_name=$(printf '%s' "$json" | jq -r 'if type=="array" then .[0].filename // empty else empty end' 2>/dev/null || true)
+    tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
 
     local has_tarball=true
     local has_install=true
@@ -94,14 +97,14 @@ test_npm_pack_includes_runtime_files() {
         has_repo_sdlc_skill=false
         has_repo_adlc_skill=false
     else
-        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/install.sh$' || has_install=false
-        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/setup.sh$' || has_setup=false
-        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/.codex/hooks/bash-guard.sh$' || has_hooks=false
-        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/bin/codex-sdlc-wizard.js$' || has_bin=false
-        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/SKILL.md$' || has_skill=false
-        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/agents/openai.yaml$' || has_openai_yaml=false
-        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/.agents/skills/sdlc/SKILL.md$' || has_repo_sdlc_skill=false
-        tar -tzf "$pack_dir/$tarball_name" | grep -q '^package/.agents/skills/adlc/SKILL.md$' || has_repo_adlc_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "install.sh") ? "yes" : ""')" = "yes" ] || has_install=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "setup.sh") ? "yes" : ""')" = "yes" ] || has_setup=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/bash-guard.sh") ? "yes" : ""')" = "yes" ] || has_hooks=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "bin/codex-sdlc-wizard.js") ? "yes" : ""')" = "yes" ] || has_bin=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "SKILL.md") ? "yes" : ""')" = "yes" ] || has_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_openai_yaml=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_sdlc_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/adlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_adlc_skill=false
     fi
 
     rm -rf "$pack_dir" "$npm_cache"
@@ -130,7 +133,7 @@ test_local_npx_installs_into_clean_repo() {
 
     local json tarball_name
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
-    tarball_name=$(printf '%s' "$json" | jq -r 'if type=="array" then .[0].filename // empty else empty end' 2>/dev/null || true)
+    tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
 
     local tarball_path="$pack_dir/$tarball_name"
     local installed=true
@@ -169,7 +172,7 @@ test_local_npx_setup_honors_model_profile_flag() {
 
     local json tarball_name
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
-    tarball_name=$(printf '%s' "$json" | jq -r 'if type=="array" then .[0].filename // empty else empty end' 2>/dev/null || true)
+    tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
 
     local configured=true
     local tarball_path="$pack_dir/$tarball_name"
@@ -185,7 +188,7 @@ test_local_npx_setup_honors_model_profile_flag() {
 
     if [ "$configured" = "true" ]; then
         if [ ! -f "$target_repo/.codex-sdlc/model-profile.json" ] ||
-           ! jq -e '.selected_profile == "maximum"' "$target_repo/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
+           ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.selected_profile === "maximum"'; then
             configured=false
         fi
     fi

@@ -1,0 +1,5 @@
+version: 1
+interface:
+  display_name: Setup Wizard
+  short_description: Scan a repo, infer the stack, and generate repo-specific SDLC docs for Codex.
+  default_prompt: Run the Codex setup wizard for this repo. Scan the project, infer the test harness and commands, ask only about unresolved preferences, then generate or update the repo-specific SDLC docs.

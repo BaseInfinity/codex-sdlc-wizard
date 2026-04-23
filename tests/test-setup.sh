@@ -8,11 +8,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 SCAN_SH="$REPO_DIR/lib/scan.sh"
 SETUP_SH="$REPO_DIR/setup.sh"
+CHECK_SH="$REPO_DIR/check.sh"
 PASSED=0
 FAILED=0
 
 # Use TMPDIR if set (sandbox-friendly), fallback to /tmp
 MKTEMP_DIR="${TMPDIR:-/tmp}"
+
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;;
+    *) IS_WINDOWS=false ;;
+esac
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -20,6 +26,48 @@ NC='\033[0m'
 
 pass() { echo -e "${GREEN}PASS${NC}: $1"; PASSED=$((PASSED + 1)); }
 fail() { echo -e "${RED}FAIL${NC}: $1"; FAILED=$((FAILED + 1)); }
+
+# JSON helpers use Node because the setup regression is specifically about missing jq.
+json_eval_stdin() {
+    local expr="$1"
+    JSON_EXPR="$expr" node -e '
+const fs = require("fs");
+const expr = process.env.JSON_EXPR;
+const input = fs.readFileSync(0, "utf8");
+if (!input.trim()) {
+  process.exit(1);
+}
+
+const data = JSON.parse(input);
+const value = Function("data", `return (${expr});`)(data);
+if (value === undefined || value === null) {
+  process.exit(1);
+}
+
+if (typeof value === "object") {
+  process.stdout.write(JSON.stringify(value));
+} else {
+  process.stdout.write(String(value));
+}
+' 2>/dev/null
+}
+
+json_text_equals() {
+    local json="$1"
+    local expr="$2"
+    local expected="$3"
+    local actual
+
+    actual=$(printf '%s' "$json" | json_eval_stdin "$expr" || true)
+    [ "$actual" = "$expected" ]
+}
+
+json_text_get() {
+    local json="$1"
+    local expr="$2"
+
+    printf '%s' "$json" | json_eval_stdin "$expr" || true
+}
 
 # Helper: create a temp project dir, run scan, return JSON
 run_scan() {
@@ -30,7 +78,7 @@ run_scan() {
 echo "=== Setup Scan Tests ==="
 echo ""
 
-# ---- Test 1: Detects Node.js project (package.json) ----
+# ---- Test 1: Detects Node.js project without jq installed ----
 test_detect_nodejs() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -41,10 +89,10 @@ test_detect_nodejs() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.language == "javascript"' >/dev/null 2>&1; then
-        pass "Detects Node.js project (package.json)"
+    if json_text_equals "$output" 'data.language' "javascript"; then
+        pass "Detects Node.js project without jq installed"
     else
-        fail "Did not detect Node.js project (got: $(echo "$output" | jq -r '.language' 2>/dev/null))"
+        fail "Did not detect Node.js project (got: $(json_text_get "$output" 'data.language'))"
     fi
 }
 
@@ -59,10 +107,10 @@ test_detect_rust() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.language == "rust"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.language' "rust"; then
         pass "Detects Rust project (Cargo.toml)"
     else
-        fail "Did not detect Rust project (got: $(echo "$output" | jq -r '.language' 2>/dev/null))"
+        fail "Did not detect Rust project (got: $(json_text_get "$output" 'data.language'))"
     fi
 }
 
@@ -77,10 +125,10 @@ test_detect_go() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.language == "go"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.language' "go"; then
         pass "Detects Go project (go.mod)"
     else
-        fail "Did not detect Go project (got: $(echo "$output" | jq -r '.language' 2>/dev/null))"
+        fail "Did not detect Go project (got: $(json_text_get "$output" 'data.language'))"
     fi
 }
 
@@ -95,10 +143,10 @@ test_detect_python() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.language == "python"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.language' "python"; then
         pass "Detects Python project (pyproject.toml)"
     else
-        fail "Did not detect Python project (got: $(echo "$output" | jq -r '.language' 2>/dev/null))"
+        fail "Did not detect Python project (got: $(json_text_get "$output" 'data.language'))"
     fi
 }
 
@@ -113,10 +161,10 @@ test_find_src_dir() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.source_dir == "src/"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.source_dir' "src/"; then
         pass "Finds src/ directory"
     else
-        fail "Did not find src/ (got: $(echo "$output" | jq -r '.source_dir' 2>/dev/null))"
+        fail "Did not find src/ (got: $(json_text_get "$output" 'data.source_dir'))"
     fi
 }
 
@@ -131,10 +179,10 @@ test_find_test_dir() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.test_dir == "__tests__/"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.test_dir' "__tests__/"; then
         pass "Finds __tests__/ directory"
     else
-        fail "Did not find __tests__/ (got: $(echo "$output" | jq -r '.test_dir' 2>/dev/null))"
+        fail "Did not find __tests__/ (got: $(json_text_get "$output" 'data.test_dir'))"
     fi
 }
 
@@ -150,10 +198,10 @@ test_detect_test_framework() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.test_framework == "jest"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.test_framework' "jest"; then
         pass "Detects jest test framework from config file"
     else
-        fail "Did not detect jest (got: $(echo "$output" | jq -r '.test_framework' 2>/dev/null))"
+        fail "Did not detect jest (got: $(json_text_get "$output" 'data.test_framework'))"
     fi
 }
 
@@ -167,10 +215,10 @@ test_detect_domain_firmware() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.domain == "firmware"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.domain' "firmware"; then
         pass "Detects firmware domain (Makefile + flash target)"
     else
-        fail "Did not detect firmware domain (got: $(echo "$output" | jq -r '.domain' 2>/dev/null))"
+        fail "Did not detect firmware domain (got: $(json_text_get "$output" 'data.domain'))"
     fi
 }
 
@@ -185,10 +233,10 @@ test_detect_domain_data_science() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.domain == "data-science"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.domain' "data-science"; then
         pass "Detects data-science domain (.ipynb)"
     else
-        fail "Did not detect data-science domain (got: $(echo "$output" | jq -r '.domain' 2>/dev/null))"
+        fail "Did not detect data-science domain (got: $(json_text_get "$output" 'data.domain'))"
     fi
 }
 
@@ -203,55 +251,35 @@ test_detect_domain_cli() {
     output=$(run_scan "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | jq -e '.domain == "cli"' >/dev/null 2>&1; then
+    if json_text_equals "$output" 'data.domain' "cli"; then
         pass "Detects CLI domain (package.json with bin, no React)"
     else
-        fail "Did not detect CLI domain (got: $(echo "$output" | jq -r '.domain' 2>/dev/null))"
-    fi
-}
-
-# ---- Test 11: Detects docs-strong scaffold repos and reports a confidence map ----
-test_detect_docs_strong_scaffold() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-    echo 'console.log("scaffold");' > "$ws/src/index.js"
-    echo '# Existing agent guidance' > "$ws/AGENTS.md"
-    echo '# Existing testing contract' > "$ws/TESTING.md"
-    echo '# Existing architecture notes' > "$ws/ARCHITECTURE.md"
-
-    local output
-    output=$(run_scan "$ws")
-    rm -rf "$ws"
-
-    if echo "$output" | jq -e '.repo_shape == "docs-strong-scaffold"' >/dev/null 2>&1 &&
-       echo "$output" | jq -e '.confidence_map.overall == "medium"' >/dev/null 2>&1 &&
-       echo "$output" | jq -e '.confidence_map.unresolved[] | select(. == "Test harness shape needs explicit repo-specific interpretation")' >/dev/null 2>&1; then
-        pass "Detects docs-strong scaffold repos and reports a confidence map"
-    else
-        fail "Did not classify docs-strong scaffold repo shape and confidence map correctly"
+        fail "Did not detect CLI domain (got: $(json_text_get "$output" 'data.domain'))"
     fi
 }
 
 # Helper: run setup.sh in a project dir
 run_setup() {
     local project_dir="$1"
-    shift
-    (cd "$project_dir" && bash "$SETUP_SH" --yes "$@" 2>/dev/null) || true
+    (cd "$project_dir" && bash "$SETUP_SH" --yes 2>/dev/null) || true
 }
 
-run_setup_capture() {
+run_setup_interactive() {
     local project_dir="$1"
-    shift
-    (cd "$project_dir" && bash "$SETUP_SH" --yes "$@" 2>&1) || true
+    local input_text="$2"
+    (cd "$project_dir" && printf '%s' "$input_text" | bash "$SETUP_SH" 2>&1) || true
 }
 
-run_setup_interactive_capture() {
+run_setup_args() {
     local project_dir="$1"
-    local input="$2"
-    shift 2
-    (cd "$project_dir" && printf '%s' "$input" | bash "$SETUP_SH" "$@" 2>&1) || true
+    shift
+    (cd "$project_dir" && bash "$SETUP_SH" "$@" 2>&1)
+}
+
+# Helper: run check.sh in a project dir
+run_check() {
+    local project_dir="$1"
+    (cd "$project_dir" && bash "$CHECK_SH" 2>/dev/null) || true
 }
 
 # ---- Test 11: Template substitution produces valid AGENTS.md under 32KiB ----
@@ -350,7 +378,125 @@ test_agents_md_read_directives() {
     fi
 }
 
-# ---- Test 15: manifest.json created with correct hashes and scan snapshot ----
+# ---- Test 15: setup.sh generates SDLC.md with metadata and default preferences ----
+test_setup_generates_sdlc_md() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest","lint":"eslint .","build":"tsc"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/__tests__"
+    touch "$ws/jest.config.js"
+
+    run_setup "$ws"
+
+    local valid=true
+    if [ ! -f "$ws/SDLC.md" ]; then
+        valid=false
+    else
+        grep -q '<!-- SDLC Wizard Version:' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q '<!-- Setup Date:' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q '<!-- Completed Steps:' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q '<!-- Response Detail:' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q '<!-- Testing Approach:' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q '<!-- Mocking Philosophy:' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q '<!-- CI Shepherd:' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'npm test' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'strict-tdd' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'minimal' "$ws/SDLC.md" 2>/dev/null || valid=false
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup.sh generates SDLC.md with metadata and default preferences"
+    else
+        fail "setup.sh did not generate SDLC.md with the expected metadata/defaults"
+    fi
+}
+
+# ---- Test 16: interactive setup only asks preference questions when core facts are detected ----
+test_setup_interactive_only_asks_preferences() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest","lint":"eslint .","build":"tsc"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/__tests__"
+    touch "$ws/jest.config.js"
+
+    local output
+    output=$(run_setup_interactive "$ws" $'\n\n\n\n\n')
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q 'Response detail preference' \
+        && echo "$output" | grep -q 'Testing approach preference' \
+        && echo "$output" | grep -q 'Mocking philosophy preference' \
+        && ! echo "$output" | grep -q 'Set source directory' \
+        && ! echo "$output" | grep -q 'Set test directory' \
+        && ! echo "$output" | grep -q 'Set test command' \
+        && ! echo "$output" | grep -q 'CI shepherd'; then
+        pass "interactive setup only asks preference questions when core facts are detected"
+    else
+        fail "interactive setup did not limit questions to unresolved preferences"
+    fi
+}
+
+# ---- Test 17: interactive setup asks missing core facts only when they are unresolved ----
+test_setup_interactive_asks_missing_core_facts() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app"}' > "$ws/package.json"
+
+    local output
+    output=$(run_setup_interactive "$ws" $'\n\n\n\n\n\n\n\n\n')
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q 'Set source directory' \
+        && echo "$output" | grep -q 'Set test directory' \
+        && echo "$output" | grep -q 'Set test framework' \
+        && echo "$output" | grep -q 'Set test command'; then
+        pass "interactive setup asks missing core facts when they are unresolved"
+    else
+        fail "interactive setup did not ask for unresolved core facts"
+    fi
+}
+
+# ---- Test 18: interactive setup asks CI shepherd only when CI is detected ----
+test_setup_interactive_ci_shepherd_is_conditional() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/.github/workflows"
+    touch "$ws/.github/workflows/ci.yml"
+    touch "$ws/jest.config.js"
+
+    local output
+    output=$(run_setup_interactive "$ws" $'\n\n\n\n\n\n')
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q 'CI shepherd'; then
+        pass "interactive setup asks CI shepherd only when CI is detected"
+    else
+        fail "interactive setup did not ask about CI shepherd when CI was detected"
+    fi
+}
+
+# ---- Test 19: interactive setup separates inferred values from detected values ----
+test_setup_interactive_shows_inferred_values() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+
+    local output
+    output=$(run_setup_interactive "$ws" $'\n\n\n\n\n\n\n')
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q 'Resolved (inferred):' \
+        && echo "$output" | grep -q 'Test framework: jest' \
+        && echo "$output" | grep -q 'Domain: web'; then
+        pass "interactive setup separates inferred values from detected values"
+    else
+        fail "interactive setup did not surface inferred values separately"
+    fi
+}
+
+# ---- Test 20: manifest.json created with correct hashes and scan snapshot ----
 test_manifest_created() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -364,123 +510,123 @@ test_manifest_created() {
         valid=false
     else
         # Check required fields exist
-        if ! jq -e '.scan.language' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+        if ! json_eval_stdin 'data.scan.language' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
             valid=false
         fi
-        if ! jq -e '.managed_files["AGENTS.md"]' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+        if ! json_eval_stdin 'data.managed_files["AGENTS.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! json_eval_stdin 'data.managed_files["SDLC.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! json_eval_stdin 'data.managed_files["SDLC-LOOP.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! json_eval_stdin 'data.managed_files["START-SDLC.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! json_eval_stdin 'data.managed_files["PROVE-IT.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
+        if ! json_eval_stdin 'data.managed_files[".codex/config.toml"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
             valid=false
         fi
         # Hash should be a sha256 string
         local hash
-        hash=$(jq -r '.managed_files["AGENTS.md"]' "$ws/.codex-sdlc/manifest.json" 2>/dev/null)
+        hash=$(json_eval_stdin 'data.managed_files["AGENTS.md"]' < "$ws/.codex-sdlc/manifest.json" || true)
         if ! echo "$hash" | grep -q '^sha256:'; then
+            valid=false
+        fi
+        if [ "$IS_WINDOWS" = "true" ]; then
+            if ! json_eval_stdin 'data.managed_files[".codex/hooks/git-guard.ps1"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+                valid=false
+            fi
+        elif ! json_eval_stdin 'data.managed_files[".codex/hooks/bash-guard.sh"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
             valid=false
         fi
     fi
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "manifest.json created with scan snapshot and sha256 hashes"
+        pass "manifest.json tracks the managed SDLC surface with scan snapshot and sha256 hashes"
     else
         fail "manifest.json missing, incomplete, or malformed"
     fi
 }
 
-test_setup_prints_confidence_map_for_docs_strong_scaffold() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-    echo 'console.log("scaffold");' > "$ws/src/index.js"
-    echo '# Existing agent guidance' > "$ws/AGENTS.md"
-    echo '# Existing testing contract' > "$ws/TESTING.md"
-    echo '# Existing architecture notes' > "$ws/ARCHITECTURE.md"
-
-    local output
-    output=$(run_setup_capture "$ws")
-    rm -rf "$ws"
-
-    if echo "$output" | grep -q 'Confidence map:' &&
-       echo "$output" | grep -q 'docs-strong-scaffold' &&
-       echo "$output" | grep -q 'Test harness shape needs explicit repo-specific interpretation'; then
-        pass "setup.sh prints a confidence map for docs-strong scaffold repos"
-    else
-        fail "setup.sh does not print a strong-enough confidence map for docs-strong scaffold repos"
+# ---- Test 21: setup.sh repairs stale Bash hook wiring on Windows ----
+test_setup_repairs_stale_windows_hooks() {
+    if [ "$IS_WINDOWS" != "true" ]; then
+        return
     fi
-}
 
-test_manifest_records_confidence_map_for_docs_strong_scaffold() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-    echo 'console.log("scaffold");' > "$ws/src/index.js"
-    echo '# Existing agent guidance' > "$ws/AGENTS.md"
-    echo '# Existing testing contract' > "$ws/TESTING.md"
-    echo '# Existing architecture notes' > "$ws/ARCHITECTURE.md"
+    mkdir -p "$ws/src" "$ws/.codex/hooks"
+    cat > "$ws/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/bash-guard.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
 
     run_setup "$ws"
 
-    local valid=true
-    if [ ! -f "$ws/.codex-sdlc/manifest.json" ]; then
-        valid=false
-    else
-        if ! jq -e '.scan.repo_shape == "docs-strong-scaffold"' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-        if ! jq -e '.confidence_map.overall == "medium"' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-        if ! jq -e '.confidence_map.unresolved[] | select(. == "Test harness shape needs explicit repo-specific interpretation")' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
-            valid=false
-        fi
+    local repaired=false
+    if grep -q 'git-guard\.ps1' "$ws/.codex/hooks.json" 2>/dev/null \
+        && ! grep -q 'bash-guard\.sh' "$ws/.codex/hooks.json" 2>/dev/null; then
+        repaired=true
     fi
     rm -rf "$ws"
 
-    if [ "$valid" = "true" ]; then
-        pass "manifest.json records the confidence map for docs-strong scaffold repos"
+    if [ "$repaired" = "true" ]; then
+        pass "setup.sh repairs stale Windows Bash hooks"
     else
-        fail "manifest.json does not persist the docs-strong scaffold confidence map"
+        fail "setup.sh left stale Windows Bash hooks in place"
     fi
 }
 
-test_setup_recommends_full_auto() {
+# ---- Test 22: check.sh reports uninitialized repo when manifest is missing ----
+test_check_reports_uninitialized() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
+    echo '{"name":"test-app"}' > "$ws/package.json"
 
     local output
-    output=$(run_setup_capture "$ws")
+    output=$(run_check "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | grep -q "codex --full-auto"; then
-        pass "setup.sh recommends codex --full-auto after installation"
+    if json_text_equals "$output" 'data.repo_state' "uninitialized"; then
+        pass "check.sh reports uninitialized repo when manifest is missing"
     else
-        fail "setup.sh does not recommend codex --full-auto"
+        fail "check.sh did not report uninitialized repo (got: $(json_text_get "$output" 'data.repo_state'))"
     fi
 }
 
-test_setup_calls_out_auth_heavy_boundary() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-
-    local output
-    output=$(run_setup_capture "$ws")
-    rm -rf "$ws"
-
-    if echo "$output" | grep -qi 'Windows / WAM / MFA' &&
-       echo "$output" | grep -qi 'user-owned' &&
-       echo "$output" | grep -qi 'resume'; then
-        pass "setup.sh explains the user-owned auth boundary for Windows / WAM / MFA flows"
-    else
-        fail "setup.sh does not explain the auth-heavy boundary clearly enough"
-    fi
-}
-
-test_generated_agents_md_encourages_capability_detectors() {
+# ---- Test 23: check.sh reports managed files as match after setup ----
+test_check_reports_matches() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
@@ -488,308 +634,293 @@ test_generated_agents_md_encourages_capability_detectors() {
 
     run_setup "$ws"
 
-    local has_detector_pattern=false
-    if [ -f "$ws/AGENTS.md" ] &&
-       grep -Eqi 'doctor|check-capability|Test-.*Access|capability detector' "$ws/AGENTS.md" 2>/dev/null; then
-        has_detector_pattern=true
-    fi
+    local output
+    output=$(run_check "$ws")
     rm -rf "$ws"
 
-    if [ "$has_detector_pattern" = "true" ]; then
-        pass "Generated AGENTS.md encourages repo-local capability detectors for auth / license-sensitive work"
+    local hook_expr='data.managed_files[".codex/hooks/bash-guard.sh"].status'
+    if [ "$IS_WINDOWS" = "true" ]; then
+        hook_expr='data.managed_files[".codex/hooks/git-guard.ps1"].status'
+    fi
+
+    if json_text_equals "$output" 'data.repo_state' "initialized" \
+        && json_text_equals "$output" 'data.managed_files["AGENTS.md"].status' "match" \
+        && json_text_equals "$output" 'data.managed_files["SDLC.md"].status' "match" \
+        && json_text_equals "$output" 'data.managed_files["SDLC-LOOP.md"].status' "match" \
+        && json_text_equals "$output" 'data.managed_files[".codex/config.toml"].status' "match" \
+        && json_text_equals "$output" 'data.managed_files[".codex/hooks.json"].status' "match" \
+        && json_text_equals "$output" "$hook_expr" "match"; then
+        pass "check.sh reports managed files as match after setup"
     else
-        fail "Generated AGENTS.md does not encourage capability-detector helpers"
+        fail "check.sh did not report matches correctly (state=$(json_text_get "$output" 'data.repo_state'), agents=$(json_text_get "$output" 'data.managed_files[\"AGENTS.md\"].status'), sdlc=$(json_text_get "$output" 'data.managed_files[\"SDLC.md\"].status'), loop=$(json_text_get "$output" 'data.managed_files[\"SDLC-LOOP.md\"].status'), config=$(json_text_get "$output" 'data.managed_files[\".codex/config.toml\"].status'), hooks=$(json_text_get "$output" 'data.managed_files[\".codex/hooks.json\"].status'), hook_script=$(json_text_get "$output" "$hook_expr"))"
     fi
 }
 
-test_setup_output_encourages_capability_detectors() {
+# ---- Test 24: check.sh reports customized files when hashes drift ----
+test_check_reports_customized() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
     mkdir -p "$ws/src"
+
+    run_setup "$ws"
+    echo "CUSTOM CHANGE" >> "$ws/AGENTS.md"
 
     local output
-    output=$(run_setup_capture "$ws")
+    output=$(run_check "$ws")
     rm -rf "$ws"
 
-    if echo "$output" | grep -Eqi 'doctor|check-capability|Test-.*Access' &&
-       echo "$output" | grep -Eqi 'one-command classification|single command classification|one command classification'; then
-        pass "setup.sh output encourages capability-detector helpers over raw provider commands"
+    if json_text_equals "$output" 'data.managed_files["AGENTS.md"].status' "customized"; then
+        pass "check.sh reports customized files when hashes drift"
     else
-        fail "setup.sh output does not encourage capability-detector helpers clearly enough"
+        fail "check.sh did not report customized file (got: $(json_text_get "$output" 'data.managed_files[\"AGENTS.md\"].status'))"
     fi
 }
 
-test_setup_scaffolds_repo_scope_skills() {
+# ---- Test 25: check.sh reports missing files when managed docs are deleted ----
+test_check_reports_missing() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
     mkdir -p "$ws/src"
 
     run_setup "$ws"
-
-    local has_sdlc_skill=false
-    local has_adlc_skill=false
-    [ -f "$ws/.agents/skills/sdlc/SKILL.md" ] && has_sdlc_skill=true
-    [ -f "$ws/.agents/skills/adlc/SKILL.md" ] && has_adlc_skill=true
-    rm -rf "$ws"
-
-    if [ "$has_sdlc_skill" = "true" ] && [ "$has_adlc_skill" = "true" ]; then
-        pass "setup.sh scaffolds repo-scope Codex sdlc and adlc skills"
-    else
-        fail "setup.sh did not scaffold repo-scope Codex sdlc/adlc skills"
-    fi
-}
-
-test_manifest_tracks_repo_scope_skills() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-
-    run_setup "$ws"
-
-    local valid=true
-    if [ ! -f "$ws/.codex-sdlc/manifest.json" ]; then
-        valid=false
-    else
-        if ! jq -e '.managed_files[".agents/skills/sdlc/SKILL.md"]' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-        if ! jq -e '.managed_files[".agents/skills/adlc/SKILL.md"]' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-    fi
-    rm -rf "$ws"
-
-    if [ "$valid" = "true" ]; then
-        pass "manifest.json tracks the repo-scope Codex sdlc/adlc skills"
-    else
-        fail "manifest.json does not track the repo-scope Codex skills"
-    fi
-}
-
-test_setup_writes_bootstrap_maximum_model_profile_by_default() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-
-    run_setup "$ws"
-
-    local valid=true
-    if [ ! -f "$ws/.codex-sdlc/model-profile.json" ]; then
-        valid=false
-    else
-        if ! jq -e '.selected_profile == "maximum"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-        if ! jq -e '.profiles.mixed.main_model == "gpt-5.4-mini"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-        if ! jq -e '.profiles.maximum.main_reasoning == "xhigh"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-    fi
-    rm -rf "$ws"
-
-    if [ "$valid" = "true" ]; then
-        pass "setup.sh defaults bootstrap work to the maximum model profile while keeping mixed available"
-    else
-        fail "setup.sh did not default bootstrap work to the maximum model profile"
-    fi
-}
-
-test_setup_accepts_maximum_model_profile() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-
-    run_setup "$ws" --model-profile maximum
-
-    local valid=true
-    if [ ! -f "$ws/.codex-sdlc/model-profile.json" ]; then
-        valid=false
-    else
-        if ! jq -e '.selected_profile == "maximum"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-    fi
-    rm -rf "$ws"
-
-    if [ "$valid" = "true" ]; then
-        pass "setup.sh accepts an explicit maximum model profile"
-    else
-        fail "setup.sh did not honor --model-profile maximum"
-    fi
-}
-
-test_setup_interactive_prompts_for_model_profile() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
+    rm -f "$ws/TESTING.md"
 
     local output
-    output=$(run_setup_interactive_capture "$ws" $'maximum\nY\n')
-
-    local valid=true
-    if ! echo "$output" | grep -qi 'model profile'; then
-        valid=false
-    fi
-    if ! echo "$output" | grep -Eqi 'default: maximum|recommended: maximum|setup.*maximum|maximum.*setup|bootstrap.*maximum|maximum.*bootstrap'; then
-        valid=false
-    fi
-    if [ ! -f "$ws/.codex-sdlc/model-profile.json" ] ||
-       ! jq -e '.selected_profile == "maximum"' "$ws/.codex-sdlc/model-profile.json" >/dev/null 2>&1; then
-        valid=false
-    fi
-
+    output=$(run_check "$ws")
     rm -rf "$ws"
 
-    if [ "$valid" = "true" ]; then
-        pass "interactive setup prompts for a model profile, recommends maximum, and honors the user's choice"
+    if json_text_equals "$output" 'data.managed_files["TESTING.md"].status' "missing"; then
+        pass "check.sh reports missing files when managed docs are deleted"
     else
-        fail "interactive setup did not recommend maximum or honor the model-profile choice"
+        fail "check.sh did not report missing file (got: $(json_text_get "$output" 'data.managed_files[\"TESTING.md\"].status'))"
     fi
 }
 
-test_setup_output_recommends_mixed_after_bootstrap() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-
-    local output
-    output=$(run_setup_capture "$ws")
-
-    local valid=true
-    echo "$output" | grep -Eqi 'setup/update.*maximum|bootstrap.*maximum' || valid=false
-    echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' || valid=false
-
-    rm -rf "$ws"
-
-    if [ "$valid" = "true" ]; then
-        pass "setup.sh output recommends maximum for bootstrap and mixed for routine work"
-    else
-        fail "setup.sh output does not explain the bootstrap-versus-routine profile policy clearly enough"
+# ---- Test 26: check.sh reports stale Windows Bash hook wiring as drift / broken ----
+test_check_reports_windows_hook_drift() {
+    if [ "$IS_WINDOWS" != "true" ]; then
+        return
     fi
-}
 
-test_setup_offers_issue_ready_feedback_on_wizard_failure() {
-    local adapter_clone
-    local ws
-    local output
-    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-
-    cp -R "$REPO_DIR/." "$adapter_clone/"
-    rm -f "$adapter_clone/install.sh"
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-
-    output=$(
-        cd "$ws" &&
-        bash "$adapter_clone/setup.sh" --yes 2>&1
-    ) || true
-
-    rm -rf "$adapter_clone" "$ws"
-
-    if echo "$output" | grep -qi 'Likely wizard-level failure' &&
-       echo "$output" | grep -qi 'codex-sdlc-wizard' &&
-       echo "$output" | grep -qi 'No issue will be posted automatically' &&
-       echo "$output" | grep -qi 'wizard version:' &&
-       echo "$output" | grep -qi 'command:' &&
-       echo "$output" | grep -qi 'repo shape:' &&
-       echo "$output" | grep -qi 'failure point:'; then
-        pass "setup.sh offers issue-ready feedback when wizard bootstrap files are missing"
-    else
-        fail "setup.sh does not offer issue-ready feedback for obvious wizard-level failures"
-    fi
-}
-
-test_manifest_tracks_selected_model_profile() {
-    local ws
-    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
-    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
-
-    run_setup "$ws" --model-profile maximum
-
-    local valid=true
-    if [ ! -f "$ws/.codex-sdlc/manifest.json" ]; then
-        valid=false
-    else
-        if ! jq -e '.model_profile.selected_profile == "maximum"' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-        if ! jq -e '.managed_files[".codex-sdlc/model-profile.json"]' "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
-            valid=false
-        fi
-    fi
-    rm -rf "$ws"
-
-    if [ "$valid" = "true" ]; then
-        pass "manifest.json tracks the selected model profile and profile file"
-    else
-        fail "manifest.json does not track the selected model profile cleanly"
-    fi
-}
-
-test_generated_agents_md_documents_profile_policy() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
     mkdir -p "$ws/src"
 
     run_setup "$ws"
+    cat > "$ws/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/bash-guard.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+
+    local output
+    output=$(run_check "$ws")
+    rm -rf "$ws"
+
+    if json_text_equals "$output" 'data.managed_files[".codex/hooks.json"].status' "drift / broken"; then
+        pass "check.sh reports stale Windows Bash hook wiring as drift / broken"
+    else
+        fail "check.sh did not report Windows hook drift (got: $(json_text_get "$output" 'data.managed_files[\".codex/hooks.json\"].status'))"
+    fi
+}
+
+# ---- Test 27: scan detects extended setup fields used by adaptive setup parity ----
+test_detect_extended_setup_fields() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    cat > "$ws/package.json" <<'EOF'
+{"name":"test-app","scripts":{"test":"jest --coverage","lint":"eslint .","build":"tsc -p tsconfig.json","typecheck":"tsc --noEmit"}}
+EOF
+    echo '{}' > "$ws/tsconfig.json"
+    echo 'FROM node:20' > "$ws/Dockerfile"
+    cat > "$ws/.env" <<'EOF'
+DATABASE_URL=postgres://localhost/test
+REDIS_URL=redis://localhost:6379
+EOF
+    mkdir -p "$ws/src" "$ws/tests/integration" "$ws/e2e"
+    touch "$ws/jest.config.js" "$ws/playwright.config.js"
+    touch "$ws/tests/unit.test.js" "$ws/tests/integration/orders.integration.test.js" "$ws/e2e/app.e2e.ts"
+
+    local output
+    output=$(run_scan "$ws")
+    rm -rf "$ws"
+
+    if json_text_equals "$output" 'data.typecheck_command' "npm run typecheck" \
+        && json_text_equals "$output" 'data.single_test_command' "npm test -- <test-file>" \
+        && json_text_equals "$output" 'data.deployment_setup' "docker" \
+        && json_text_equals "$output" 'data.databases' "postgresql" \
+        && json_text_equals "$output" 'data.cache_layer' "redis" \
+        && json_text_equals "$output" 'data.coverage_config' "jest --coverage" \
+        && json_text_equals "$output" 'data.test_duration' "<1 minute" \
+        && json_text_equals "$output" 'data.test_types' "unit, integration, e2e"; then
+        pass "scan detects extended setup fields for commands, infra, coverage, and test shape"
+    else
+        fail "scan missed extended setup fields"
+    fi
+}
+
+# ---- Test 28: setup writes extended commands and infra into generated docs ----
+test_setup_generates_extended_setup_docs() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    cat > "$ws/package.json" <<'EOF'
+{"name":"test-app","scripts":{"test":"jest --coverage","lint":"eslint .","build":"tsc -p tsconfig.json","typecheck":"tsc --noEmit"}}
+EOF
+    echo '{}' > "$ws/tsconfig.json"
+    echo 'FROM node:20' > "$ws/Dockerfile"
+    cat > "$ws/.env" <<'EOF'
+DATABASE_URL=postgres://localhost/test
+REDIS_URL=redis://localhost:6379
+EOF
+    mkdir -p "$ws/src" "$ws/tests/integration" "$ws/e2e"
+    touch "$ws/jest.config.js" "$ws/playwright.config.js"
+    touch "$ws/tests/unit.test.js" "$ws/tests/integration/orders.integration.test.js" "$ws/e2e/app.e2e.ts"
+
+    run_setup "$ws"
 
     local valid=true
-    if [ ! -f "$ws/AGENTS.md" ]; then
-        valid=false
+    grep -q 'Type-check' "$ws/SDLC.md" 2>/dev/null || valid=false
+    grep -q 'npm run typecheck' "$ws/SDLC.md" 2>/dev/null || valid=false
+    grep -q 'Single test file' "$ws/SDLC.md" 2>/dev/null || valid=false
+    grep -q 'npm test -- <test-file>' "$ws/SDLC.md" 2>/dev/null || valid=false
+    grep -q 'Coverage' "$ws/TESTING.md" 2>/dev/null || valid=false
+    grep -q 'jest --coverage' "$ws/TESTING.md" 2>/dev/null || valid=false
+    grep -q 'Test types' "$ws/TESTING.md" 2>/dev/null || valid=false
+    grep -q 'unit, integration, e2e' "$ws/TESTING.md" 2>/dev/null || valid=false
+    grep -q 'docker' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    grep -q 'postgresql' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    grep -q 'redis' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup writes extended commands and infra into generated docs"
     else
-        grep -q 'Model Profile' "$ws/AGENTS.md" || valid=false
-        grep -q 'mixed' "$ws/AGENTS.md" || valid=false
-        grep -q 'maximum' "$ws/AGENTS.md" || valid=false
-        grep -Eqi '95%|research more first' "$ws/AGENTS.md" || valid=false
-        grep -Eqi 'xhigh review|xhigh' "$ws/AGENTS.md" || valid=false
+        fail "setup docs did not include the extended setup fields"
+    fi
+}
+
+# ---- Test 29: interactive setup allows overriding detected values instead of aborting ----
+test_setup_interactive_allows_overriding_detected_values() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    cat > "$ws/package.json" <<'EOF'
+{"name":"test-app","scripts":{"test":"jest","lint":"eslint .","build":"tsc","typecheck":"tsc --noEmit"}}
+EOF
+    mkdir -p "$ws/src" "$ws/__tests__"
+    touch "$ws/jest.config.js" "$ws/tsconfig.json"
+
+    local output
+    output=$(run_setup_interactive "$ws" $'n\napp/\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+
+    local valid=true
+    echo "$output" | grep -q 'Source directory \[src/\]' 2>/dev/null || valid=false
+    echo "$output" | grep -vq 'Aborted\.' 2>/dev/null || valid=false
+    grep -q 'Source directory: `app/`' "$ws/SDLC.md" 2>/dev/null || valid=false
+    if ! json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.resolved_values.source_dir' "app/"; then
+        valid=false
     fi
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "Generated AGENTS.md documents the model-profile tradeoff and low-confidence escalation rule"
+        pass "interactive setup allows overriding detected values instead of aborting"
     else
-        fail "Generated AGENTS.md does not document the model-profile policy clearly enough"
+        fail "interactive setup still aborts or ignores overrides for detected values"
     fi
 }
 
-test_generated_agents_md_documents_codex_shape_and_repo_focus() {
+# ---- Test 30: verify-only reports missing managed files without regenerating them ----
+test_setup_verify_only_reports_missing_files() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
     mkdir -p "$ws/src"
 
     run_setup "$ws"
+    rm -f "$ws/TESTING.md"
+
+    local output status
+    set +e
+    output=$(run_setup_args "$ws" verify-only)
+    status=$?
+    set -e
 
     local valid=true
-    if [ ! -f "$ws/AGENTS.md" ]; then
-        valid=false
-    else
-        grep -q 'skills = explicit workflow layer' "$ws/AGENTS.md" || valid=false
-        grep -q 'hooks = silent event enforcement' "$ws/AGENTS.md" || valid=false
-        grep -q 'repo docs = source of local truth' "$ws/AGENTS.md" || valid=false
-        grep -qi 'always state confidence' "$ws/AGENTS.md" || valid=false
-        grep -qi 'direct GitHub issue' "$ws/AGENTS.md" || valid=false
-        grep -qi 'product repo' "$ws/AGENTS.md" || valid=false
-        grep -qi 'actually blocked' "$ws/AGENTS.md" || valid=false
-    fi
+    [ "$status" -ne 0 ] || valid=false
+    echo "$output" | grep -q 'Verifying installation' 2>/dev/null || valid=false
+    echo "$output" | grep -q 'MISSING: TESTING.md' 2>/dev/null || valid=false
+    [ ! -f "$ws/TESTING.md" ] || valid=false
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "Generated AGENTS.md documents the honest Codex shape, confidence rule, and repo-focus feedback loop"
+        pass "verify-only reports missing managed files without regenerating them"
     else
-        fail "Generated AGENTS.md does not document the Codex shape and repo-focus feedback loop clearly enough"
+        fail "verify-only did not stay read-only or did not report the missing managed file"
+    fi
+}
+
+# ---- Test 31: regenerate rebuilds docs from stored setup state without interactive prompts ----
+test_setup_regenerate_rebuilds_docs_from_manifest() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest","lint":"eslint .","build":"tsc"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/__tests__"
+    touch "$ws/jest.config.js"
+
+    run_setup "$ws"
+
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node -e '
+const fs = require("fs");
+const file = process.env.MANIFEST_PATH;
+const data = JSON.parse(fs.readFileSync(file, "utf8"));
+data.resolved_values.source_dir = "app/";
+fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+'
+    rm -f "$ws/SDLC.md" "$ws/TESTING.md" "$ws/ARCHITECTURE.md"
+
+    local output status
+    set +e
+    output=$(run_setup_args "$ws" regenerate)
+    status=$?
+    set -e
+
+    local valid=true
+    [ "$status" -eq 0 ] || valid=false
+    echo "$output" | grep -vq 'Use detected values above' 2>/dev/null || valid=false
+    [ -f "$ws/SDLC.md" ] || valid=false
+    [ -f "$ws/TESTING.md" ] || valid=false
+    [ -f "$ws/ARCHITECTURE.md" ] || valid=false
+    grep -q 'Source directory: `app/`' "$ws/SDLC.md" 2>/dev/null || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "regenerate rebuilds docs from stored setup state without interactive prompts"
+    else
+        fail "regenerate did not rebuild docs from manifest-backed setup state"
     fi
 }
 
@@ -804,28 +935,27 @@ test_detect_test_framework
 test_detect_domain_firmware
 test_detect_domain_data_science
 test_detect_domain_cli
-test_detect_docs_strong_scaffold
 test_template_agents_md_valid
 test_template_testing_md_domain
 test_generated_no_placeholders
 test_agents_md_read_directives
+test_setup_generates_sdlc_md
+test_setup_interactive_only_asks_preferences
+test_setup_interactive_asks_missing_core_facts
+test_setup_interactive_ci_shepherd_is_conditional
+test_setup_interactive_shows_inferred_values
 test_manifest_created
-test_setup_prints_confidence_map_for_docs_strong_scaffold
-test_manifest_records_confidence_map_for_docs_strong_scaffold
-test_setup_recommends_full_auto
-test_setup_calls_out_auth_heavy_boundary
-test_generated_agents_md_encourages_capability_detectors
-test_setup_output_encourages_capability_detectors
-test_setup_scaffolds_repo_scope_skills
-test_manifest_tracks_repo_scope_skills
-test_setup_writes_bootstrap_maximum_model_profile_by_default
-test_setup_accepts_maximum_model_profile
-test_setup_interactive_prompts_for_model_profile
-test_setup_output_recommends_mixed_after_bootstrap
-test_setup_offers_issue_ready_feedback_on_wizard_failure
-test_manifest_tracks_selected_model_profile
-test_generated_agents_md_documents_profile_policy
-test_generated_agents_md_documents_codex_shape_and_repo_focus
+test_setup_repairs_stale_windows_hooks
+test_check_reports_uninitialized
+test_check_reports_matches
+test_check_reports_customized
+test_check_reports_missing
+test_check_reports_windows_hook_drift
+test_detect_extended_setup_fields
+test_setup_generates_extended_setup_docs
+test_setup_interactive_allows_overriding_detected_values
+test_setup_verify_only_reports_missing_files
+test_setup_regenerate_rebuilds_docs_from_manifest
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

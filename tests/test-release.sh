@@ -8,7 +8,10 @@ REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
 WORKFLOW="$REPO_DIR/.github/workflows/release.yml"
 PACKAGE_JSON="$REPO_DIR/package.json"
-CURRENT_VERSION="$(jq -r '.version' "$PACKAGE_JSON")"
+JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
+source "$JSON_HELPERS"
+require_node
+CURRENT_VERSION="$(json_get_file "$PACKAGE_JSON" 'data.version')"
 PASSED=0
 FAILED=0
 
