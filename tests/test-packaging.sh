@@ -302,48 +302,21 @@ test_readme_recommends_full_auto() {
     fi
 }
 
-test_readme_documents_auth_heavy_boundaries() {
-    local has_heading=true
-    local has_windows=true
-    local has_user_owned=true
-    local has_resume_pattern=true
-    local has_not_refusal=true
+test_readme_stays_consumer_focused() {
+    local avoids_auth_heavy_section=true
+    local avoids_capability_detector_section=true
+    local avoids_internal_lane_copy=true
 
-    grep -q '^## Auth-Heavy Workflow Boundaries$' "$README" || has_heading=false
-    grep -qi 'Windows' "$README" || has_windows=false
-    grep -Eqi 'user-owned|your live sign-in' "$README" || has_user_owned=false
-    grep -Eqi 'resume|wrap' "$README" || has_resume_pattern=false
-    grep -Eqi 'not a refusal|isn.t refusing|without sounding like the agent is refusing' "$README" || has_not_refusal=false
+    grep -q '^## Auth-Heavy Workflow Boundaries$' "$README" && avoids_auth_heavy_section=false
+    grep -q '^## Capability Detectors for Auth / License-Sensitive Repos$' "$README" && avoids_capability_detector_section=false
+    grep -Eqi '(^|[^A-Za-z])(OK|NotConnected|PermissionError|UnsupportedAccount)([^A-Za-z]|$)|tenant shape|license-sensitive repos|one-command classification|setup data' "$README" && avoids_internal_lane_copy=false
 
-    if [ "$has_heading" = "true" ] &&
-       [ "$has_windows" = "true" ] &&
-       [ "$has_user_owned" = "true" ] &&
-       [ "$has_resume_pattern" = "true" ] &&
-       [ "$has_not_refusal" = "true" ]; then
-        pass "README documents auth-heavy workflow boundaries and how to present them"
+    if [ "$avoids_auth_heavy_section" = "true" ] &&
+       [ "$avoids_capability_detector_section" = "true" ] &&
+       [ "$avoids_internal_lane_copy" = "true" ]; then
+        pass "README stays consumer-focused and avoids internal operator-only prose"
     else
-        fail "README does not document auth-heavy workflow boundaries clearly enough"
-    fi
-}
-
-test_readme_documents_capability_detectors() {
-    local has_heading=true
-    local has_doctor_pattern=true
-    local has_one_command_classifier=true
-    local has_setup_data_language=true
-
-    grep -q '^## Capability Detectors for Auth / License-Sensitive Repos$' "$README" || has_heading=false
-    grep -Eqi 'doctor|check-capability|Test-.*Access' "$README" || has_doctor_pattern=false
-    grep -Eqi 'one-command classification|one command classification|single command classification' "$README" || has_one_command_classifier=false
-    grep -Eqi 'setup data|account type|licen(s|c)e|permission state|tenant shape' "$README" || has_setup_data_language=false
-
-    if [ "$has_heading" = "true" ] &&
-       [ "$has_doctor_pattern" = "true" ] &&
-       [ "$has_one_command_classifier" = "true" ] &&
-       [ "$has_setup_data_language" = "true" ]; then
-        pass "README documents the capability-detector pattern for auth / license-sensitive repos"
-    else
-        fail "README does not document the capability-detector pattern clearly enough"
+        fail "README still contains internal operator prose that should not be in the public README"
     fi
 }
 
@@ -488,6 +461,46 @@ test_readme_uses_real_release_examples() {
     fi
 }
 
+test_readme_puts_quick_start_near_the_top() {
+    local quick_start_line
+    local what_this_repo_is_line
+    local quick_start_section
+    local quick_start_command
+    local has_latest=true
+    local has_setup_yes=true
+    local avoids_git_clone=true
+    local avoids_model_experiment=true
+    local avoids_pilot_rollout=true
+
+    quick_start_line=$(grep -n '^## Quick Start$' "$README" | cut -d: -f1 | head -n1)
+    what_this_repo_is_line=$(grep -n '^## What This Repo Is$' "$README" | cut -d: -f1 | head -n1)
+    quick_start_section=$(awk '
+        /^## Quick Start$/ { in_section=1; next }
+        /^## / && in_section { exit }
+        in_section { print }
+    ' "$README")
+    quick_start_command=$(printf '%s\n' "$quick_start_section" | grep '^npx codex-sdlc-wizard@' | head -n1)
+
+    echo "$quick_start_command" | grep -q '^npx codex-sdlc-wizard@latest setup --yes$' || has_latest=false
+    echo "$quick_start_section" | grep -q 'setup --yes' || has_setup_yes=false
+    echo "$quick_start_section" | grep -q 'git clone' && avoids_git_clone=false
+    echo "$quick_start_section" | grep -Eqi 'model-experiment|benchmark|gpt-5\.4-mini|20-slice' && avoids_model_experiment=false
+    echo "$quick_start_section" | grep -Eqi 'pilot-rollout|default-use gate|default use gate|3-5 pilot repos' && avoids_pilot_rollout=false
+
+    if [ -n "${quick_start_line:-}" ] &&
+       [ -n "${what_this_repo_is_line:-}" ] &&
+       [ "$quick_start_line" -lt "$what_this_repo_is_line" ] &&
+       [ "$has_latest" = "true" ] &&
+       [ "$has_setup_yes" = "true" ] &&
+       [ "$avoids_git_clone" = "true" ] &&
+       [ "$avoids_model_experiment" = "true" ] &&
+       [ "$avoids_pilot_rollout" = "true" ]; then
+        pass "README puts Quick Start near the top, starts with latest setup, and keeps it free of extra noise"
+    else
+        fail "README does not keep Quick Start near the top and consumer-focused"
+    fi
+}
+
 test_consumer_bug_report_template_exists() {
     local template="$REPO_DIR/.github/ISSUE_TEMPLATE/consumer-bug-report.yml"
     local has_file=true
@@ -546,13 +559,13 @@ test_readme_has_install_choice_table
 test_readme_explains_install_side_effects
 test_readme_mentions_packaging_test_command
 test_readme_recommends_full_auto
-test_readme_documents_auth_heavy_boundaries
-test_readme_documents_capability_detectors
+test_readme_stays_consumer_focused
 test_readme_documents_repo_scope_skills
 test_readme_documents_honest_codex_shape
 test_readme_documents_feedback_flow_and_repo_focus
 test_readme_documents_model_profiles
 test_readme_uses_real_release_examples
+test_readme_puts_quick_start_near_the_top
 test_consumer_bug_report_template_exists
 
 echo ""
