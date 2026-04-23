@@ -164,11 +164,11 @@ test_pilot_rollout_summary_recommends_default_use_when_gate_is_met() {
 
     cat > "$fixture" <<'CSV'
 repo_name,install_version,install_success,reusable_wizard_bug,confidence_after_install,recommended_next_step,notes
-repo-1,0.5.0,1,0,high,continue,clean
-repo-2,0.5.0,1,0,high,continue,clean
-repo-3,0.5.0,1,1,high,continue,one reusable bug captured
-repo-4,0.5.0,1,0,high,continue,clean
-repo-5,0.5.0,1,0,high,continue,clean
+repo-1,0.7.1,1,0,high,continue,clean
+repo-2,0.7.1,1,0,high,continue,clean
+repo-3,0.7.1,1,1,high,continue,one reusable bug captured
+repo-4,0.7.1,1,0,high,continue,clean
+repo-5,0.7.1,1,0,high,continue,clean
 CSV
 
     output="$("$PILOT_SUMMARY_SCRIPT" "$fixture")"
@@ -192,9 +192,9 @@ test_pilot_rollout_summary_holds_default_use_when_reusable_bug_count_is_too_high
 
     cat > "$fixture" <<'CSV'
 repo_name,install_version,install_success,reusable_wizard_bug,confidence_after_install,recommended_next_step,notes
-repo-1,0.5.0,1,0,high,continue,clean
-repo-2,0.5.0,1,1,high,continue,bug one
-repo-3,0.5.0,1,1,medium,stabilize,bug two
+repo-1,0.7.1,1,0,high,continue,clean
+repo-2,0.7.1,1,1,high,continue,bug one
+repo-3,0.7.1,1,1,medium,stabilize,bug two
 CSV
 
     output="$("$PILOT_SUMMARY_SCRIPT" "$fixture")"

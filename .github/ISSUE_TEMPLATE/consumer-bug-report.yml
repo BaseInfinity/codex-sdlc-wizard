@@ -15,7 +15,7 @@ body:
     attributes:
       label: Wizard version
       description: Which `codex-sdlc-wizard` version were you using?
-      placeholder: "0.6.0"
+      placeholder: "0.7.1"
     validations:
       required: true
   - type: input
@@ -23,7 +23,7 @@ body:
     attributes:
       label: Command used
       description: What exact install, setup, update, or runtime command did you run?
-      placeholder: "npx codex-sdlc-wizard@0.6.0 setup --yes --model-profile maximum"
+      placeholder: "npx codex-sdlc-wizard@0.7.1 setup --yes --model-profile maximum"
     validations:
       required: true
   - type: input

@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.0` and `v0.7.0` are the current release target for the consumer-flow hardening pass
+- `codex-sdlc-wizard@0.7.1` and `v0.7.1` are the current release target for the README/consistency cleanup pass
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the repo-scoped Codex discovery bridge for `$sdlc` / `$adlc` is now part of the shipping path
@@ -14,32 +14,32 @@
 - setup/install now offer issue-ready feedback for obvious wizard-level failures instead of only failing vaguely
 - setup/update guidance now biases bootstrap work toward `maximum` while routine work can switch back to `mixed`
 - the repo now ships a consumer bug-report template for install/setup/runtime failures
+- the public README now leads with the real `@latest setup --yes` path and keeps the top section consumer-focused
 - benchmark and pilot-rollout ledgers now exist so model/default-use decisions can be measured, not guessed
 - release, packaging, npm, skill, setup, adapter, and E2E tests are green
 
 ## Next Release Cycle
 
-### 0.7.1
+### 0.7.2
 
-Purpose: prove the post-`0.7.0` consumer path on real repos and stabilize any reusable wizard bugs without changing the default-use claim early.
+Purpose: prove the post-`0.7.1` consumer path on real repos and stabilize any reusable wizard bugs without changing the default-use claim early.
 
 Scope:
-- run `0.7.0` on 3-5 pilot repos and log results in `benchmarks/pilot-rollout.csv`
+- run `0.7.1` on 3-5 pilot repos and log results in `benchmarks/pilot-rollout.csv`
 - cut a stabilization patch only if pilots surface a reusable wizard bug
 - keep the default-use recommendation gated on the measurable pilot summary
 - keep the separate model experiment running, but do not let it block pilot rollout work
 
 ## Tracker Cleanup
 
-The issue tracker should be updated as the 0.7.0 consumer-flow backlog lands.
+The issue tracker is currently clear.
 
-- close or narrow `#15` once setup/install failures offer issue-ready feedback without auto-posting
-- close or narrow `#16` once setup/update clearly bias bootstrap work toward `maximum`
-- close or narrow `#17` once the consumer bug-report template is shipped and linked from the feedback flow
+- open a new issue only when pilot consumption exposes a proven reusable wizard bug
+- avoid speculative backlog churn while `0.7.1` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.0` and issue cleanup, the main backlog is:
+After `0.7.1`, the main backlog is:
 
 - pilot rollout proof for default use on real repos
 - any reusable wizard fixes discovered during the pilot set
@@ -48,16 +48,15 @@ After `0.7.0` and issue cleanup, the main backlog is:
 
 ## Working Order
 
-1. Close or narrow `#15` to `#17` so the tracker matches the shipped guidance
-2. Prove the default-use gate on 3-5 pilot repos with `0.7.0`
-3. Ship `0.7.1` only if pilot rollout surfaces a reusable wizard bug
-4. Keep creator-tool investigation behind the active backlog
+1. Prove the default-use gate on 3-5 pilot repos with `0.7.1`
+2. Ship `0.7.2` only if pilot rollout surfaces a reusable wizard bug
+3. Keep creator-tool investigation behind the active backlog
 
 ## Default-Use Gate
 
 Before calling this the default Codex SDLC path, prove it on real pilot repos instead of just repo-self-tests.
 
-- run `0.7.0` on 3-5 pilot repos
+- run `0.7.1` on 3-5 pilot repos
 - require pilot success >= 95% before default use
 - allow no more than 1 reusable wizard bug across the pilot set
 - track the pilot set in `benchmarks/pilot-rollout.csv`

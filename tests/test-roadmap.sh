@@ -95,9 +95,9 @@ test_roadmap_lists_next_release_cycle() {
 
 test_roadmap_calls_out_stale_issue_cleanup() {
     local has_heading=true
-    local has_issue15=true
-    local has_issue16=true
-    local has_issue17=true
+    local has_tracker_clear=true
+    local has_new_issue_rule=true
+    local avoids_old_issue_refs=true
     local cleanup_section
 
     cleanup_section=$(awk '
@@ -107,15 +107,15 @@ test_roadmap_calls_out_stale_issue_cleanup() {
     ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    echo "$cleanup_section" | grep -q '#15' || has_issue15=false
-    echo "$cleanup_section" | grep -q '#16' || has_issue16=false
-    echo "$cleanup_section" | grep -q '#17' || has_issue17=false
+    echo "$cleanup_section" | grep -Eqi 'tracker is currently clear|issue tracker is currently clear' || has_tracker_clear=false
+    echo "$cleanup_section" | grep -Eqi 'open a new issue|pilot consumption exposes' || has_new_issue_rule=false
+    echo "$cleanup_section" | grep -Eq '#15|#16|#17' && avoids_old_issue_refs=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_issue15" = "true" ] &&
-       [ "$has_issue16" = "true" ] &&
-       [ "$has_issue17" = "true" ]; then
-        pass "Roadmap calls out the consumer-path release issues for cleanup"
+       [ "$has_tracker_clear" = "true" ] &&
+       [ "$has_new_issue_rule" = "true" ] &&
+       [ "$avoids_old_issue_refs" = "true" ]; then
+        pass "Roadmap reflects the clear tracker and the rule for opening new issues from real consumption"
     else
         fail "Roadmap does not call out tracker cleanup clearly"
     fi

@@ -2,6 +2,20 @@
 
 An adapter that brings [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard) enforcement to OpenAI's Codex CLI.
 
+## Quick Start
+
+```bash
+# Install/update the latest wizard into the current repo
+npx codex-sdlc-wizard@latest setup --yes
+
+# Start coding with SDLC enforcement
+codex --full-auto
+```
+
+`codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing/runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
+
+If you want pinned release examples instead of `@latest`, see [Releases](#releases).
+
 ## What This Repo Is
 
 This repo is now a **Codex skill plus installer-style adapter** for Codex projects.
@@ -18,7 +32,7 @@ This repo is now a **Codex skill plus installer-style adapter** for Codex projec
 
 ## Self-Adapting SDLC Enforcement
 
-Like a suit that molds to its wearer, the SDLC Wizard adapts to YOUR project. The Claude Code version reads your repo's language, framework, test runner, and domain to generate tailored docs, hooks, and config. This Codex adapter brings that same philosophy — starting with universal SDLC enforcement hooks, evolving toward full project-adaptive setup.
+This adapter brings the SDLC Wizard discipline into Codex today with hard guardrails, repo-local guidance, and setup/install flows that work in existing projects.
 
 **What works today:**
 - Hard enforcement hooks that block bad habits (git commit without tests, push without review)
@@ -32,7 +46,7 @@ Like a suit that molds to its wearer, the SDLC Wizard adapts to YOUR project. Th
 
 ## Self-Evolving
 
-This adapter evolves automatically with the upstream [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard). A weekly CI workflow detects new upstream releases and opens sync issues. As the Claude Code wizard gains new capabilities (scoring, self-improvement, degradation detection), they get translated to Codex format here.
+This adapter tracks the upstream [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard). A weekly sync workflow checks for upstream releases and opens follow-up issues here when translation work is needed.
 
 ## What It Does
 
@@ -43,49 +57,6 @@ This adapter evolves automatically with the upstream [SDLC Wizard](https://githu
 | git push gate | PreToolUse blocks `git push` | **Hard** (stronger than CC wizard!) |
 | SDLC baseline | UserPromptSubmit hook | Context injection every prompt |
 | Session init | SessionStart hook | Warns if AGENTS.md missing |
-
-## Quick Start
-
-```bash
-# Install the current pinned release from npm via npx
-npx codex-sdlc-wizard@0.7.0
-
-# Or float on the latest published release
-npx codex-sdlc-wizard@latest
-
-# Or clone the adapter release directly
-git clone --branch v0.7.0 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
-cd your-project
-bash /tmp/codex-sdlc-wizard/install.sh
-
-# Start coding with SDLC enforcement
-codex --full-auto
-```
-
-`codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing/runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
-
-If you want actual model-choice numbers instead of anecdotes, record slices in [benchmarks/model-experiment.csv](/Users/stefanayala/codex-sdlc-wizard/benchmarks/model-experiment.csv) and summarize them with:
-
-```bash
-bash scripts/summarize-model-experiment.sh
-```
-
-The current threshold for recommending `gpt-5.4-mini` as the main pass with `xhigh` review is:
-- sample size `>= 20`
-- end-to-end success `>= 95%`
-- follow-up rate `<= 10%`
-- cycle-time improvement vs all-`xhigh` `>= 15%`
-
-If you want to know whether this wizard is ready for default use across real repos, track pilot installs in [benchmarks/pilot-rollout.csv](/Users/stefanayala/codex-sdlc-wizard/benchmarks/pilot-rollout.csv) and summarize them with:
-
-```bash
-bash scripts/summarize-pilot-rollout.sh
-```
-
-The current default-use gate is:
-- 3-5 pilot repos
-- pilot success `>= 95%`
-- no more than `1` reusable wizard bug across the pilot set
 
 ## Model Profiles
 
@@ -100,10 +71,10 @@ How to choose:
 
 ```bash
 # recommended bootstrap path
-npx codex-sdlc-wizard@0.7.0 setup --yes --model-profile maximum
+npx codex-sdlc-wizard@0.7.1 setup --yes --model-profile maximum
 
 # routine work can switch back to the efficiency-first profile later
-npx codex-sdlc-wizard@0.7.0 setup --yes
+npx codex-sdlc-wizard@0.7.1 setup --yes
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest setup --yes --model-profile maximum
@@ -130,7 +101,7 @@ Repo-specific maintainer rule:
 For adaptive setup instead of the basic installer:
 
 ```bash
-npx codex-sdlc-wizard@0.7.0 setup --yes
+npx codex-sdlc-wizard@0.7.1 setup --yes
 ```
 
 If you want Codex to discover this as a reusable skill, install this repository through the normal GitHub skill-install flow. The repo root now contains `SKILL.md` and `agents/openai.yaml`, while the bundled skill behavior still delegates real repo mutation to `install.sh` / `setup.sh`.
@@ -176,40 +147,6 @@ When you dogfood this wizard in a product repo, keep the active session focused 
 
 This keeps dogfooding useful without turning every implementation session into wizard meta-work.
 
-## Auth-Heavy Workflow Boundaries
-
-Some repos still hit auth-heavy steps that the agent cannot finish fully on your behalf, especially on Windows when Microsoft Graph auth lands in WAM / MFA / browser sign-in flows.
-
-What stays agent-owned:
-- command shape and wrapper scripts
-- prerequisite checks and environment validation
-- outcome classification and next-step guidance
-- verify/resume commands after the live sign-in completes
-
-What stays user-owned:
-- your live Windows / browser sign-in interaction
-- WAM / MFA approval prompts that land in your session
-
-How repos should wrap these flows:
-1. give Codex an explicit auth-start command
-2. let the user complete the live sign-in step
-3. give Codex an explicit verify/resume command so the workflow continues cleanly afterward
-
-This should be presented as a boundary, not a refusal. The agent is not refusing the work; it still owns setup, checks, classification, and the resume path, while your live sign-in remains user-owned.
-
-## Capability Detectors for Auth / License-Sensitive Repos
-
-If account type, tenant shape, licensing, or permission state determines what is possible in a repo, do not leave users hand-running vague provider commands.
-
-Prefer a repo-local helper such as:
-- `doctor`
-- `check-capability`
-- `Test-*Access.ps1`
-
-Bias setup and troubleshooting toward one-command classification first. The goal is to turn provider vagueness into explicit repo-owned signals like `OK`, `NotConnected`, `PermissionError`, or `UnsupportedAccount`.
-
-Treat account type, license, tenant, and permission state as setup data, not just troubleshooting noise. Codex should be able to run the detector, classify the current lane, and continue from a clear starting point.
-
 ## Releases
 
 Versioned releases for this adapter live at:
@@ -220,7 +157,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.0
+npx codex-sdlc-wizard@0.7.1
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -230,7 +167,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.0 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.1 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow
