@@ -326,6 +326,21 @@ test_agents_md_size() {
     fi
 }
 
+# Test 19: E2E harness skips known sandboxed Codex startup failures instead of failing noisily
+test_e2e_harness_skips_known_sandbox_startup_failure() {
+    local has_warning_signature=true
+    local has_skip_reason=true
+
+    grep -q 'could not update PATH: Operation not permitted' "$REPO_DIR/tests/test-e2e.sh" || has_warning_signature=false
+    grep -q 'sandbox blocks real Codex session startup' "$REPO_DIR/tests/test-e2e.sh" || has_skip_reason=false
+
+    if [ "$has_warning_signature" = "true" ] && [ "$has_skip_reason" = "true" ]; then
+        pass "test-e2e.sh skips the known sandboxed Codex startup failure mode"
+    else
+        fail "test-e2e.sh does not document or skip the known sandboxed Codex startup failure mode"
+    fi
+}
+
 # ---- Run all tests ----
 
 test_sdlc_prompt_keywords
@@ -346,6 +361,7 @@ test_install_preserves_agents_md
 test_install_merges_config
 test_install_backs_up_hooks_json
 test_agents_md_size
+test_e2e_harness_skips_known_sandbox_startup_failure
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

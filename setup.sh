@@ -11,12 +11,36 @@ source "$SCRIPT_DIR/templates/domain-testing-sections.sh"
 # ---- Parse args ----
 AUTO_YES=false
 FORCE=false
-for arg in "$@"; do
-    case "$arg" in
+MODEL_PROFILE="mixed"
+MODEL_PROFILE_SET=false
+while [ $# -gt 0 ]; do
+    case "$1" in
         --yes|-y) AUTO_YES=true ;;
         --force) FORCE=true ;;
+        --model-profile)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Missing value for --model-profile (expected: mixed or maximum)" >&2
+                exit 1
+            fi
+            MODEL_PROFILE="$1"
+            MODEL_PROFILE_SET=true
+            ;;
+        --model-profile=*)
+            MODEL_PROFILE="${1#*=}"
+            MODEL_PROFILE_SET=true
+            ;;
     esac
+    shift
 done
+
+case "$MODEL_PROFILE" in
+    mixed|maximum) ;;
+    *)
+        echo "Unsupported model profile: $MODEL_PROFILE (expected: mixed or maximum)" >&2
+        exit 1
+        ;;
+esac
 
 # ---- Step 1: Scan project ----
 echo "Scanning project..."
@@ -68,6 +92,17 @@ echo ""
 
 # ---- Step 2: Confirm ----
 if [ "$AUTO_YES" = "false" ]; then
+    if [ "$MODEL_PROFILE_SET" = "false" ]; then
+        read -rp "Model profile [mixed/maximum] (default: mixed): " model_choice
+        case "$model_choice" in
+            ""|mixed) MODEL_PROFILE="mixed" ;;
+            maximum) MODEL_PROFILE="maximum" ;;
+            *)
+                echo "Unsupported model profile: $model_choice (expected: mixed or maximum)" >&2
+                exit 1
+                ;;
+        esac
+    fi
     read -rp "Proceed with setup? [Y/n] " confirm
     case "$confirm" in
         [nN]*) echo "Aborted."; exit 0 ;;
@@ -93,6 +128,7 @@ substitute_template() {
         -e "s|{{SETUP_CONFIDENCE}}|${CONFIDENCE_OVERALL}|g" \
         -e "s|{{SETUP_KNOWN_SUMMARY}}|${CONFIDENCE_KNOWN_SUMMARY:-none}|g" \
         -e "s|{{SETUP_UNRESOLVED_SUMMARY}}|${CONFIDENCE_UNRESOLVED_SUMMARY:-none}|g" \
+        -e "s|{{MODEL_PROFILE}}|${MODEL_PROFILE}|g" \
         "$template"
 }
 
@@ -137,7 +173,7 @@ generate_testing_md
 
 # ---- Step 4: Run install.sh (hooks + config) ----
 echo ""
-bash "$SCRIPT_DIR/install.sh"
+bash "$SCRIPT_DIR/install.sh" --model-profile "$MODEL_PROFILE"
 
 # ---- Step 5: Write manifest ----
 mkdir -p .codex-sdlc
@@ -163,9 +199,11 @@ jq -n \
     --arg confidence_overall "$CONFIDENCE_OVERALL" \
     --argjson confidence_known "$(echo "$SCAN_JSON" | jq -c '.confidence_map.known')" \
     --argjson confidence_unresolved "$(echo "$SCAN_JSON" | jq -c '.confidence_map.unresolved')" \
+    --arg model_profile "$MODEL_PROFILE" \
     --arg agents_hash "$(compute_hash AGENTS.md)" \
     --arg testing_hash "$(compute_hash TESTING.md)" \
     --arg arch_hash "$(compute_hash ARCHITECTURE.md)" \
+    --arg model_profile_hash "$(compute_hash .codex-sdlc/model-profile.json)" \
     --arg hooks_json_hash "$(compute_hash .codex/hooks.json)" \
     --arg bash_guard_hash "$(compute_hash .codex/hooks/bash-guard.sh)" \
     --arg prompt_check_hash "$(compute_hash .codex/hooks/sdlc-prompt-check.sh)" \
@@ -186,10 +224,14 @@ jq -n \
             known: $confidence_known,
             unresolved: $confidence_unresolved
         },
+        model_profile: {
+            selected_profile: $model_profile
+        },
         managed_files: {
             "AGENTS.md": $agents_hash,
             "TESTING.md": $testing_hash,
             "ARCHITECTURE.md": $arch_hash,
+            ".codex-sdlc/model-profile.json": $model_profile_hash,
             ".codex/hooks.json": $hooks_json_hash,
             ".codex/hooks/bash-guard.sh": $bash_guard_hash,
             ".codex/hooks/sdlc-prompt-check.sh": $prompt_check_hash,
@@ -206,7 +248,7 @@ echo "Created $MANIFEST"
 echo ""
 echo "Verifying installation..."
 ERRORS=0
-for f in AGENTS.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .agents/skills/sdlc/SKILL.md .agents/skills/adlc/SKILL.md; do
+for f in AGENTS.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .codex-sdlc/model-profile.json .agents/skills/sdlc/SKILL.md .agents/skills/adlc/SKILL.md; do
     if [ ! -f "$f" ]; then
         echo "  MISSING: $f"
         ERRORS=$((ERRORS + 1))
@@ -218,7 +260,12 @@ if [ "$ERRORS" -eq 0 ]; then
     echo ""
     echo "Setup complete. Trust this repo in Codex, then start with 'codex --full-auto'."
     echo "Use plain 'codex' instead if you want more manual confirmation."
-    echo "Repo-scoped skills will be available in a fresh Codex session: '\$sdlc' and '\$adlc'."
+    echo "Model profile: '$MODEL_PROFILE'."
+    echo "  - mixed: gpt-5.4-mini main pass + gpt-5.4 xhigh review for better speed, lower latency, and lower token usage."
+    echo "  - maximum: gpt-5.4 xhigh throughout for maximum stability and the most thorough \"ultimate mode\"."
+    echo "If confidence drops below 95%, research more first. If it still stays below 95%, escalate review to xhigh."
+    echo "Repo-scoped skills are still a work in progress. Today the supported public workflow skill is '\$sdlc'."
+    echo "Future repo-scoped skills like 'gdlc' and 'rdlc' are planned next."
     echo "If a repo hits Windows / WAM / MFA sign-in, the live prompt remains user-owned in your session."
     echo "Let Codex handle the wrapped checks, then resume with the verify step after you complete sign-in."
     echo "For auth / license-sensitive repos, add a repo-local doctor / check-capability / Test-*Access helper."

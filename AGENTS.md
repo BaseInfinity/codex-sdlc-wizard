@@ -2,7 +2,7 @@
 
 ## Before Every Task
 1. Plan before coding — outline steps, state confidence (HIGH/MEDIUM/LOW)
-2. LOW confidence? Research more or ASK USER
+2. If confidence is below 95%, research more first. If it still stays below 95%, escalate review to xhigh or switch to the maximum model profile for abstract, complex, or high-blast-radius work.
 3. Write failing test FIRST (TDD RED), then implement (TDD GREEN)
 4. ALL tests must pass before commit — no exceptions
 
@@ -23,3 +23,18 @@
 - Less is more — don't add what wasn't asked for
 - Tests ARE code — treat test failures as bugs
 - NEVER commit without running tests first
+
+## Honest Codex Shape
+- `skills = explicit workflow layer`
+- `hooks = silent event enforcement`
+- `repo docs = source of local truth`
+
+## Repo Focus
+- Keep slices small enough that confidence stays high in practice
+- Always state confidence on meaningful work
+- File a direct GitHub issue for proven reusable wizard findings
+- Keep the active session focused on the product repo unless it is actually blocked
+
+## Model Profiles
+- `mixed`: `gpt-5.4-mini` main pass plus `gpt-5.4` `xhigh` review for better speed and lower token usage
+- `maximum`: `gpt-5.4` `xhigh` throughout for maximum stability and depth

@@ -123,6 +123,25 @@ test_readme_documents_maintainer_release_steps() {
     fi
 }
 
+test_roadmap_tests_are_version_agnostic() {
+    local roadmap_test="$REPO_DIR/tests/test-roadmap.sh"
+    local reads_package_version=true
+    local avoids_hardcoded_050=true
+    local avoids_hardcoded_060=true
+
+    grep -q 'package_version=' "$roadmap_test" || reads_package_version=false
+    grep -q '0\.5\.0' "$roadmap_test" && avoids_hardcoded_050=false
+    grep -q '0\.6\.0' "$roadmap_test" && avoids_hardcoded_060=false
+
+    if [ "$reads_package_version" = "true" ] &&
+       [ "$avoids_hardcoded_050" = "true" ] &&
+       [ "$avoids_hardcoded_060" = "true" ]; then
+        pass "Roadmap tests derive the current release version instead of hard-coding an old one"
+    else
+        fail "Roadmap tests still hard-code the current release version"
+    fi
+}
+
 test_release_workflow_exists
 test_release_workflow_triggers_on_semver_tags
 test_release_workflow_supports_manual_dispatch
@@ -130,6 +149,7 @@ test_release_workflow_can_publish_release
 test_release_workflow_can_publish_npm
 test_readme_documents_versioned_release_path
 test_readme_documents_maintainer_release_steps
+test_roadmap_tests_are_version_agnostic
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

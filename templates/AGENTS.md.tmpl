@@ -16,12 +16,21 @@ Read ARCHITECTURE.md for system context before architectural changes.
 
 This project follows a strict Software Development Life Cycle. The goal is not speed — it is confidence. Every change should be planned, tested, and reviewed before it ships. If these docs don't fully match your project yet, improve them as you learn.
 
+## Honest Codex Shape
+
+- `skills = explicit workflow layer`
+- `hooks = silent event enforcement`
+- `repo docs = source of local truth`
+
+Use skills for the visible workflow contract, let hooks enforce silently, and keep these repo docs as the local truth. Do not pretend Codex has native slash commands when it does not.
+
 ## Before Every Task
 
 1. **Plan first.** State your approach and confidence level before writing code
    - HIGH (90%+): Know exactly what to do — proceed after stating approach
    - MEDIUM (60-89%): Solid approach, some unknowns — highlight uncertainties
    - LOW (<60%): Not sure — do more research or ASK the user before proceeding
+   - Always state confidence on meaningful work, and keep slices small enough that confidence stays high in practice
 2. **TDD Red:** Write a failing test FIRST that proves the feature/fix is needed
 3. **TDD Green:** Implement the minimum code to make the test pass
 4. **Run ALL tests** — not just the new one. No exceptions
@@ -40,6 +49,13 @@ If any command above shows N/A, figure out the right command for this project an
 
 - Known: {{SETUP_KNOWN_SUMMARY}}
 - Unresolved: {{SETUP_UNRESOLVED_SUMMARY}}
+
+## Model Profile
+
+- Selected profile: {{MODEL_PROFILE}}
+- `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.4` at `xhigh` for review. Use this when you want better speed, lower latency, and lower token usage on routine work.
+- `maximum`: `gpt-5.4` at `xhigh` for the whole slice. Use this as the stability-first "ultimate mode" for abstract, complex, or high-blast-radius work.
+- If confidence is below `95%`, research more first. If it still stays below `95%`, escalate review to `xhigh`.
 
 ## Capability Detectors
 
@@ -87,6 +103,12 @@ After implementation, BEFORE presenting to the user:
 - Test code is production code — same quality standards
 - Every bug fix starts with a failing test that reproduces the bug
 - If you fail twice on the same problem, STOP and ask the user
+
+## Feedback and Repo Focus
+
+- If you uncover a proven reusable wizard lesson, prefer filing a direct GitHub issue instead of leaving a loose note
+- Keep the active session focused on the product repo
+- Only switch to live wizard work when the product repo is actually blocked
 
 ## Self-Improving
 

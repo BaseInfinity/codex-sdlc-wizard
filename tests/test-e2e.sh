@@ -27,8 +27,19 @@ if ! command -v codex >/dev/null 2>&1; then
 fi
 
 echo "=== Codex SDLC Adapter E2E Tests ==="
-echo "Codex version: $(codex --version 2>&1)"
+CODEX_VERSION_OUTPUT="$(codex --version 2>&1)"
+echo "Codex version: $CODEX_VERSION_OUTPUT"
 echo ""
+
+# Workspace sandboxing can block Codex from updating PATH during startup, which
+# prevents real sessions from booting and turns this suite into a false negative.
+# Skip the whole E2E suite in that environment and require an unsandboxed rerun.
+if echo "$CODEX_VERSION_OUTPUT" | grep -q 'could not update PATH: Operation not permitted'; then
+    skip "E2E: workspace sandbox blocks real Codex session startup — rerun tests/test-e2e.sh outside the sandbox"
+    echo ""
+    echo "=== E2E Results: $PASSED passed, $FAILED failed, $SKIPPED skipped ==="
+    exit 0
+fi
 
 # Create a test workspace with the adapter installed
 setup_workspace() {

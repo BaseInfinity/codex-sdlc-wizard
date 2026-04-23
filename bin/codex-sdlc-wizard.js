@@ -15,11 +15,15 @@ Commands:
 
 Options:
   --setup        Alias for the setup command
+  --model-profile <mixed|maximum>
+                Wizard-owned profile toggle. 'mixed' favors speed/token
+                efficiency with xhigh review; 'maximum' favors stability.
   --help, -h     Show this help
 
 Examples:
   npx codex-sdlc-wizard
   npx codex-sdlc-wizard setup --yes
+  npx codex-sdlc-wizard setup --yes --model-profile maximum
   npx codex-sdlc-wizard --setup --yes --force
 `);
 }

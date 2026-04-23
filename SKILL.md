@@ -18,7 +18,9 @@ Use the bundled scripts like this:
 2. If the user wants repo-aware setup or regenerated docs, run the bundled `setup.sh --yes` from this skill bundle against the current working repo.
 3. Tell the user exactly which path you chose: `install.sh` for baseline enforcement, `setup.sh` for adaptive setup.
 4. After installation, tell the user to start a fresh Codex session so hooks and repo docs are loaded cleanly. Recommend `codex --full-auto` as the default start mode once the guardrails are installed, and mention plain `codex` as the manual fallback.
-   The fresh session should also pick up the repo-scoped `\$sdlc` and `\$adlc` skills under `.agents/skills`.
+   The fresh session should also pick up the repo-scoped `\$sdlc` skill under `.agents/skills`. Repo-scoped skill coverage is still a work in progress; `gdlc` and `rdlc` are planned next.
+   If the user wants a model profile choice, use the `mixed` profile via `--model-profile mixed` for the better speed / lower latency / lower token path with `xhigh` review, or the `maximum` profile via `--model-profile maximum` for the stability-first "ultimate mode".
+   Interactive `setup` should ask for the profile when the user does not pass `--yes` or `--model-profile`.
 5. For auth-heavy Windows / WAM / MFA flows, say plainly that the live sign-in remains user-owned, while Codex still owns command shape, checks, and the verify/resume path after the user completes sign-in.
 6. For auth / license-sensitive repos, encourage a repo-local capability detector such as `doctor`, `check-capability`, or `Test-*Access.ps1` so Codex can start from one-command classification instead of raw provider commands.
 
