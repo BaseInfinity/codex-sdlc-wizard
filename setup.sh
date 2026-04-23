@@ -512,7 +512,7 @@ refresh_setup_template_values() {
 confirm_detected_values() {
     local answer=""
 
-    printf "Use detected values above? [Y/n]: " >&2
+    printf "Use scan results above and continue? [Y/n]: " >&2
     IFS= read -r answer || answer=""
     case "$answer" in
         [nN]*) return 1 ;;
@@ -608,6 +608,8 @@ apply_auto_yes_defaults() {
 }
 
 collect_setup_answers() {
+    local edit_mode=false
+
     if [ "$AUTO_YES" = "true" ]; then
         apply_auto_yes_defaults
         return 0
@@ -615,23 +617,26 @@ collect_setup_answers() {
 
     show_setup_resolution_map
     if ! confirm_detected_values; then
+        edit_mode=true
         collect_detected_overrides
     fi
 
-    [ -z "$SOURCE_DIR" ] && SOURCE_DIR=$(prompt_with_default "Set source directory")
-    [ -z "$TEST_DIR" ] && TEST_DIR=$(prompt_with_default "Set test directory")
-    [ -z "$TEST_FRAMEWORK" ] && TEST_FRAMEWORK=$(prompt_with_default "Set test framework")
-    [ -z "$TEST_COMMAND" ] && TEST_COMMAND=$(prompt_with_default "Set test command")
-    [ -z "$LINT_COMMAND" ] && LINT_COMMAND=$(prompt_with_default "Set lint command")
-    [ -z "$TYPECHECK_COMMAND" ] && TYPECHECK_COMMAND=$(prompt_with_default "Set type-check command" "none")
-    [ -z "$SINGLE_TEST_COMMAND" ] && SINGLE_TEST_COMMAND=$(prompt_with_default "Set single test command" "none")
-    [ -z "$BUILD_COMMAND" ] && BUILD_COMMAND=$(prompt_with_default "Set build command")
-    [ -z "$DEPLOYMENT_SETUP" ] && DEPLOYMENT_SETUP=$(prompt_with_default "Deployment setup" "none")
-    [ -z "$DATABASES" ] && DATABASES=$(prompt_with_default "Database(s)" "none")
-    [ -z "$CACHE_LAYER" ] && CACHE_LAYER=$(prompt_with_default "Caching layer" "none")
-    [ -z "$TEST_DURATION" ] && TEST_DURATION=$(prompt_with_default "Test duration expectation" "unknown")
-    [ -z "$TEST_TYPES" ] && TEST_TYPES=$(prompt_with_default "Test types present" "none")
-    [ -z "$COVERAGE_CONFIG" ] && COVERAGE_CONFIG=$(prompt_with_default "Coverage config" "none")
+    if [ "$edit_mode" = "true" ]; then
+        [ -z "$SOURCE_DIR" ] && SOURCE_DIR=$(prompt_with_default "Set source directory")
+        [ -z "$TEST_DIR" ] && TEST_DIR=$(prompt_with_default "Set test directory")
+        [ -z "$TEST_FRAMEWORK" ] && TEST_FRAMEWORK=$(prompt_with_default "Set test framework")
+        [ -z "$TEST_COMMAND" ] && TEST_COMMAND=$(prompt_with_default "Set test command")
+        [ -z "$LINT_COMMAND" ] && LINT_COMMAND=$(prompt_with_default "Set lint command")
+        [ -z "$TYPECHECK_COMMAND" ] && TYPECHECK_COMMAND=$(prompt_with_default "Set type-check command" "none")
+        [ -z "$SINGLE_TEST_COMMAND" ] && SINGLE_TEST_COMMAND=$(prompt_with_default "Set single test command" "none")
+        [ -z "$BUILD_COMMAND" ] && BUILD_COMMAND=$(prompt_with_default "Set build command")
+        [ -z "$DEPLOYMENT_SETUP" ] && DEPLOYMENT_SETUP=$(prompt_with_default "Deployment setup" "none")
+        [ -z "$DATABASES" ] && DATABASES=$(prompt_with_default "Database(s)" "none")
+        [ -z "$CACHE_LAYER" ] && CACHE_LAYER=$(prompt_with_default "Caching layer" "none")
+        [ -z "$TEST_DURATION" ] && TEST_DURATION=$(prompt_with_default "Test duration expectation" "unknown")
+        [ -z "$TEST_TYPES" ] && TEST_TYPES=$(prompt_with_default "Test types present" "none")
+        [ -z "$COVERAGE_CONFIG" ] && COVERAGE_CONFIG=$(prompt_with_default "Coverage config" "none")
+    fi
 
     choose_model_profile
     GIT_WORKFLOW=$(prompt_with_default "Git workflow preference [solo/prs]" "$GIT_WORKFLOW")

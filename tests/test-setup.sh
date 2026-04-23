@@ -437,14 +437,43 @@ test_setup_interactive_only_asks_preferences() {
     fi
 }
 
-# ---- Test 17: interactive setup asks missing core facts only when they are unresolved ----
+# ---- Test 17: interactive setup fast path skips unresolved repo facts after scan acceptance ----
+test_setup_interactive_accepts_scan_without_prompting_optional_blanks() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    cat > "$ws/package.json" <<'EOF'
+{"name":"test-app","scripts":{"test":"npm test"}}
+EOF
+    mkdir -p "$ws/tests"
+    touch "$ws/playwright.config.js"
+    touch "$ws/tests/app.e2e.ts"
+
+    local output
+    output=$(run_setup_interactive "$ws" $'\n\n\n\n\n')
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q 'Use scan results above and continue' \
+        && echo "$output" | grep -q 'Response detail preference' \
+        && echo "$output" | grep -q 'Testing approach preference' \
+        && echo "$output" | grep -q 'Mocking philosophy preference' \
+        && ! echo "$output" | grep -q 'Set source directory' \
+        && ! echo "$output" | grep -q 'Set lint command' \
+        && ! echo "$output" | grep -q 'Set type-check command' \
+        && ! echo "$output" | grep -q 'Set build command'; then
+        pass "interactive setup accepts the scan without prompting unresolved optional blanks"
+    else
+        fail "interactive setup still prompted unresolved optional blanks after scan acceptance"
+    fi
+}
+
+# ---- Test 18: interactive setup asks missing core facts when the user enters edit mode ----
 test_setup_interactive_asks_missing_core_facts() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app"}' > "$ws/package.json"
 
     local output
-    output=$(run_setup_interactive "$ws" $'\n\n\n\n\n\n\n\n\n')
+    output=$(run_setup_interactive "$ws" $'n\n\n\n\n\n\n\n\n\n')
     rm -rf "$ws"
 
     if echo "$output" | grep -q 'Set source directory' \
@@ -457,7 +486,7 @@ test_setup_interactive_asks_missing_core_facts() {
     fi
 }
 
-# ---- Test 18: interactive setup asks CI shepherd only when CI is detected ----
+# ---- Test 19: interactive setup asks CI shepherd only when CI is detected ----
 test_setup_interactive_ci_shepherd_is_conditional() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -477,7 +506,7 @@ test_setup_interactive_ci_shepherd_is_conditional() {
     fi
 }
 
-# ---- Test 19: interactive setup separates inferred values from detected values ----
+# ---- Test 20: interactive setup separates inferred values from detected values ----
 test_setup_interactive_shows_inferred_values() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -910,7 +939,7 @@ fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
 
     local valid=true
     [ "$status" -eq 0 ] || valid=false
-    echo "$output" | grep -vq 'Use detected values above' 2>/dev/null || valid=false
+    echo "$output" | grep -vq 'Use scan results above and continue' 2>/dev/null || valid=false
     [ -f "$ws/SDLC.md" ] || valid=false
     [ -f "$ws/TESTING.md" ] || valid=false
     [ -f "$ws/ARCHITECTURE.md" ] || valid=false
@@ -975,6 +1004,7 @@ test_generated_no_placeholders
 test_agents_md_read_directives
 test_setup_generates_sdlc_md
 test_setup_interactive_only_asks_preferences
+test_setup_interactive_accepts_scan_without_prompting_optional_blanks
 test_setup_interactive_asks_missing_core_facts
 test_setup_interactive_ci_shepherd_is_conditional
 test_setup_interactive_shows_inferred_values
