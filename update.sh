@@ -187,7 +187,10 @@ if [ "$REPO_STATE" != "initialized" ]; then
     exit 1
 fi
 
-mapfile -t STATUS_LINES < <(
+STATUS_LINES=()
+while IFS= read -r status_line; do
+    STATUS_LINES+=("$status_line")
+done < <(
     UPDATE_CHECK_JSON="$CHECK_JSON" node -e '
 const data = JSON.parse(process.env.UPDATE_CHECK_JSON || "{}");
 
@@ -209,18 +212,30 @@ CHANGES_PENDING=false
 RUN_REGENERATE=false
 REGENERATE_FORCE=false
 
+array_contains() {
+    local needle="$1"
+    shift
+    local item
+
+    for item in "$@"; do
+        if [ "$item" = "$needle" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 queue_static_repair() {
     local relative_path="$1"
-    if [ -z "${STATIC_REPAIR_SET[$relative_path]+x}" ]; then
-        STATIC_REPAIR_SET["$relative_path"]=1
+    if [ "${#STATIC_REPAIRS[@]}" -eq 0 ] || ! array_contains "$relative_path" "${STATIC_REPAIRS[@]}"; then
         STATIC_REPAIRS+=("$relative_path")
     fi
 }
 
 queue_skill_repair() {
     local skill_name="$1"
-    if [ -z "${SKILL_REPAIR_SET[$skill_name]+x}" ]; then
-        SKILL_REPAIR_SET["$skill_name"]=1
+    if [ "${#SKILL_REPAIRS[@]}" -eq 0 ] || ! array_contains "$skill_name" "${SKILL_REPAIRS[@]}"; then
         SKILL_REPAIRS+=("$skill_name")
     fi
 }
@@ -366,15 +381,19 @@ fi
 
 echo ""
 echo "Applying planned updates..."
-for relative_path in "${STATIC_REPAIRS[@]}"; do
-    repair_managed_file "$relative_path"
-    echo "Applied: $relative_path"
-done
+if [ "${#STATIC_REPAIRS[@]}" -gt 0 ]; then
+    for relative_path in "${STATIC_REPAIRS[@]}"; do
+        repair_managed_file "$relative_path"
+        echo "Applied: $relative_path"
+    done
+fi
 
-for skill_name in "${SKILL_REPAIRS[@]}"; do
-    repair_skill "$skill_name"
-    echo "Applied: skills/$skill_name"
-done
+if [ "${#SKILL_REPAIRS[@]}" -gt 0 ]; then
+    for skill_name in "${SKILL_REPAIRS[@]}"; do
+        repair_skill "$skill_name"
+        echo "Applied: skills/$skill_name"
+    done
+fi
 
 for legacy_name in "${LEGACY_SKILL_REMOVALS[@]}"; do
     remove_legacy_skill "$legacy_name"

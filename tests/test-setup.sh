@@ -1005,7 +1005,7 @@ test_setup_hashes_manifest_without_shell_hash_tools() {
     fi
 }
 
-# ---- Test 33: interactive setup uses codex exec with gpt-5.4 xhigh reasoning when available ----
+# ---- Test 33: interactive setup uses codex exec with gpt-5.5 xhigh reasoning when available ----
 test_setup_uses_codex_xhigh_reasoning_when_available() {
     local ws
     local fakebin
@@ -1092,7 +1092,7 @@ EOF
     grep -qx 'read-only' "$args_file" 2>/dev/null || valid=false
     grep -qx -- '--skip-git-repo-check' "$args_file" 2>/dev/null || valid=false
     grep -qx -- '--output-schema' "$args_file" 2>/dev/null || valid=false
-    grep -qx 'model="gpt-5.4"' "$args_file" 2>/dev/null || valid=false
+    grep -qx 'model="gpt-5.5"' "$args_file" 2>/dev/null || valid=false
     grep -qx 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
     echo "$output" | grep -vq 'Set source directory' 2>/dev/null || valid=false
     grep -q 'Source directory: `app/`' "$ws/SDLC.md" 2>/dev/null || valid=false
@@ -1103,7 +1103,7 @@ EOF
     rm -rf "$ws" "$fakebin"
 
     if [ "$valid" = "true" ]; then
-        pass "interactive setup uses codex exec with gpt-5.4 xhigh reasoning when available"
+        pass "interactive setup uses codex exec with gpt-5.5 xhigh reasoning when available"
     else
         fail "interactive setup did not use the codex xhigh reasoning path correctly"
     fi

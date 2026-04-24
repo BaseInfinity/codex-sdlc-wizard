@@ -71,13 +71,13 @@ function Merge-CodexModelConfig {
         "mixed" {
             @{
                 model = "gpt-5.4-mini"
-                effort = "xhigh"
-                review = "gpt-5.4"
+                effort = "medium"
+                review = "gpt-5.5"
             }
         }
         "maximum" {
             @{
-                model = "gpt-5.4"
+                model = "gpt-5.5"
                 effort = "xhigh"
                 review = $null
             }

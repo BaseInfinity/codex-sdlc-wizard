@@ -473,8 +473,8 @@ test_sdlc_skill_has_docsync_learning_and_merge_guard() {
 test_repo_defaults_to_xhigh_reasoning() {
     local all_passed=true
 
-    if ! grep -q 'default to XHIGH' "$REPO_DIR/AGENTS.md"; then
-        fail "AGENTS.md does not set XHIGH as the default reasoning policy"
+    if ! grep -Eiq 'gpt-5\.5.*xhigh|xhigh.*gpt-5\.5' "$REPO_DIR/AGENTS.md"; then
+        fail "AGENTS.md does not set gpt-5.5 xhigh as the default reasoning policy"
         all_passed=false
     fi
 
@@ -495,6 +495,16 @@ test_repo_defaults_to_xhigh_reasoning() {
 
     if ! grep -q 'Use xhigh reasoning by default' "$REPO_DIR/START-SDLC.md"; then
         fail "START-SDLC.md does not set xhigh as the default reasoning policy"
+        all_passed=false
+    fi
+
+    if grep -Eq 'gpt-5\.4(["` ,]|$)' \
+        "$REPO_DIR/.codex/config.toml" \
+        "$REPO_DIR/lib/codex-config.sh" \
+        "$REPO_DIR/install.sh" \
+        "$REPO_DIR/install.ps1" \
+        "$REPO_DIR/README.md"; then
+        fail "repo model/config surface still contains non-mini gpt-5.4"
         all_passed=false
     fi
 

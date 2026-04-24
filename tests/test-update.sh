@@ -296,7 +296,7 @@ EOF
     check_output=$(run_check "$ws")
 
     grep -q 'codex_hooks = true' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    grep -q '^model = "gpt-5.4"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model = "gpt-5.5"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q '^review_model =' "$ws/.codex/config.toml" 2>/dev/null && valid=false
     grep -q 'name = "o3"' "$ws/.codex/config.toml" 2>/dev/null || valid=false

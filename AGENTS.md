@@ -3,9 +3,9 @@
 ## Before Every Task
 1. Plan before coding - outline steps, state confidence (HIGH/MEDIUM/LOW)
 2. LOW confidence? Research more or ASK USER
-3. Reasoning policy - default to XHIGH for this repo
-4. Keep XHIGH as the normal path in this repo unless the user explicitly asks for less
-5. Keep this repo on maximum because codex-sdlc-wizard is unusually meta and high-blast-radius
+3. Reasoning policy - use `gpt-5.5` with `xhigh` reasoning for this repo
+4. Always keep this repo on `gpt-5.5` `xhigh`; do not switch wizard-repo work to `mixed`, mini-only, or lower-reasoning profiles
+5. Keep this repo on `maximum` (`gpt-5.5` `xhigh` throughout) because codex-sdlc-wizard is unusually meta and high-blast-radius
 6. Write failing test FIRST (TDD RED), then implement (TDD GREEN)
 7. ALL tests must pass before commit - no exceptions
 

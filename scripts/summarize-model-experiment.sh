@@ -1,5 +1,5 @@
 #!/bin/bash
-# Summarize the gpt-5.4-mini + xhigh-review experiment against all-xhigh.
+# Summarize the gpt-5.4-mini + gpt-5.5 xhigh-review experiment against all-xhigh.
 
 set -euo pipefail
 

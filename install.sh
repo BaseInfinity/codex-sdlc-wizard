@@ -153,15 +153,15 @@ write_model_profile() {
   "profiles": {
     "mixed": {
       "main_model": "gpt-5.4-mini",
-      "main_reasoning": "xhigh",
-      "review_model": "gpt-5.4",
+      "main_reasoning": "medium",
+      "review_model": "gpt-5.5",
       "review_reasoning": "xhigh",
       "tradeoff": "Smaller/faster main model for routine work while keeping xhigh reasoning and xhigh review."
     },
     "maximum": {
-      "main_model": "gpt-5.4",
+      "main_model": "gpt-5.5",
       "main_reasoning": "xhigh",
-      "review_model": "gpt-5.4",
+      "review_model": "gpt-5.5",
       "review_reasoning": "xhigh",
       "tradeoff": "Higher latency and token usage in exchange for maximum stability and depth."
     }
@@ -227,8 +227,8 @@ echo "Recommended start: 'codex --full-auto' for low-friction SDLC inside the re
 echo "Use plain 'codex' instead if you want more manual confirmation."
 echo "If you close or interrupt the handoff, resume with 'codex resume --full-auto' when Codex gives you a resume id."
 echo "Model profile: '$MODEL_PROFILE'."
-echo "  - mixed: gpt-5.4-mini xhigh main pass + gpt-5.4 xhigh review for better speed, lower latency, and lower token usage."
-echo "  - maximum: gpt-5.4 xhigh throughout for maximum stability and the most thorough \"ultimate mode\"."
+echo "  - mixed: gpt-5.4-mini main pass + gpt-5.5 xhigh review for better speed, lower latency, and lower token usage."
+echo "  - maximum: gpt-5.5 xhigh throughout for maximum stability and the most thorough \"ultimate mode\"."
 echo "Wrote repo-local .codex/config.toml model keys for this profile; mixed is wizard policy, not a native Codex mode."
 echo "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
 echo "If confidence drops below 95%, research more first. If it still stays below 95%, escalate review to xhigh."

@@ -208,7 +208,7 @@ test_local_npx_setup_honors_model_profile_flag() {
         if [ ! -f "$target_repo/.codex-sdlc/model-profile.json" ] ||
            ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.selected_profile === "maximum"'; then
             configured=false
-        elif ! grep -q '^model = "gpt-5.4"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        elif ! grep -q '^model = "gpt-5.5"' "$target_repo/.codex/config.toml" 2>/dev/null; then
             configured=false
         elif ! grep -q '^model_reasoning_effort = "xhigh"' "$target_repo/.codex/config.toml" 2>/dev/null; then
             configured=false
@@ -285,7 +285,7 @@ test_packed_tarball_scratch_smoke() {
 }
 
 test_default_interactive_hands_off_to_codex() {
-    local ws fakebin fakebin_win codex_home args_file input_file output
+    local ws fakebin fakebin_win codex_bin codex_path_entry codex_home args_file input_file output
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -297,6 +297,17 @@ test_default_interactive_hands_off_to_codex() {
     touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
     printf '\n' > "$input_file"
 
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ -n "${FAKE_CODEX_ARGS_FILE:-}" ]; then
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$FAKE_CODEX_ARGS_FILE"
+  done
+fi
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
     cat > "$fakebin/codex.cmd" <<'EOF'
 @echo off
 if not "%FAKE_CODEX_ARGS_FILE%"=="" (
@@ -305,15 +316,21 @@ if not "%FAKE_CODEX_ARGS_FILE%"=="" (
 exit /b 0
 EOF
 
-    fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null || printf '%s' "$fakebin")
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+        codex_bin="$fakebin_win\\codex.cmd"
+        codex_path_entry="$fakebin_win"
+    else
+        codex_bin="$fakebin/codex"
+        codex_path_entry="$fakebin"
+    fi
 
     output=$(
         cd "$ws" && \
         CODEX_HOME="$codex_home" \
-        CODEX_SDLC_CODEX_BIN="$fakebin_win\\codex.cmd" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
         FAKE_CODEX_ARGS_FILE="$args_file" \
-        PATH="$fakebin_win;$PATH" \
+        PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" 2>&1
     ) || true
 
@@ -325,8 +342,8 @@ EOF
     grep -Fq -- '--full-auto' "$args_file" 2>/dev/null && valid=false
     grep -Fq -- '-C' "$args_file" 2>/dev/null || valid=false
     grep -Fq -- '-m' "$args_file" 2>/dev/null || valid=false
-    grep -Fq 'gpt-5.4' "$args_file" 2>/dev/null || valid=false
-    grep -Fq "model_reasoning_effort='xhigh'" "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'gpt-5.5' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
     grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
     echo "$output" | grep -Fq 'Choose first-run Codex handoff mode' || valid=false
     echo "$output" | grep -Fq 'Press Enter: plain codex (recommended)' || valid=false
@@ -346,7 +363,7 @@ EOF
 }
 
 test_full_auto_handoff_choice_is_explicit() {
-    local ws fakebin fakebin_win codex_home args_file input_file output
+    local ws fakebin fakebin_win codex_bin codex_path_entry codex_home args_file input_file output
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -358,6 +375,17 @@ test_full_auto_handoff_choice_is_explicit() {
     touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
     printf 'full-auto\n' > "$input_file"
 
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ -n "${FAKE_CODEX_ARGS_FILE:-}" ]; then
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$FAKE_CODEX_ARGS_FILE"
+  done
+fi
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
     cat > "$fakebin/codex.cmd" <<'EOF'
 @echo off
 if not "%FAKE_CODEX_ARGS_FILE%"=="" (
@@ -366,20 +394,28 @@ if not "%FAKE_CODEX_ARGS_FILE%"=="" (
 exit /b 0
 EOF
 
-    fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null || printf '%s' "$fakebin")
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+        codex_bin="$fakebin_win\\codex.cmd"
+        codex_path_entry="$fakebin_win"
+    else
+        codex_bin="$fakebin/codex"
+        codex_path_entry="$fakebin"
+    fi
 
     output=$(
         cd "$ws" && \
         CODEX_HOME="$codex_home" \
-        CODEX_SDLC_CODEX_BIN="$fakebin_win\\codex.cmd" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
         FAKE_CODEX_ARGS_FILE="$args_file" \
-        PATH="$fakebin_win;$PATH" \
+        PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" 2>&1
     ) || true
 
     local valid=true
     grep -Fq -- '--full-auto' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'gpt-5.5' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
     grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
     echo "$output" | grep -Fq 'Handing off into Codex for live setup using codex --full-auto' || valid=false
     ! echo "$output" | grep -Fq 'Scanning project...' || valid=false
