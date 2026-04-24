@@ -109,7 +109,7 @@ It also writes the matching repo-local Codex config to `.codex/config.toml` so t
 
 ```toml
 model = "gpt-5.4-mini"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "xhigh"
 review_model = "gpt-5.5"
 
 [features]

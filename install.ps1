@@ -71,7 +71,7 @@ function Merge-CodexModelConfig {
         "mixed" {
             @{
                 model = "gpt-5.4-mini"
-                effort = "medium"
+                effort = "xhigh"
                 review = "gpt-5.5"
             }
         }
@@ -239,7 +239,7 @@ Write-Host "Installed PowerShell hook scripts"
 Write-Host ""
 Write-Host "SDLC Wizard for Codex installed."
 $startModel = if ($ModelProfile -eq "maximum") { "gpt-5.5" } else { "gpt-5.4-mini" }
-$startReasoning = if ($ModelProfile -eq "maximum") { "xhigh" } else { "medium" }
+$startReasoning = "xhigh"
 Write-Host "Recommended start: 'codex --full-auto' for low-friction SDLC inside the repo guardrails."
 Write-Host "Use plain 'codex' instead if you want more manual confirmation."
 Write-Host "Fresh-session note: if you ran this from inside an existing Codex session, exit and reopen Codex in this repo so repo-local config, hooks, and skills load."

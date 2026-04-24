@@ -1121,7 +1121,7 @@ test_setup_writes_mixed_profile_with_xhigh_reasoning() {
     local valid=true
     grep -q '^model = "gpt-5.4-mini"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    grep -q '^review_model = "gpt-5.4"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^review_model = "gpt-5.5"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     if ! json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.main_reasoning' "xhigh"; then
         valid=false
     fi
