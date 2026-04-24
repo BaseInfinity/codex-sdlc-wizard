@@ -271,6 +271,9 @@ test_packed_tarball_scratch_smoke() {
     [ -f "$target_repo/.codex-sdlc/manifest.json" ] || valid=false
     json_has_truthy_file "$target_repo/.codex-sdlc/manifest.json" 'typeof data.managed_files?.["AGENTS.md"] === "string" && /^sha256:[0-9a-f]{64}$/.test(data.managed_files["AGENTS.md"])' || valid=false
     echo "$setup_output" | grep -q 'Setup complete' || valid=false
+    echo "$setup_output" | grep -Eqi 'exit and reopen Codex|restart Codex' || valid=false
+    echo "$setup_output" | grep -q 'codex resume --full-auto -m gpt-5.5' || valid=false
+    echo "$setup_output" | grep -Fq 'model_reasoning_effort="xhigh"' || valid=false
     echo "$setup_output" | grep -q 'shasum: command not found' && valid=false
     echo "$check_output" | grep -q '"status": "match"' || valid=false
     echo "$update_output" | grep -Eq 'No managed files need updates|"status": "match"|match' || valid=false

@@ -169,7 +169,7 @@ test_installer_uses_canonical_sdlc_skill_name() {
     fi
 }
 
-test_installer_recommends_full_auto() {
+test_installer_recommends_full_auto_and_restart_resume() {
     local adapter_clone
     local target_repo
     local output
@@ -185,10 +185,13 @@ test_installer_recommends_full_auto() {
 
     rm -rf "$adapter_clone" "$target_repo"
 
-    if echo "$output" | grep -q "codex --full-auto"; then
-        pass "Installer output recommends codex --full-auto after setup"
+    if echo "$output" | grep -q "codex --full-auto" &&
+       echo "$output" | grep -Eqi 'exit and reopen Codex|restart Codex' &&
+       echo "$output" | grep -q "codex resume --full-auto -m gpt-5.5" &&
+       echo "$output" | grep -Fq 'model_reasoning_effort="xhigh"'; then
+        pass "Installer output recommends codex --full-auto plus restart/resume after setup"
     else
-        fail "Installer output does not recommend codex --full-auto"
+        fail "Installer output does not recommend codex --full-auto plus restart/resume clearly enough"
     fi
 }
 
@@ -600,7 +603,7 @@ test_installer_smoke_test_clean_project
 test_installer_scaffolds_repo_scope_skills
 test_installer_uses_canonical_sdlc_skill_name
 test_installer_writes_default_model_profile
-test_installer_recommends_full_auto
+test_installer_recommends_full_auto_and_restart_resume
 test_installer_mentions_model_profile_tradeoff
 test_installer_calls_out_auth_heavy_boundary
 test_installer_offers_issue_ready_feedback_on_wizard_failure
