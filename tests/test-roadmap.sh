@@ -139,28 +139,31 @@ test_roadmap_tracks_late_creator_investigation() {
     fi
 }
 
-test_roadmap_tracks_review_model_experiment() {
+test_roadmap_tracks_review_model_measurement() {
     local has_mini=true
     local has_xhigh_review=true
-    local has_experiment_language=true
+    local has_measurement_language=true
     local has_toggle_language=true
+    local avoids_experiment_word=true
 
     grep -qi 'gpt-5\.4-mini' "$ROADMAP" || has_mini=false
     grep -Eqi 'xhigh review|review.*xhigh|cross-model review.*xhigh' "$ROADMAP" || has_xhigh_review=false
-    grep -Eqi 'experiment|test against|compare' "$ROADMAP" || has_experiment_language=false
+    grep -Eqi 'measure|measurement|compare|validate|data collection' "$ROADMAP" || has_measurement_language=false
     grep -Eqi 'toggle|profile|switch between|all-xhigh|everything at xhigh' "$ROADMAP" || has_toggle_language=false
+    grep -Eqi 'experiment|experimental|experimentation' "$ROADMAP" && avoids_experiment_word=false
 
     if [ "$has_mini" = "true" ] &&
        [ "$has_xhigh_review" = "true" ] &&
-       [ "$has_experiment_language" = "true" ] &&
-       [ "$has_toggle_language" = "true" ]; then
-        pass "Roadmap tracks the gpt-5.4-mini vs xhigh-review experiment as later work"
+       [ "$has_measurement_language" = "true" ] &&
+       [ "$has_toggle_language" = "true" ] &&
+       [ "$avoids_experiment_word" = "true" ]; then
+        pass "Roadmap tracks gpt-5.4-mini vs xhigh-review measurement without experimental framing"
     else
-        fail "Roadmap does not track the gpt-5.4-mini vs xhigh-review experiment"
+        fail "Roadmap does not track gpt-5.4-mini vs xhigh-review measurement without experimental framing"
     fi
 }
 
-test_roadmap_sets_numeric_model_experiment_targets() {
+test_roadmap_sets_numeric_model_profile_targets() {
     local has_sample_size=true
     local has_success_rate=true
     local has_speed_delta=true
@@ -178,9 +181,9 @@ test_roadmap_sets_numeric_model_experiment_targets() {
        [ "$has_speed_delta" = "true" ] &&
        [ "$has_reopen_rate" = "true" ] &&
        [ "$has_complex_xhigh_rule" = "true" ]; then
-        pass "Roadmap sets numeric targets for the model experiment and keeps complex work on xhigh for now"
+        pass "Roadmap sets numeric targets for model-profile measurement and keeps complex work on xhigh for now"
     else
-        fail "Roadmap does not set numeric targets for the model experiment clearly enough"
+        fail "Roadmap does not set numeric targets for model-profile measurement clearly enough"
     fi
 }
 
@@ -233,8 +236,8 @@ test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_calls_out_stale_issue_cleanup
 test_roadmap_tracks_late_creator_investigation
-test_roadmap_tracks_review_model_experiment
-test_roadmap_sets_numeric_model_experiment_targets
+test_roadmap_tracks_review_model_measurement
+test_roadmap_sets_numeric_model_profile_targets
 test_roadmap_tracks_default_use_pilot_gate
 test_roadmap_prioritizes_pilot_rollout_before_creator_investigation
 
