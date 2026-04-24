@@ -275,6 +275,9 @@ test_update_merges_config_without_dropping_other_settings() {
 
     run_setup_local "$ws"
     cat > "$ws/.codex/config.toml" <<'EOF'
+model = "gpt-5.5"
+model_reasoning_effort = "xhigh"
+
 [features]
 codex_hooks = false
 
@@ -287,6 +290,9 @@ EOF
     check_output=$(run_check "$ws")
 
     grep -q 'codex_hooks = true' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model = "gpt-5.4"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^review_model =' "$ws/.codex/config.toml" 2>/dev/null && valid=false
     grep -q 'name = "o3"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     echo "$output" | grep -q '.codex/config.toml' 2>/dev/null || valid=false
     echo "$output" | grep -qi 'merge\|repair' 2>/dev/null || valid=false
@@ -294,9 +300,9 @@ EOF
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "update merges codex_hooks into existing config.toml without dropping other settings"
+        pass "update merges model profile and codex_hooks into existing config.toml without dropping other settings"
     else
-        fail "update did not merge the managed hook config into config.toml safely"
+        fail "update did not merge the managed model/hook config into config.toml safely"
     fi
 }
 

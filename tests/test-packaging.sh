@@ -117,12 +117,22 @@ test_installer_writes_default_model_profile() {
         has_profile=false
     fi
 
+    if ! grep -q '^model = "gpt-5.4-mini"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        has_profile=false
+    elif ! grep -q '^model_reasoning_effort = "medium"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        has_profile=false
+    elif ! grep -q '^review_model = "gpt-5.4"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        has_profile=false
+    elif ! grep -q '^codex_hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        has_profile=false
+    fi
+
     rm -rf "$adapter_clone" "$target_repo"
 
     if [ "$has_profile" = "true" ]; then
-        pass "Installer writes the default mixed model profile with a maximum option"
+        pass "Installer writes the default mixed model profile into metadata and repo-local Codex config"
     else
-        fail "Installer did not write the expected default model profile"
+        fail "Installer did not write the expected default model profile into metadata and .codex/config.toml"
     fi
 }
 

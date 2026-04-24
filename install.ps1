@@ -1,3 +1,8 @@
+param(
+    [ValidateSet("mixed", "maximum")]
+    [string]$ModelProfile = "mixed"
+)
+
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -46,6 +51,153 @@ function Install-Skills {
     }
 }
 
+function Merge-CodexModelConfig {
+    param(
+        [string]$ConfigPath,
+        [ValidateSet("mixed", "maximum")]
+        [string]$Profile
+    )
+
+    $profileConfig = switch ($Profile) {
+        "mixed" {
+            @{
+                model = "gpt-5.4-mini"
+                effort = "medium"
+                review = "gpt-5.4"
+            }
+        }
+        "maximum" {
+            @{
+                model = "gpt-5.4"
+                effort = "xhigh"
+                review = $null
+            }
+        }
+    }
+
+    $configDir = Split-Path -Parent $ConfigPath
+    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+
+    $content = if (Test-Path -LiteralPath $ConfigPath) {
+        Get-Content -LiteralPath $ConfigPath -Raw
+    } else {
+        ""
+    }
+
+    $lines = @()
+    if ($content.Length -gt 0) {
+        $normalized = ($content -replace "`r`n", "`n") -replace "`r", "`n"
+        $lines = @($normalized -split "`n")
+        if ($lines.Count -gt 0 -and $lines[$lines.Count - 1] -eq "") {
+            if ($lines.Count -eq 1) {
+                $lines = @()
+            } else {
+                $lines = @($lines[0..($lines.Count - 2)])
+            }
+        }
+    }
+
+    $stripped = New-Object System.Collections.Generic.List[string]
+    $tableName = $null
+    foreach ($line in $lines) {
+        if ($line -match '^\s*\[([^\]]+)\]\s*(#.*)?$') {
+            $tableName = $Matches[1].Trim()
+            $stripped.Add($line)
+            continue
+        }
+
+        if ($null -eq $tableName -and $line -match '^\s*(model|model_reasoning_effort|review_model)\s*=') {
+            continue
+        }
+
+        $stripped.Add($line)
+    }
+
+    $profileLines = New-Object System.Collections.Generic.List[string]
+    $profileLines.Add("model = `"$($profileConfig.model)`"")
+    $profileLines.Add("model_reasoning_effort = `"$($profileConfig.effort)`"")
+    if ($profileConfig.review) {
+        $profileLines.Add("review_model = `"$($profileConfig.review)`"")
+    }
+
+    $firstTableIndex = -1
+    for ($i = 0; $i -lt $stripped.Count; $i++) {
+        if ($stripped[$i] -match '^\s*\[[^\]]+\]\s*(#.*)?$') {
+            $firstTableIndex = $i
+            break
+        }
+    }
+
+    $withProfile = New-Object System.Collections.Generic.List[string]
+    if ($firstTableIndex -eq -1) {
+        foreach ($line in $stripped) { $withProfile.Add($line) }
+        if ($withProfile.Count -gt 0 -and $withProfile[$withProfile.Count - 1] -ne "") {
+            $withProfile.Add("")
+        }
+        foreach ($line in $profileLines) { $withProfile.Add($line) }
+    } else {
+        for ($i = 0; $i -lt $firstTableIndex; $i++) {
+            $withProfile.Add($stripped[$i])
+        }
+        if ($withProfile.Count -gt 0 -and $withProfile[$withProfile.Count - 1] -ne "") {
+            $withProfile.Add("")
+        }
+        foreach ($line in $profileLines) { $withProfile.Add($line) }
+        $withProfile.Add("")
+        for ($i = $firstTableIndex; $i -lt $stripped.Count; $i++) {
+            $withProfile.Add($stripped[$i])
+        }
+    }
+
+    $output = New-Object System.Collections.Generic.List[string]
+    $inFeatures = $false
+    $sawFeatures = $false
+    $insertedHooks = $false
+
+    foreach ($line in $withProfile) {
+        if ($line -match '^\s*\[([^\]]+)\]\s*(#.*)?$') {
+            if ($inFeatures -and -not $insertedHooks) {
+                $output.Add("codex_hooks = true")
+                $insertedHooks = $true
+            }
+
+            $inFeatures = $Matches[1].Trim() -eq "features"
+            if ($inFeatures) {
+                $sawFeatures = $true
+                $insertedHooks = $false
+            }
+
+            $output.Add($line)
+
+            if ($inFeatures) {
+                $output.Add("codex_hooks = true")
+                $insertedHooks = $true
+            }
+            continue
+        }
+
+        if ($inFeatures -and $line -match '^\s*codex_hooks\s*=') {
+            continue
+        }
+
+        $output.Add($line)
+    }
+
+    if ($inFeatures -and -not $insertedHooks) {
+        $output.Add("codex_hooks = true")
+    }
+
+    if (-not $sawFeatures) {
+        if ($output.Count -gt 0 -and $output[$output.Count - 1] -ne "") {
+            $output.Add("")
+        }
+        $output.Add("[features]")
+        $output.Add("codex_hooks = true")
+    }
+
+    Set-Content -LiteralPath $ConfigPath -Value (($output -join "`r`n") + "`r`n") -NoNewline
+}
+
 Write-Host "Installing SDLC Wizard for Codex CLI..."
 
 Copy-IfMissing -Source (Join-Path $scriptDir "AGENTS.md") -Destination "AGENTS.md" -Label "AGENTS.md"
@@ -59,29 +211,8 @@ New-Item -ItemType Directory -Path ".codex" -Force | Out-Null
 New-Item -ItemType Directory -Path ".codex\hooks" -Force | Out-Null
 
 $configPath = ".codex\config.toml"
-if (Test-Path -LiteralPath $configPath) {
-    $config = Get-Content -LiteralPath $configPath -Raw
-    $activeLines = ($config -split "`r?`n") | Where-Object { $_ -notmatch '^\s*#' }
-
-    if ($activeLines -match 'codex_hooks\s*=\s*false') {
-        $updated = [regex]::Replace($config, '(^[^#\r\n]*codex_hooks\s*=\s*)false', '$1true', [System.Text.RegularExpressions.RegexOptions]::Multiline)
-        Set-Content -LiteralPath $configPath -Value $updated -NoNewline
-        Write-Host "Set codex_hooks = true in existing config.toml"
-    } elseif ($activeLines -match 'codex_hooks\s*=\s*true') {
-        Write-Host "config.toml already has codex_hooks = true - skipping"
-    } elseif ($config -match '^\[features\]') {
-        $updated = [regex]::Replace($config, '^\[features\]\r?\n', "[features]`r`ncodex_hooks = true`r`n", [System.Text.RegularExpressions.RegexOptions]::Multiline)
-        Set-Content -LiteralPath $configPath -Value $updated -NoNewline
-        Write-Host "Added codex_hooks = true to existing [features] table"
-    } else {
-        $suffix = if ($config.EndsWith("`n")) { "" } else { "`r`n" }
-        Set-Content -LiteralPath $configPath -Value ($config + $suffix + "[features]`r`ncodex_hooks = true`r`n") -NoNewline
-        Write-Host "Added [features] codex_hooks = true to config.toml"
-    }
-} else {
-    Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\config.toml") -Destination $configPath
-    Write-Host "Created .codex/config.toml"
-}
+Merge-CodexModelConfig -ConfigPath $configPath -Profile $ModelProfile
+Write-Host "Merged repo-local Codex config for model profile '$ModelProfile'"
 
 $hooksPath = ".codex\hooks.json"
 if (Test-Path -LiteralPath $hooksPath) {
@@ -99,6 +230,8 @@ Write-Host "Installed PowerShell hook scripts"
 Write-Host ""
 Write-Host "SDLC Wizard for Codex installed."
 Write-Host "Recommended: use full access during setup, environment repair, and auth-heavy workflows."
+Write-Host "Wrote repo-local .codex/config.toml model keys for this profile; mixed is wizard policy, not a native Codex mode."
+Write-Host "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
 Write-Host "Codex does not have a native /sdlc command. Use the installed skills plus START-SDLC.md and SDLC-LOOP.md as the honest equivalent."
 Write-Host "Restart Codex to pick up the new skills, then use /skills and invoke `$codex-sdlc, `$setup-wizard, `$update-wizard, or `$feedback."
 Write-Host "Run 'codex' to start a session with SDLC enforcement."

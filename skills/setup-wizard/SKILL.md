@@ -15,6 +15,21 @@ Do not ask a fixed checklist. Do not ask what you already know.
 
 Default to `xhigh` in this repo. Setup is one-time, high-leverage work and should use the highest planning discipline by default.
 
+## Scope guard
+
+Setup owns repo metadata and Codex integration artifacts. It may create or update setup-surface files such as:
+
+- `AGENTS.md`
+- `TESTING.md`
+- `ARCHITECTURE.md`
+- `SDLC.md`
+- `.codex/**`
+- wizard helper scripts
+
+During setup, do not edit application code, product logic, or application tests. Verification is diagnostic by default: if tests or validation fail outside setup-managed files, summarize the failures and stop. Ask the user before switching from setup into implementation work, or hand the remediation to `$codex-sdlc`.
+
+Only auto-fix failures that are directly caused by setup drift, such as broken hook paths, contradictory generated docs, missing wizard artifacts, or Windows hook config that still points at Bash scripts.
+
 ## Mandatory first action
 
 Before doing anything else, read the repo-local context that already exists.
@@ -143,6 +158,8 @@ Recommend Codex-specific follow-ups where appropriate:
 - config.toml adjustments
 - repo-local docs that should be added
 
+When a model profile is selected, ensure the repo-local `.codex/config.toml` matches it. Preserve existing custom config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].codex_hooks` settings. Explain that `mixed` is wizard policy, not a native Codex mode, and that project config only loads after the repo is trusted.
+
 On Windows, treat `.codex/hooks.json` that still references Bash hook scripts such as `bash-guard.sh` or `session-start.sh` as broken drift, not as an acceptable customization. Repair it to the PowerShell hook set.
 
 Do not pretend Codex has a native `/sdlc` command if it does not.
@@ -157,9 +174,11 @@ Before calling setup complete, verify:
 - any suggested commands actually match the repo
 - on Windows, active hook config does not still point at Bash hook scripts
 
+This verification is diagnostic for product behavior. If a failing command points at application code or application tests unrelated to setup changes, do not edit application code to force setup green. Report the failure, identify why it appears outside setup scope, and ask whether to continue under `$codex-sdlc`.
+
 ### Step 8: Restart and next steps
 
-If new skills or hooks were installed, tell the user to restart Codex.
+If new skills or hooks were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun setup just for that restart.
 
 Then point them at the next entrypoint:
 
@@ -174,3 +193,4 @@ Then point them at the next entrypoint:
 - Always preserve intentional repo customizations.
 - Always surface reasoning when something is inferred rather than detected.
 - Prefer repo-specific truth over generic wizard defaults.
+- During setup, never cross into product remediation without explicit user consent.

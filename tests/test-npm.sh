@@ -13,6 +13,10 @@ require_node
 PASSED=0
 FAILED=0
 MKTEMP_DIR="${TMPDIR:-/tmp}"
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;;
+    *) IS_WINDOWS=false ;;
+esac
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -156,13 +160,18 @@ test_local_npx_installs_into_clean_repo() {
     [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || installed=false
     [ -f "$target_repo/.agents/skills/adlc/SKILL.md" ] || installed=false
     [ -f "$target_repo/.codex-sdlc/manifest.json" ] || installed=false
+    if [ "$IS_WINDOWS" = "true" ]; then
+        grep -q 'git-guard\.ps1' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
+        grep -q 'session-start\.ps1' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
+        grep -q '\.sh' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
+    fi
 
     rm -rf "$pack_dir" "$target_repo" "$npm_cache"
 
     if [ "$installed" = "true" ]; then
-        pass "local npm exec defaults to adaptive setup when automation passes --yes"
+        pass "local npm exec defaults to adaptive setup with platform-native hooks when automation passes --yes"
     else
-        fail "local npm exec did not route the default command through adaptive setup"
+        fail "local npm exec did not route the default command through adaptive setup with platform-native hooks"
     fi
 }
 
@@ -192,6 +201,14 @@ test_local_npx_setup_honors_model_profile_flag() {
     if [ "$configured" = "true" ]; then
         if [ ! -f "$target_repo/.codex-sdlc/model-profile.json" ] ||
            ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.selected_profile === "maximum"'; then
+            configured=false
+        elif ! grep -q '^model = "gpt-5.4"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+            configured=false
+        elif ! grep -q '^model_reasoning_effort = "xhigh"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+            configured=false
+        elif grep -q '^review_model =' "$target_repo/.codex/config.toml" 2>/dev/null; then
+            configured=false
+        elif ! grep -q '^codex_hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
             configured=false
         fi
     fi

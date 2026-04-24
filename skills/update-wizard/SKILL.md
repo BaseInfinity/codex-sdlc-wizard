@@ -15,6 +15,14 @@ Do not blindly overwrite files.
 
 Default to `xhigh` in this repo. Update work is maintenance architecture, and customized drift makes lower-effort passes too risky by default.
 
+## Scope guard
+
+Update owns the wizard surface: repo metadata, Codex integration artifacts, hooks, skills, helper scripts, and SDLC docs.
+
+During update, do not edit application code, product logic, or application tests. Verification is diagnostic by default: if tests or validation fail outside setup-managed files, summarize the failures and stop. Ask the user before switching from update into implementation work, or hand the remediation to `$codex-sdlc`.
+
+Only auto-fix failures that are directly caused by wizard drift, such as broken hook paths, missing installed skills, contradictory generated docs, stale helper scripts, or Windows hook config that still points at Bash scripts.
+
 ## Mandatory first action
 
 Read the local repo context first:
@@ -53,6 +61,7 @@ Expected Codex SDLC surface includes:
 - `update-wizard`
 - `feedback`
 - repo-local SDLC docs as appropriate
+- repo-local `.codex/config.toml` model settings that match the selected wizard profile
 - hook config and scripts
 
 Group findings as:
@@ -63,6 +72,8 @@ Group findings as:
 - drift / broken
 
 On Windows, `.codex/hooks.json` that still points at Bash hook scripts is `drift / broken`, not a customization to preserve.
+
+If `.codex-sdlc/model-profile.json` or `SDLC.md` says one model profile but `.codex/config.toml` still inherits a different user/global model, classify that as drift. Preserve unrelated config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].codex_hooks` settings. Explain that `mixed` is wizard policy, not a native Codex mode, and that project config only loads after the repo is trusted.
 
 ### Step 3: Show update plan first
 
@@ -93,9 +104,16 @@ After updates, verify:
 - customized files were preserved when requested
 - on Windows, active hook config does not still reference Bash hook scripts
 
+This verification is diagnostic for product behavior. If a failing command points at application code or application tests unrelated to wizard-managed changes, do not edit application code to force update green. Report the failure, identify why it appears outside update scope, and ask whether to continue under `$codex-sdlc`.
+
+### Step 6: Restart and next steps
+
+If skills, hooks, hook config, or helper scripts were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun update just for that restart.
+
 ## Rules
 
 - Never overwrite customizations blindly.
 - Prefer merge or extension over replacement.
 - Explain drift clearly.
 - If the repo is effectively uninitialized, recommend running `$setup-wizard` instead.
+- During update, never cross into product remediation without explicit user consent.
