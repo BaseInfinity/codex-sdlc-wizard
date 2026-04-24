@@ -350,7 +350,7 @@ EOF
     grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
     echo "$output" | grep -Fq 'Choose first-run Codex handoff mode' || valid=false
     echo "$output" | grep -Fq 'Press Enter: plain codex (recommended)' || valid=false
-    echo "$output" | grep -Fq 'Type full-auto: codex --full-auto' || valid=false
+    echo "$output" | grep -Fq 'Type "full-auto": codex --full-auto' || valid=false
     echo "$output" | grep -Fq 'codex resume --full-auto' || valid=false
     echo "$output" | grep -Fq 'Handing off into Codex for live setup using plain codex' || valid=false
     ! echo "$output" | grep -Fq 'DEP0190' || valid=false
