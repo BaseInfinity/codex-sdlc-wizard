@@ -11,7 +11,7 @@ profile_model() {
 
 profile_reasoning() {
     case "$1" in
-        mixed) printf '%s\n' "medium" ;;
+        mixed) printf '%s\n' "xhigh" ;;
         maximum) printf '%s\n' "xhigh" ;;
         *) return 1 ;;
     esac
@@ -40,7 +40,7 @@ const profile = process.env.CODEX_MODEL_PROFILE;
 const profiles = {
   mixed: {
     model: "gpt-5.4-mini",
-    model_reasoning_effort: "medium",
+    model_reasoning_effort: "xhigh",
     review_model: "gpt-5.4"
   },
   maximum: {
@@ -197,7 +197,7 @@ const profile = process.env.CODEX_MODEL_PROFILE;
 const profiles = {
   mixed: {
     model: "gpt-5.4-mini",
-    model_reasoning_effort: "medium",
+    model_reasoning_effort: "xhigh",
     review_model: "gpt-5.4"
   },
   maximum: {
@@ -257,4 +257,3 @@ if (features.codex_hooks !== "true") needsRepair = true;
 process.exit(needsRepair ? 0 : 1);
 NODE
 }
-

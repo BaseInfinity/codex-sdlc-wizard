@@ -26,7 +26,7 @@ Setup owns repo metadata and Codex integration artifacts. It may create or updat
 - `.codex/**`
 - wizard helper scripts
 
-During setup, do not edit application code, product logic, or application tests. Verification is diagnostic by default: if tests or validation fail outside setup-managed files, summarize the failures and stop. Ask the user before switching from setup into implementation work, or hand the remediation to `$codex-sdlc`.
+During setup, do not edit application code, product logic, or application tests. Verification is diagnostic by default: if tests or validation fail outside setup-managed files, summarize the failures and stop. Ask the user before switching from setup into implementation work, or hand the remediation to `$sdlc`.
 
 Only auto-fix failures that are directly caused by setup drift, such as broken hook paths, contradictory generated docs, missing wizard artifacts, or Windows hook config that still points at Bash scripts.
 
@@ -174,15 +174,15 @@ Before calling setup complete, verify:
 - any suggested commands actually match the repo
 - on Windows, active hook config does not still point at Bash hook scripts
 
-This verification is diagnostic for product behavior. If a failing command points at application code or application tests unrelated to setup changes, do not edit application code to force setup green. Report the failure, identify why it appears outside setup scope, and ask whether to continue under `$codex-sdlc`.
+This verification is diagnostic for product behavior. If a failing command points at application code or application tests unrelated to setup changes, do not edit application code to force setup green. Report the failure, identify why it appears outside setup scope, and ask whether to continue under `$sdlc`.
 
 ### Step 8: Restart and next steps
 
-If new skills or hooks were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun setup just for that restart.
+If new skills or hooks were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun setup just for that restart. If they closed an interrupted handoff and Codex printed a resume id, recommend `codex resume --full-auto <session-id>` for low-friction continuation, or plain `codex resume <session-id>` when they want manual confirmations.
 
 Then point them at the next entrypoint:
 
-- `$codex-sdlc` for implementation work
+- `$sdlc` for implementation work
 - `$update-wizard` for maintenance
 - `$feedback` to contribute back
 

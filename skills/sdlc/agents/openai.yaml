@@ -1,0 +1,6 @@
+version: 1
+interface:
+  display_name: SDLC
+  short_description: Full SDLC workflow for Codex with planning, TDD, prove-it, and self-review.
+  default_prompt: Apply the full SDLC workflow for this task. Read the repo-local contract, state task, scope, confidence, verification plan, then drive red, green, prove-it, and self-review.
+

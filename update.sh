@@ -27,7 +27,8 @@ FORCE_ALL=false
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
-CORE_SKILLS=("codex-sdlc" "feedback" "setup-wizard" "update-wizard")
+CORE_SKILLS=("sdlc" "feedback" "setup-wizard" "update-wizard")
+LEGACY_SKILLS=("codex-sdlc:sdlc")
 
 for arg in "$@"; do
     case "$arg" in
@@ -131,6 +132,17 @@ repair_skill() {
     cp -R "$source_path" "$SKILLS_ROOT/"
 }
 
+remove_legacy_skill() {
+    local legacy_name="$1"
+    local target_path="$SKILLS_ROOT/$legacy_name"
+
+    [ -d "$target_path" ] || return 0
+
+    mkdir -p "$SKILLS_BACKUP_ROOT"
+    cp -R "$target_path" "$SKILLS_BACKUP_ROOT/$legacy_name.bak.$(date +%s)"
+    rm -rf "$target_path"
+}
+
 restore_skipped_hashes() {
     local manifest_path=".codex-sdlc/manifest.json"
     local skipped_hashes_json="$1"
@@ -188,9 +200,11 @@ for (const [relativePath, info] of Object.entries(data.managed_files || {}).sort
 declare -a PLAN_LINES=()
 declare -a STATIC_REPAIRS=()
 declare -a SKILL_REPAIRS=()
+declare -a LEGACY_SKILL_REMOVALS=()
 declare -a SKIPPED_CUSTOMIZED_PATHS=()
 declare -A STATIC_REPAIR_SET=()
 declare -A SKILL_REPAIR_SET=()
+declare -A LEGACY_SKILL_REMOVAL_SET=()
 CHANGES_PENDING=false
 RUN_REGENERATE=false
 REGENERATE_FORCE=false
@@ -208,6 +222,14 @@ queue_skill_repair() {
     if [ -z "${SKILL_REPAIR_SET[$skill_name]+x}" ]; then
         SKILL_REPAIR_SET["$skill_name"]=1
         SKILL_REPAIRS+=("$skill_name")
+    fi
+}
+
+queue_legacy_skill_removal() {
+    local legacy_name="$1"
+    if [ -z "${LEGACY_SKILL_REMOVAL_SET[$legacy_name]+x}" ]; then
+        LEGACY_SKILL_REMOVAL_SET["$legacy_name"]=1
+        LEGACY_SKILL_REMOVALS+=("$legacy_name")
     fi
 }
 
@@ -282,6 +304,17 @@ for skill_name in "${CORE_SKILLS[@]}"; do
     PLAN_LINES+=("skills/$skill_name|$skill_status|$skill_action")
 done
 
+for legacy_spec in "${LEGACY_SKILLS[@]}"; do
+    IFS=':' read -r legacy_name canonical_name <<< "$legacy_spec"
+    [ -n "$legacy_name" ] || continue
+
+    if [ -d "$SKILLS_ROOT/$legacy_name" ]; then
+        PLAN_LINES+=("skills/$legacy_name|legacy|remove (canonical: $canonical_name)")
+        CHANGES_PENDING=true
+        queue_legacy_skill_removal "$legacy_name"
+    fi
+done
+
 SKIPPED_CUSTOM_HASHES_JSON="{}"
 if [ "${#SKIPPED_CUSTOMIZED_PATHS[@]}" -gt 0 ]; then
     SKIPPED_PATHS="$(
@@ -311,6 +344,7 @@ fi
 echo "Codex SDLC update"
 echo "Installed version: ${INSTALLED_VERSION:-unknown}"
 echo "Available version: ${CURRENT_VERSION:-unknown}"
+echo "Package boundary: this updates repo artifacts using the package you invoked; use 'npx codex-sdlc-wizard@latest update' to consume the newest npm release."
 echo ""
 echo "Plan:"
 for plan_line in "${PLAN_LINES[@]}"; do
@@ -340,6 +374,11 @@ done
 for skill_name in "${SKILL_REPAIRS[@]}"; do
     repair_skill "$skill_name"
     echo "Applied: skills/$skill_name"
+done
+
+for legacy_name in "${LEGACY_SKILL_REMOVALS[@]}"; do
+    remove_legacy_skill "$legacy_name"
+    echo "Removed legacy skill: skills/$legacy_name"
 done
 
 if [ "$RUN_REGENERATE" = "true" ]; then
