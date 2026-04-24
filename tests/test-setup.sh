@@ -261,19 +261,19 @@ test_detect_domain_cli() {
 # Helper: run setup.sh in a project dir
 run_setup() {
     local project_dir="$1"
-    (cd "$project_dir" && bash "$SETUP_SH" --yes 2>/dev/null) || true
+    (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 bash "$SETUP_SH" --yes 2>/dev/null) || true
 }
 
 run_setup_interactive() {
     local project_dir="$1"
     local input_text="$2"
-    (cd "$project_dir" && printf '%s' "$input_text" | bash "$SETUP_SH" 2>&1) || true
+    (cd "$project_dir" && printf '%s' "$input_text" | CODEX_SDLC_DISABLE_REASONING=1 bash "$SETUP_SH" 2>&1) || true
 }
 
 run_setup_args() {
     local project_dir="$1"
     shift
-    (cd "$project_dir" && bash "$SETUP_SH" "$@" 2>&1)
+    (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 bash "$SETUP_SH" "$@" 2>&1)
 }
 
 # Helper: run check.sh in a project dir
@@ -968,7 +968,7 @@ test_setup_hashes_manifest_without_shell_hash_tools() {
 
     local output status hash valid=true
     set +e
-    output=$(cd "$ws" && PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
+    output=$(cd "$ws" && CODEX_SDLC_DISABLE_REASONING=1 PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
     status=$?
     set -e
 
@@ -984,6 +984,147 @@ test_setup_hashes_manifest_without_shell_hash_tools() {
         pass "setup falls back to Node hashing when shell hash tools are unavailable"
     else
         fail "setup did not produce valid manifest hashes without shell hash tools"
+    fi
+}
+
+# ---- Test 33: interactive setup uses codex exec with gpt-5.4 xhigh reasoning when available ----
+test_setup_uses_codex_xhigh_reasoning_when_available() {
+    local ws
+    local fakebin
+    local args_file
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    args_file="$ws/codex-args.txt"
+
+    cat > "$ws/package.json" <<'EOF'
+{"name":"test-app","scripts":{"test":"npm test"}}
+EOF
+    mkdir -p "$ws/tests"
+    touch "$ws/playwright.config.js" "$ws/tests/app.e2e.ts"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+set -eu
+args_file="${FAKE_CODEX_ARGS_FILE:-}"
+output_file=""
+previous=""
+
+for arg in "$@"; do
+    if [ -n "$args_file" ]; then
+        printf '%s\n' "$arg" >> "$args_file"
+    fi
+    if [ "$previous" = "-o" ]; then
+        output_file="$arg"
+    fi
+    previous="$arg"
+done
+
+if [ -z "$output_file" ]; then
+    echo "missing output file" >&2
+    exit 64
+fi
+
+cat > "$output_file" <<'JSON'
+{
+  "language": "javascript",
+  "source_dir": "app/",
+  "test_dir": "tests/",
+  "test_framework": "playwright",
+  "test_command": "npm test",
+  "lint_command": "npm run lint",
+  "typecheck_command": "",
+  "single_test_command": "npx playwright test <test-file>",
+  "build_command": "",
+  "deployment_setup": "",
+  "databases": "",
+  "cache_layer": "",
+  "test_duration": "<1 minute",
+  "test_types": "unit, e2e, api",
+  "coverage_config": "",
+  "ci": "",
+  "domain": "web",
+  "confidence_map": {
+    "source_dir": "inferred",
+    "test_dir": "detected",
+    "test_framework": "detected",
+    "test_command": "detected",
+    "lint_command": "inferred",
+    "typecheck_command": "unresolved",
+    "single_test_command": "inferred",
+    "build_command": "unresolved",
+    "deployment_setup": "unresolved",
+    "databases": "unresolved",
+    "cache_layer": "unresolved",
+    "test_duration": "inferred",
+    "test_types": "detected",
+    "coverage_config": "unresolved",
+    "ci": "unresolved",
+    "domain": "inferred"
+  }
+}
+JSON
+EOF
+    chmod +x "$fakebin/codex"
+
+    local output valid=true
+    output=$(cd "$ws" && printf '\n\n\n\n\n' | FAKE_CODEX_ARGS_FILE="$args_file" PATH="$fakebin:$PATH" bash "$SETUP_SH" 2>&1)
+
+    grep -qx 'exec' "$args_file" 2>/dev/null || valid=false
+    grep -qx -- '-s' "$args_file" 2>/dev/null || valid=false
+    grep -qx 'read-only' "$args_file" 2>/dev/null || valid=false
+    grep -qx -- '--skip-git-repo-check' "$args_file" 2>/dev/null || valid=false
+    grep -qx -- '--output-schema' "$args_file" 2>/dev/null || valid=false
+    grep -qx 'model="gpt-5.4"' "$args_file" 2>/dev/null || valid=false
+    grep -qx 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
+    echo "$output" | grep -vq 'Set source directory' 2>/dev/null || valid=false
+    grep -q 'Source directory: `app/`' "$ws/SDLC.md" 2>/dev/null || valid=false
+    if ! json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.resolved_values.source_dir' "app/"; then
+        valid=false
+    fi
+
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "interactive setup uses codex exec with gpt-5.4 xhigh reasoning when available"
+    else
+        fail "interactive setup did not use the codex xhigh reasoning path correctly"
+    fi
+}
+
+# ---- Test 34: setup falls back to deterministic scan when codex reasoning fails ----
+test_setup_falls_back_when_codex_reasoning_fails() {
+    local ws
+    local fakebin
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/__tests__"
+    touch "$ws/jest.config.js"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+exit 42
+EOF
+    chmod +x "$fakebin/codex"
+
+    local output status valid=true
+    set +e
+    output=$(cd "$ws" && PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    [ -f "$ws/AGENTS.md" ] || valid=false
+    [ -f "$ws/.codex-sdlc/manifest.json" ] || valid=false
+    grep -q 'Scanning project' <<< "$output" 2>/dev/null || valid=false
+
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup falls back to deterministic scan when codex reasoning fails"
+    else
+        fail "setup did not fall back cleanly when codex reasoning failed"
     fi
 }
 
@@ -1021,6 +1162,8 @@ test_setup_interactive_allows_overriding_detected_values
 test_setup_verify_only_reports_missing_files
 test_setup_regenerate_rebuilds_docs_from_manifest
 test_setup_hashes_manifest_without_shell_hash_tools
+test_setup_uses_codex_xhigh_reasoning_when_available
+test_setup_falls_back_when_codex_reasoning_fails
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

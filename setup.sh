@@ -11,6 +11,175 @@ source "$SCRIPT_DIR/templates/domain-testing-sections.sh"
 
 require_node
 
+setup_tmpfile() {
+    mktemp "${TMPDIR:-/tmp}/codex-sdlc-$1.XXXXXX"
+}
+
+codex_reasoning_enabled() {
+    [ "${CODEX_SDLC_DISABLE_REASONING:-0}" != "1" ] || return 1
+    command -v codex >/dev/null 2>&1
+}
+
+refine_scan_with_codex() {
+    local base_scan_json="$1"
+    local base_scan_file=""
+    local schema_file=""
+    local output_file=""
+    local prompt_file=""
+    local refined_scan_json=""
+
+    codex_reasoning_enabled || {
+        printf '%s' "$base_scan_json"
+        return 0
+    }
+
+    base_scan_file=$(setup_tmpfile scan.json)
+    schema_file=$(setup_tmpfile schema.json)
+    output_file=$(setup_tmpfile output.json)
+    prompt_file=$(setup_tmpfile prompt.txt)
+
+    printf '%s' "$base_scan_json" > "$base_scan_file"
+
+    cat > "$schema_file" <<'EOF'
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "language": { "type": "string" },
+    "source_dir": { "type": "string" },
+    "test_dir": { "type": "string" },
+    "test_framework": { "type": "string" },
+    "test_command": { "type": "string" },
+    "lint_command": { "type": "string" },
+    "typecheck_command": { "type": "string" },
+    "single_test_command": { "type": "string" },
+    "build_command": { "type": "string" },
+    "deployment_setup": { "type": "string" },
+    "databases": { "type": "string" },
+    "cache_layer": { "type": "string" },
+    "test_duration": { "type": "string" },
+    "test_types": { "type": "string" },
+    "coverage_config": { "type": "string" },
+    "ci": { "type": "string" },
+    "domain": { "type": "string" },
+    "confidence_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_dir": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "test_dir": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "test_framework": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "test_command": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "lint_command": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "typecheck_command": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "single_test_command": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "build_command": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "deployment_setup": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "databases": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "cache_layer": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "test_duration": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "test_types": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "coverage_config": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "ci": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "domain": { "type": "string", "enum": ["detected", "inferred", "unresolved"] }
+      }
+    }
+  }
+}
+EOF
+
+    cat > "$prompt_file" <<EOF
+You are refining repository setup detection for the Codex SDLC wizard.
+Inspect the current working tree in read-only mode and improve the baseline scan below.
+Return JSON only, following the provided schema exactly.
+
+Baseline scan:
+$base_scan_json
+
+Rules:
+- Prefer concrete repository evidence over the baseline when they disagree.
+- Use empty strings for unknown values.
+- Provide confidence_map entries using only detected, inferred, or unresolved.
+- Do not invent tools, frameworks, or commands that the repo does not support.
+EOF
+
+    if codex exec \
+        -s read-only \
+        --skip-git-repo-check \
+        --ignore-rules \
+        --ephemeral \
+        --output-schema "$schema_file" \
+        -o "$output_file" \
+        -c 'model="gpt-5.4"' \
+        -c 'model_reasoning_effort="xhigh"' \
+        "$(cat "$prompt_file")" >/dev/null 2>&1; then
+        if json_has_truthy_file "$output_file" 'typeof data === "object" && data !== null && !Array.isArray(data)'; then
+            refined_scan_json=$(BASE_SCAN_FILE="$base_scan_file" REFINED_SCAN_FILE="$output_file" node -e '
+const fs = require("fs");
+const base = JSON.parse(fs.readFileSync(process.env.BASE_SCAN_FILE, "utf8"));
+const refined = JSON.parse(fs.readFileSync(process.env.REFINED_SCAN_FILE, "utf8"));
+const fields = [
+  "language",
+  "source_dir",
+  "test_dir",
+  "test_framework",
+  "test_command",
+  "lint_command",
+  "typecheck_command",
+  "single_test_command",
+  "build_command",
+  "deployment_setup",
+  "databases",
+  "cache_layer",
+  "test_duration",
+  "test_types",
+  "coverage_config",
+  "ci",
+  "domain"
+];
+const merged = { ...base };
+for (const field of fields) {
+  if (typeof refined[field] === "string") {
+    merged[field] = refined[field];
+  }
+}
+if (refined.confidence_map && typeof refined.confidence_map === "object" && !Array.isArray(refined.confidence_map)) {
+  const confidenceMap = {};
+  for (const field of fields) {
+    const value = refined.confidence_map[field];
+    if (value === "detected" || value === "inferred" || value === "unresolved") {
+      confidenceMap[field] = value;
+    }
+  }
+  if (Object.keys(confidenceMap).length > 0) {
+    merged.confidence_map = confidenceMap;
+  }
+}
+process.stdout.write(JSON.stringify(merged));
+' 2>/dev/null || true)
+        fi
+    fi
+
+    rm -f "$base_scan_file" "$schema_file" "$output_file" "$prompt_file"
+
+    if [ -n "$refined_scan_json" ]; then
+        printf '%s' "$refined_scan_json"
+    else
+        printf '%s' "$base_scan_json"
+    fi
+}
+
+preferred_state() {
+    local override="$1"
+    local fallback="$2"
+
+    if [ -n "$override" ]; then
+        printf '%s' "$override"
+    else
+        printf '%s' "$fallback"
+    fi
+}
+
 verify_installation() {
     local errors=0
 
@@ -180,6 +349,7 @@ if [ "$SETUP_MODE" = "regenerate" ]; then
 else
     echo "Scanning project..."
     SCAN_JSON=$(cd "$(pwd)" && bash "$SCRIPT_DIR/lib/scan.sh")
+    SCAN_JSON=$(refine_scan_with_codex "$SCAN_JSON")
 
     # Extract scan values
     LANGUAGE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.language')
@@ -215,6 +385,22 @@ else
     SCAN_COVERAGE_CONFIG_RAW="$COVERAGE_CONFIG"
     SCAN_CI_RAW="$CI"
     SCAN_DOMAIN_RAW="$DOMAIN"
+    SCAN_SOURCE_DIR_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.source_dir || ""')
+    SCAN_TEST_DIR_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.test_dir || ""')
+    SCAN_TEST_FRAMEWORK_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.test_framework || ""')
+    SCAN_TEST_COMMAND_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.test_command || ""')
+    SCAN_LINT_COMMAND_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.lint_command || ""')
+    SCAN_TYPECHECK_COMMAND_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.typecheck_command || ""')
+    SCAN_SINGLE_TEST_COMMAND_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.single_test_command || ""')
+    SCAN_BUILD_COMMAND_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.build_command || ""')
+    SCAN_DEPLOYMENT_SETUP_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.deployment_setup || ""')
+    SCAN_DATABASES_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.databases || ""')
+    SCAN_CACHE_LAYER_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.cache_layer || ""')
+    SCAN_TEST_DURATION_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.test_duration || ""')
+    SCAN_TEST_TYPES_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.test_types || ""')
+    SCAN_COVERAGE_CONFIG_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.coverage_config || ""')
+    SCAN_CI_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.ci || ""')
+    SCAN_DOMAIN_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.domain || ""')
     ADAPTER_VERSION=$(cat "$SCRIPT_DIR/UPSTREAM_VERSION" 2>/dev/null | tr -d '[:space:]')
     INSTALLED_AT_VALUE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     SETUP_DATE=$(date -u +%Y-%m-%d)
@@ -377,22 +563,22 @@ domain_state() {
 }
 
 if [ "$SETUP_MODE" != "regenerate" ]; then
-    SOURCE_DIR_STATE=$([ -n "$SOURCE_DIR" ] && printf 'detected' || printf 'unresolved')
-    TEST_DIR_STATE=$([ -n "$TEST_DIR" ] && printf 'detected' || printf 'unresolved')
-    TEST_FRAMEWORK_STATE=$(test_framework_state)
-    TEST_COMMAND_STATE=$(test_command_state)
-    LINT_COMMAND_STATE=$(lint_command_state)
-    TYPECHECK_COMMAND_STATE=$(typecheck_command_state)
-    SINGLE_TEST_COMMAND_STATE=$(single_test_command_state)
-    BUILD_COMMAND_STATE=$(build_command_state)
-    DEPLOYMENT_SETUP_STATE=$(deployment_setup_state)
-    DATABASES_STATE=$(databases_state)
-    CACHE_LAYER_STATE=$(cache_layer_state)
-    TEST_DURATION_STATE=$(test_duration_state)
-    TEST_TYPES_STATE=$(test_types_state)
-    COVERAGE_CONFIG_STATE=$(coverage_config_state)
-    CI_STATE=$([ -n "$CI" ] && printf 'detected' || printf 'unresolved')
-    DOMAIN_STATE=$(domain_state)
+    SOURCE_DIR_STATE=$(preferred_state "${SCAN_SOURCE_DIR_STATE_OVERRIDE:-}" "$([ -n "$SOURCE_DIR" ] && printf 'detected' || printf 'unresolved')")
+    TEST_DIR_STATE=$(preferred_state "${SCAN_TEST_DIR_STATE_OVERRIDE:-}" "$([ -n "$TEST_DIR" ] && printf 'detected' || printf 'unresolved')")
+    TEST_FRAMEWORK_STATE=$(preferred_state "${SCAN_TEST_FRAMEWORK_STATE_OVERRIDE:-}" "$(test_framework_state)")
+    TEST_COMMAND_STATE=$(preferred_state "${SCAN_TEST_COMMAND_STATE_OVERRIDE:-}" "$(test_command_state)")
+    LINT_COMMAND_STATE=$(preferred_state "${SCAN_LINT_COMMAND_STATE_OVERRIDE:-}" "$(lint_command_state)")
+    TYPECHECK_COMMAND_STATE=$(preferred_state "${SCAN_TYPECHECK_COMMAND_STATE_OVERRIDE:-}" "$(typecheck_command_state)")
+    SINGLE_TEST_COMMAND_STATE=$(preferred_state "${SCAN_SINGLE_TEST_COMMAND_STATE_OVERRIDE:-}" "$(single_test_command_state)")
+    BUILD_COMMAND_STATE=$(preferred_state "${SCAN_BUILD_COMMAND_STATE_OVERRIDE:-}" "$(build_command_state)")
+    DEPLOYMENT_SETUP_STATE=$(preferred_state "${SCAN_DEPLOYMENT_SETUP_STATE_OVERRIDE:-}" "$(deployment_setup_state)")
+    DATABASES_STATE=$(preferred_state "${SCAN_DATABASES_STATE_OVERRIDE:-}" "$(databases_state)")
+    CACHE_LAYER_STATE=$(preferred_state "${SCAN_CACHE_LAYER_STATE_OVERRIDE:-}" "$(cache_layer_state)")
+    TEST_DURATION_STATE=$(preferred_state "${SCAN_TEST_DURATION_STATE_OVERRIDE:-}" "$(test_duration_state)")
+    TEST_TYPES_STATE=$(preferred_state "${SCAN_TEST_TYPES_STATE_OVERRIDE:-}" "$(test_types_state)")
+    COVERAGE_CONFIG_STATE=$(preferred_state "${SCAN_COVERAGE_CONFIG_STATE_OVERRIDE:-}" "$(coverage_config_state)")
+    CI_STATE=$(preferred_state "${SCAN_CI_STATE_OVERRIDE:-}" "$([ -n "$CI" ] && printf 'detected' || printf 'unresolved')")
+    DOMAIN_STATE=$(preferred_state "${SCAN_DOMAIN_STATE_OVERRIDE:-}" "$(domain_state)")
 fi
 
 echo ""
@@ -542,6 +728,8 @@ show_setup_resolution_map() {
     echo ""
 
     echo "Resolved (inferred):"
+    [ "$SOURCE_DIR_STATE" = "inferred" ] && echo "  - Source dir: $SOURCE_DIR"
+    [ "$TEST_DIR_STATE" = "inferred" ] && echo "  - Test dir: $TEST_DIR"
     [ "$TEST_FRAMEWORK_STATE" = "inferred" ] && echo "  - Test framework: $TEST_FRAMEWORK"
     [ "$TEST_COMMAND_STATE" = "inferred" ] && echo "  - Test command: $TEST_COMMAND"
     [ "$LINT_COMMAND_STATE" = "inferred" ] && echo "  - Lint command: $LINT_COMMAND"
