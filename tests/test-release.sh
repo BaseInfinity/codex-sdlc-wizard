@@ -142,6 +142,7 @@ test_release_checklist_enforces_sync_and_proof() {
     local has_rebase=true
     local has_release_suite=true
     local has_tarball_smoke=true
+    local has_real_repo_smoke=true
     local has_tagging=true
 
     grep -Eq 'git fetch origin' "$RELEASE_DOC" || has_sync=false
@@ -161,6 +162,7 @@ test_release_checklist_enforces_sync_and_proof() {
     done
 
     grep -Eqi 'packed tarball|scratch smoke|npm pack' "$RELEASE_DOC" || has_tarball_smoke=false
+    grep -Eqi 'real (external )?repo smoke|representative repo smoke|powershell session|codex\.cmd' "$RELEASE_DOC" || has_real_repo_smoke=false
     grep -Eq 'git tag vX\.Y\.Z' "$RELEASE_DOC" || has_tagging=false
     grep -Eq 'git push origin vX\.Y\.Z' "$RELEASE_DOC" || has_tagging=false
 
@@ -168,8 +170,9 @@ test_release_checklist_enforces_sync_and_proof() {
        [ "$has_rebase" = "true" ] &&
        [ "$has_release_suite" = "true" ] &&
        [ "$has_tarball_smoke" = "true" ] &&
+       [ "$has_real_repo_smoke" = "true" ] &&
        [ "$has_tagging" = "true" ]; then
-        pass "RELEASE.md requires latest-main sync, proof suite, tarball smoke, and tagging steps"
+        pass "RELEASE.md requires latest-main sync, proof suite, tarball smoke, real repo smoke, and tagging steps"
     else
         fail "RELEASE.md does not yet enforce the full maintainer release checklist"
     fi
