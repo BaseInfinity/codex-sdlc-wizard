@@ -40,7 +40,7 @@ const profile = process.env.CODEX_MODEL_PROFILE;
 const profiles = {
   mixed: {
     model: "gpt-5.4-mini",
-    model_reasoning_effort: "medium",
+    model_reasoning_effort: "xhigh",
     review_model: "gpt-5.5"
   },
   maximum: {
@@ -197,7 +197,7 @@ const profile = process.env.CODEX_MODEL_PROFILE;
 const profiles = {
   mixed: {
     model: "gpt-5.4-mini",
-    model_reasoning_effort: "medium",
+    model_reasoning_effort: "xhigh",
     review_model: "gpt-5.5"
   },
   maximum: {

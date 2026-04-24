@@ -63,26 +63,26 @@ test_benchmark_summary_script_reports_thresholds_and_recommendation() {
 
     cat > "$fixture" <<'CSV'
 slice_id,mode,category,complexity,cycle_minutes,end_to_end_success,follow_up_required,main_model,main_reasoning,review_model,review_reasoning,notes
-mx-001,mixed,feature,routine,24,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-002,mixed,bugfix,routine,25,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-003,mixed,feature,routine,26,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-004,mixed,bugfix,routine,24,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-005,mixed,feature,routine,25,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-006,mixed,bugfix,routine,26,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-007,mixed,feature,routine,24,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-008,mixed,bugfix,routine,25,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-009,mixed,feature,routine,26,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-010,mixed,bugfix,routine,24,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-011,mixed,feature,routine,25,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-012,mixed,bugfix,routine,26,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-013,mixed,feature,routine,24,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-014,mixed,bugfix,routine,25,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-015,mixed,feature,routine,26,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-016,mixed,bugfix,routine,24,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-017,mixed,feature,routine,25,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-018,mixed,bugfix,routine,26,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-019,mixed,feature,routine,24,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-020,mixed,bugfix,routine,25,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
+mx-001,mixed,feature,routine,24,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-002,mixed,bugfix,routine,25,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-003,mixed,feature,routine,26,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-004,mixed,bugfix,routine,24,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-005,mixed,feature,routine,25,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-006,mixed,bugfix,routine,26,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-007,mixed,feature,routine,24,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-008,mixed,bugfix,routine,25,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-009,mixed,feature,routine,26,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-010,mixed,bugfix,routine,24,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-011,mixed,feature,routine,25,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-012,mixed,bugfix,routine,26,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-013,mixed,feature,routine,24,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-014,mixed,bugfix,routine,25,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-015,mixed,feature,routine,26,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-016,mixed,bugfix,routine,24,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-017,mixed,feature,routine,25,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-018,mixed,bugfix,routine,26,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-019,mixed,feature,routine,24,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-020,mixed,bugfix,routine,25,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
 xh-001,all-xhigh,feature,routine,32,1,0,gpt-5.5,xhigh,gpt-5.5,xhigh,baseline
 xh-002,all-xhigh,bugfix,routine,33,1,0,gpt-5.5,xhigh,gpt-5.5,xhigh,baseline
 xh-003,all-xhigh,feature,routine,34,1,0,gpt-5.5,xhigh,gpt-5.5,xhigh,baseline
@@ -113,8 +113,8 @@ test_benchmark_summary_script_holds_when_data_is_insufficient() {
 
     cat > "$fixture" <<'CSV'
 slice_id,mode,category,complexity,cycle_minutes,end_to_end_success,follow_up_required,main_model,main_reasoning,review_model,review_reasoning,notes
-mx-001,mixed,feature,routine,30,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
-mx-002,mixed,feature,routine,31,1,0,gpt-5.4-mini,medium,gpt-5.5,xhigh,good
+mx-001,mixed,feature,routine,30,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
+mx-002,mixed,feature,routine,31,1,0,gpt-5.4-mini,xhigh,gpt-5.5,xhigh,good
 xh-001,all-xhigh,feature,routine,32,1,0,gpt-5.5,xhigh,gpt-5.5,xhigh,baseline
 CSV
 
