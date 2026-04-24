@@ -166,7 +166,7 @@ async function askHandoffMode() {
     "",
     "Choose first-run Codex handoff mode:",
     "  Press Enter: plain codex (recommended)",
-    "  Type full-auto: codex --full-auto",
+    '  Type "full-auto": codex --full-auto',
     "  If interrupted later, resume with: codex resume --full-auto <session-id>",
     "> "
   ].join("\n");
