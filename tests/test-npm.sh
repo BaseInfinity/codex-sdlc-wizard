@@ -300,7 +300,6 @@ EOF
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$fakebin_win\\codex.cmd" \
         CODEX_SDLC_DISABLE_REASONING=1 \
-        CODEX_SDLC_FORCE_CODEX_HANDOFF=1 \
         FAKE_CODEX_ARGS_FILE="$args_file" \
         PATH="$fakebin_win;$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" 2>&1
@@ -326,6 +325,68 @@ EOF
         pass "default interactive CLI bootstraps then hands off into Codex"
     else
         fail "default interactive CLI did not hand off into Codex correctly"
+    fi
+}
+
+test_ci_mode_keeps_shell_setup_path() {
+    local ws fakebin fakebin_win codex_home args_file prompts_file output
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    args_file="$ws/codex-args.txt"
+    prompts_file="$ws/prompts.txt"
+
+    printf '%s' '{"name":"handoff-smoke","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
+    printf '\n\n\n\n' > "$prompts_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+set -eu
+args_file="${FAKE_CODEX_ARGS_FILE:-}"
+if [ -n "$args_file" ]; then
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$args_file"
+  done
+fi
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
+    cat > "$fakebin/codex.cmd" <<'EOF'
+@echo off
+if not "%FAKE_CODEX_ARGS_FILE%"=="" (
+  >>"%FAKE_CODEX_ARGS_FILE%" echo %*
+)
+exit /b 0
+EOF
+
+    fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null || printf '%s' "$fakebin")
+
+    output=$(
+        cd "$ws" && \
+        env CI=1 \
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$fakebin_win\\codex.cmd" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        FAKE_CODEX_ARGS_FILE="$args_file" \
+        PATH="$fakebin_win;$PATH" \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$prompts_file" 2>&1
+    ) || true
+
+    local valid=true
+    [ -f "$ws/.codex-sdlc/manifest.json" ] || valid=false
+    echo "$output" | grep -Fq 'Scanning project...' || valid=false
+    ! echo "$output" | grep -Fq 'Handing off into Codex for live setup' || valid=false
+    [ ! -s "$args_file" ] || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "CI mode keeps setup on the shell path"
+    else
+        fail "CI mode did not keep setup on the shell path"
     fi
 }
 
@@ -355,6 +416,7 @@ test_local_npx_installs_into_clean_repo
 test_local_npx_setup_honors_model_profile_flag
 test_packed_tarball_scratch_smoke
 test_default_interactive_hands_off_to_codex
+test_ci_mode_keeps_shell_setup_path
 test_cli_help_documents_bootstrap_profile_policy
 
 echo ""
