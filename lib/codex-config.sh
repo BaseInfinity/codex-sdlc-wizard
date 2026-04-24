@@ -4,7 +4,7 @@ set -euo pipefail
 profile_model() {
     case "$1" in
         mixed) printf '%s\n' "gpt-5.4-mini" ;;
-        maximum) printf '%s\n' "gpt-5.4" ;;
+        maximum) printf '%s\n' "gpt-5.5" ;;
         *) return 1 ;;
     esac
 }
@@ -19,7 +19,7 @@ profile_reasoning() {
 
 profile_review_model() {
     case "$1" in
-        mixed) printf '%s\n' "gpt-5.4" ;;
+        mixed) printf '%s\n' "gpt-5.5" ;;
         maximum) printf '%s\n' "" ;;
         *) return 1 ;;
     esac
@@ -40,11 +40,11 @@ const profile = process.env.CODEX_MODEL_PROFILE;
 const profiles = {
   mixed: {
     model: "gpt-5.4-mini",
-    model_reasoning_effort: "xhigh",
-    review_model: "gpt-5.4"
+    model_reasoning_effort: "medium",
+    review_model: "gpt-5.5"
   },
   maximum: {
-    model: "gpt-5.4",
+    model: "gpt-5.5",
     model_reasoning_effort: "xhigh",
     review_model: null
   }
@@ -197,11 +197,11 @@ const profile = process.env.CODEX_MODEL_PROFILE;
 const profiles = {
   mixed: {
     model: "gpt-5.4-mini",
-    model_reasoning_effort: "xhigh",
-    review_model: "gpt-5.4"
+    model_reasoning_effort: "medium",
+    review_model: "gpt-5.5"
   },
   maximum: {
-    model: "gpt-5.4",
+    model: "gpt-5.5",
     model_reasoning_effort: "xhigh",
     review_model: null
   }

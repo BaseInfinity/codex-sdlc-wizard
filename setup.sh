@@ -110,7 +110,7 @@ EOF
         --ephemeral \
         --output-schema "$schema_file" \
         -o "$output_file" \
-        -c 'model="gpt-5.4"' \
+        -c 'model="gpt-5.5"' \
         -c 'model_reasoning_effort="xhigh"' \
         "$(cat "$prompt_file")" >/dev/null 2>&1; then
         if json_has_truthy_file "$output_file" 'typeof data === "object" && data !== null && !Array.isArray(data)'; then
