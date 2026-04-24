@@ -195,8 +195,8 @@ verify_installation() {
     if [ "$errors" -eq 0 ]; then
         echo "  All files present."
         echo ""
-        echo "Setup complete. Trust this repo in Codex, then run 'codex --full-auto' for low-friction SDLC."
-        echo "If you are continuing an interrupted Codex handoff and have a resume id, use 'codex resume --full-auto'."
+        echo "Setup complete. Trust this repo in Codex, then exit and reopen Codex in this repo so repo-local config, hooks, and skills load."
+        echo "If you resume, use the model-explicit resume command printed above so Codex does not fall back to an older model."
         return 0
     fi
 
