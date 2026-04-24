@@ -141,9 +141,11 @@ test_local_npx_installs_into_clean_repo() {
     if [ -z "$tarball_name" ] || [ ! -f "$tarball_path" ]; then
         installed=false
     else
+        printf '%s' '{"name":"install-smoke","scripts":{"test":"jest"}}' > "$target_repo/package.json"
+        mkdir -p "$target_repo/src"
         (
             cd "$target_repo"
-            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard >/dev/null 2>&1
+            npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard --yes >/dev/null 2>&1
         ) || installed=false
     fi
 
@@ -153,13 +155,14 @@ test_local_npx_installs_into_clean_repo() {
     [ -x "$target_repo/.codex/hooks/bash-guard.sh" ] || installed=false
     [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || installed=false
     [ -f "$target_repo/.agents/skills/adlc/SKILL.md" ] || installed=false
+    [ -f "$target_repo/.codex-sdlc/manifest.json" ] || installed=false
 
     rm -rf "$pack_dir" "$target_repo" "$npm_cache"
 
     if [ "$installed" = "true" ]; then
-        pass "local npm exec installs SDLC enforcement into a clean repo"
+        pass "local npm exec defaults to adaptive setup when automation passes --yes"
     else
-        fail "local npm exec did not install the package correctly"
+        fail "local npm exec did not route the default command through adaptive setup"
     fi
 }
 
@@ -267,11 +270,12 @@ test_cli_help_documents_bootstrap_profile_policy() {
     echo "$output" | grep -qi 'maximum' || valid=false
     echo "$output" | grep -Eqi 'setup.*maximum|bootstrap.*maximum' || valid=false
     echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' || valid=false
+    echo "$output" | grep -Eqi 'default.*adaptive setup|adaptive setup.*default' || valid=false
 
     if [ "$valid" = "true" ]; then
-        pass "CLI help documents maximum for bootstrap and mixed for routine work"
+        pass "CLI help documents adaptive setup as the default plus the bootstrap profile policy"
     else
-        fail "CLI help does not document the bootstrap-versus-routine profile policy clearly enough"
+        fail "CLI help does not document the adaptive default and bootstrap-versus-routine profile policy clearly enough"
     fi
 }
 

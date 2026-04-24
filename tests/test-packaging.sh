@@ -470,7 +470,7 @@ test_readme_puts_quick_start_near_the_top() {
     local quick_start_section
     local quick_start_command
     local has_latest=true
-    local has_setup_yes=true
+    local has_adaptive_setup_note=true
     local avoids_git_clone=true
     local avoids_model_experiment=true
     local avoids_pilot_rollout=true
@@ -484,8 +484,8 @@ test_readme_puts_quick_start_near_the_top() {
     ' "$README")
     quick_start_command=$(printf '%s\n' "$quick_start_section" | grep '^npx codex-sdlc-wizard@' | head -n1)
 
-    echo "$quick_start_command" | grep -q '^npx codex-sdlc-wizard@latest setup --yes$' || has_latest=false
-    echo "$quick_start_section" | grep -q 'setup --yes' || has_setup_yes=false
+    echo "$quick_start_command" | grep -q '^npx codex-sdlc-wizard@latest$' || has_latest=false
+    echo "$quick_start_section" | grep -Eqi 'adaptive interactive setup|adaptive setup' || has_adaptive_setup_note=false
     echo "$quick_start_section" | grep -q 'git clone' && avoids_git_clone=false
     echo "$quick_start_section" | grep -Eqi 'model-experiment|benchmark|gpt-5\.4-mini|20-slice' && avoids_model_experiment=false
     echo "$quick_start_section" | grep -Eqi 'pilot-rollout|default-use gate|default use gate|3-5 pilot repos' && avoids_pilot_rollout=false
@@ -494,11 +494,11 @@ test_readme_puts_quick_start_near_the_top() {
        [ -n "${what_this_repo_is_line:-}" ] &&
        [ "$quick_start_line" -lt "$what_this_repo_is_line" ] &&
        [ "$has_latest" = "true" ] &&
-       [ "$has_setup_yes" = "true" ] &&
+       [ "$has_adaptive_setup_note" = "true" ] &&
        [ "$avoids_git_clone" = "true" ] &&
        [ "$avoids_model_experiment" = "true" ] &&
        [ "$avoids_pilot_rollout" = "true" ]; then
-        pass "README puts Quick Start near the top, starts with latest setup, and keeps it free of extra noise"
+        pass "README puts Quick Start near the top, starts with the adaptive default command, and keeps it free of extra noise"
     else
         fail "README does not keep Quick Start near the top and consumer-focused"
     fi
