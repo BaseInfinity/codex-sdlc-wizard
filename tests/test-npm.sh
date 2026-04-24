@@ -261,11 +261,80 @@ test_packed_tarball_scratch_smoke() {
     fi
 }
 
+test_default_interactive_hands_off_to_codex() {
+    local ws fakebin fakebin_win codex_home args_file output
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    args_file="$ws/codex-args.txt"
+
+    printf '%s' '{"name":"handoff-smoke","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+set -eu
+args_file="${FAKE_CODEX_ARGS_FILE:-}"
+if [ -n "$args_file" ]; then
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$args_file"
+  done
+fi
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
+    cat > "$fakebin/codex.cmd" <<'EOF'
+@echo off
+if not "%FAKE_CODEX_ARGS_FILE%"=="" (
+  >>"%FAKE_CODEX_ARGS_FILE%" echo %*
+)
+exit /b 0
+EOF
+
+    fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null || printf '%s' "$fakebin")
+
+    output=$(
+        cd "$ws" && \
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$fakebin_win\\codex.cmd" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        CODEX_SDLC_FORCE_CODEX_HANDOFF=1 \
+        FAKE_CODEX_ARGS_FILE="$args_file" \
+        PATH="$fakebin_win;$PATH" \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" 2>&1
+    ) || true
+
+    local valid=true
+    [ -f "$ws/.codex/config.toml" ] || valid=false
+    [ -f "$ws/.codex/hooks.json" ] || valid=false
+    [ -f "$ws/.codex-sdlc/model-profile.json" ] || valid=false
+    [ ! -f "$ws/.codex-sdlc/manifest.json" ] || valid=false
+    grep -Fq -- '--full-auto' "$args_file" 2>/dev/null || valid=false
+    grep -Fq -- '-C' "$args_file" 2>/dev/null || valid=false
+    grep -Fq -- '-m' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'gpt-5.4' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
+    grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
+    echo "$output" | grep -Fq 'Handing off into Codex for live setup' || valid=false
+    ! echo "$output" | grep -Fq 'Scanning project...' || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "default interactive CLI bootstraps then hands off into Codex"
+    else
+        fail "default interactive CLI did not hand off into Codex correctly"
+    fi
+}
+
 test_cli_help_documents_bootstrap_profile_policy() {
     local output
     output=$(node "$REPO_DIR/bin/codex-sdlc-wizard.js" --help 2>&1) || true
 
     local valid=true
+    echo "$output" | grep -Eqi 'launch.*codex|handoff.*codex|continue.*inside codex' || valid=false
     echo "$output" | grep -qi 'mixed' || valid=false
     echo "$output" | grep -qi 'maximum' || valid=false
     echo "$output" | grep -Eqi 'setup.*maximum|bootstrap.*maximum' || valid=false
@@ -285,6 +354,7 @@ test_npm_pack_includes_runtime_files
 test_local_npx_installs_into_clean_repo
 test_local_npx_setup_honors_model_profile_flag
 test_packed_tarball_scratch_smoke
+test_default_interactive_hands_off_to_codex
 test_cli_help_documents_bootstrap_profile_policy
 
 echo ""
