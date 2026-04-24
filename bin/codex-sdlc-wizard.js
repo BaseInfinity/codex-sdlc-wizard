@@ -92,16 +92,14 @@ function codexAvailable() {
   return !result.error && result.status === 0;
 }
 
-function isInteractiveTerminal() {
-  if (process.env.CODEX_SDLC_FORCE_CODEX_HANDOFF === "1") {
-    return true;
-  }
+function isCiEnvironment() {
+  const ciValue = process.env.CI;
 
-  if (process.env.CODEX_SDLC_DISABLE_CODEX_HANDOFF === "1") {
+  if (typeof ciValue !== "string") {
     return false;
   }
 
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  return ciValue !== "" && ciValue !== "0" && ciValue.toLowerCase() !== "false";
 }
 
 function isHandoffCompatibleArg(arg) {
@@ -128,7 +126,11 @@ function shouldHandoffToCodex() {
     return true;
   }
 
-  return isInteractiveTerminal() && codexAvailable();
+  if (process.env.CODEX_SDLC_DISABLE_CODEX_HANDOFF === "1" || isCiEnvironment()) {
+    return false;
+  }
+
+  return codexAvailable();
 }
 
 function runScript(scriptName, args) {
