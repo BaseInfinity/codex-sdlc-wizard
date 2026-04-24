@@ -2,10 +2,12 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.3` and `v0.7.3` are the current release target for the adaptive-default CLI cleanup pass
+- `codex-sdlc-wizard@0.7.4` and `v0.7.4` are the current release target for the xhigh conversational setup refinement pass
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
+- setup now layers deterministic scan plus live Codex `gpt-5.4` / `xhigh` refinement when available
+- setup now keeps detected values automatically, asks inferred values conversationally, and asks only missing core repo facts directly
 - the repo-scoped Codex discovery bridge for `$sdlc` / `$adlc` is now part of the shipping path
 - consumer-path hardening for auth-heavy boundaries, capability detectors, and docs-strong scaffold repos is shipped
 - honest Codex architecture guidance, confidence/reporting guidance, direct-issue capture, and repo-focus rules are now part of the shipped path
@@ -21,13 +23,13 @@
 
 ## Next Release Cycle
 
-### 0.7.4
+### 0.7.5
 
-Purpose: prove the post-`0.7.3` consumer path on real repos and stabilize any reusable wizard bugs without changing the default-use claim early.
+Purpose: prove the post-`0.7.4` consumer path on real repos and stabilize any reusable wizard bugs without changing the default-use claim early.
 
 Scope:
-- run `0.7.3` on 3-5 pilot repos and log results in `benchmarks/pilot-rollout.csv`
-- cut a stabilization patch only if pilots surface a reusable wizard bug
+- run `0.7.4` on 3-5 pilot repos and log results in `benchmarks/pilot-rollout.csv`
+- cut a stabilization patch only if pilots surface another reusable wizard bug
 - keep the default-use recommendation gated on the measurable pilot summary
 - keep the separate model experiment running, but do not let it block pilot rollout work
 
@@ -36,11 +38,11 @@ Scope:
 The issue tracker is currently clear.
 
 - open a new issue only when pilot consumption exposes a proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.3` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.4` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.3`, the main backlog is:
+After `0.7.4`, the main backlog is:
 
 - pilot rollout proof for default use on real repos
 - any reusable wizard fixes discovered during the pilot set
@@ -49,15 +51,15 @@ After `0.7.3`, the main backlog is:
 
 ## Working Order
 
-1. Prove the default-use gate on 3-5 pilot repos with `0.7.3`
-2. Ship `0.7.4` only if pilot rollout surfaces a reusable wizard bug
+1. Prove the default-use gate on 3-5 pilot repos with `0.7.4`
+2. Ship `0.7.5` only if pilot rollout surfaces another reusable wizard bug
 3. Keep creator-tool investigation behind the active backlog
 
 ## Default-Use Gate
 
 Before calling this the default Codex SDLC path, prove it on real pilot repos instead of just repo-self-tests.
 
-- run `0.7.3` on 3-5 pilot repos
+- run `0.7.4` on 3-5 pilot repos
 - require pilot success >= 95% before default use
 - allow no more than 1 reusable wizard bug across the pilot set
 - track the pilot set in `benchmarks/pilot-rollout.csv`
