@@ -205,9 +205,6 @@ declare -a STATIC_REPAIRS=()
 declare -a SKILL_REPAIRS=()
 declare -a LEGACY_SKILL_REMOVALS=()
 declare -a SKIPPED_CUSTOMIZED_PATHS=()
-declare -A STATIC_REPAIR_SET=()
-declare -A SKILL_REPAIR_SET=()
-declare -A LEGACY_SKILL_REMOVAL_SET=()
 CHANGES_PENDING=false
 RUN_REGENERATE=false
 REGENERATE_FORCE=false
@@ -242,8 +239,7 @@ queue_skill_repair() {
 
 queue_legacy_skill_removal() {
     local legacy_name="$1"
-    if [ -z "${LEGACY_SKILL_REMOVAL_SET[$legacy_name]+x}" ]; then
-        LEGACY_SKILL_REMOVAL_SET["$legacy_name"]=1
+    if [ "${#LEGACY_SKILL_REMOVALS[@]}" -eq 0 ] || ! array_contains "$legacy_name" "${LEGACY_SKILL_REMOVALS[@]}"; then
         LEGACY_SKILL_REMOVALS+=("$legacy_name")
     fi
 }
@@ -395,10 +391,12 @@ if [ "${#SKILL_REPAIRS[@]}" -gt 0 ]; then
     done
 fi
 
-for legacy_name in "${LEGACY_SKILL_REMOVALS[@]}"; do
-    remove_legacy_skill "$legacy_name"
-    echo "Removed legacy skill: skills/$legacy_name"
-done
+if [ "${#LEGACY_SKILL_REMOVALS[@]}" -gt 0 ]; then
+    for legacy_name in "${LEGACY_SKILL_REMOVALS[@]}"; do
+        remove_legacy_skill "$legacy_name"
+        echo "Removed legacy skill: skills/$legacy_name"
+    done
+fi
 
 if [ "$RUN_REGENERATE" = "true" ]; then
     if [ "$REGENERATE_FORCE" = "true" ]; then

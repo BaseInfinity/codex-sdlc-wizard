@@ -153,10 +153,10 @@ write_model_profile() {
   "profiles": {
     "mixed": {
       "main_model": "gpt-5.4-mini",
-      "main_reasoning": "medium",
+      "main_reasoning": "xhigh",
       "review_model": "gpt-5.5",
       "review_reasoning": "xhigh",
-      "tradeoff": "Smaller/faster main model for routine work while keeping xhigh reasoning and xhigh review."
+      "tradeoff": "Smaller/faster main model for routine work while keeping xhigh main reasoning and xhigh review."
     },
     "maximum": {
       "main_model": "gpt-5.5",
