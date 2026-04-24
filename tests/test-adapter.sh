@@ -508,6 +508,12 @@ test_repo_defaults_to_xhigh_reasoning() {
         all_passed=false
     fi
 
+    if ! grep -q 'codex resume --full-auto -m gpt-5.5' "$REPO_DIR/install.ps1" ||
+       ! grep -q 'model_reasoning_effort=`"xhigh`"' "$REPO_DIR/install.ps1"; then
+        fail "PowerShell installer does not print model-explicit gpt-5.5 xhigh resume guidance"
+        all_passed=false
+    fi
+
     if [ "$all_passed" = "true" ]; then
         pass "repo contract defaults to xhigh reasoning"
     fi
