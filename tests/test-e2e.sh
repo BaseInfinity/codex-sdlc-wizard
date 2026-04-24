@@ -10,6 +10,7 @@ REPO_DIR="$SCRIPT_DIR/.."
 PASSED=0
 FAILED=0
 SKIPPED=0
+CODEX_E2E_MODEL="${CODEX_E2E_MODEL:-gpt-5.5}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -20,6 +21,17 @@ pass() { echo -e "${GREEN}PASS${NC}: $1"; PASSED=$((PASSED + 1)); }
 fail() { echo -e "${RED}FAIL${NC}: $1"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "${YELLOW}SKIP${NC}: $1"; SKIPPED=$((SKIPPED + 1)); }
 
+codex_transport_unavailable() {
+    echo "$1" | grep -Eqi 'failed to lookup address|failed to connect to websocket|stream disconnected before completion|api\.openai\.com'
+}
+
+skip_transport_unavailable() {
+    skip "E2E: Codex API transport is unavailable in this environment — rerun tests/test-e2e.sh with network access"
+    echo ""
+    echo "=== E2E Results: $PASSED passed, $FAILED failed, $SKIPPED skipped ==="
+    exit 0
+}
+
 # Preflight: codex CLI must exist
 if ! command -v codex >/dev/null 2>&1; then
     echo "codex CLI not found — skipping E2E tests"
@@ -29,6 +41,7 @@ fi
 echo "=== Codex SDLC Adapter E2E Tests ==="
 CODEX_VERSION_OUTPUT="$(codex --version 2>&1)"
 echo "Codex version: $CODEX_VERSION_OUTPUT"
+echo "Codex E2E model: $CODEX_E2E_MODEL"
 echo ""
 
 # Workspace sandboxing can block Codex from updating PATH during startup, which
@@ -65,11 +78,17 @@ test_e2e_hooks_load() {
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
         -s danger-full-access \
-        "Reply with exactly the text: HOOKS_LOADED_OK" 2>&1) || exit_code=$?
+        -m "$CODEX_E2E_MODEL" \
+        -c 'model_reasoning_effort="xhigh"' \
+        "Run this exact shell command and show the output: echo HOOKS_LOADED_OK" 2>&1) || exit_code=$?
 
     cleanup "$ws"
 
-    if [ "$exit_code" -eq 0 ] && [ -n "$output" ]; then
+    if codex_transport_unavailable "$output"; then
+        skip_transport_unavailable
+    fi
+
+    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -q "HOOKS_LOADED_OK"; then
         pass "E2E: Codex session completed with hooks loaded"
     else
         fail "E2E: Codex session failed to load hooks (exit=$exit_code, output=${output:0:200})"
@@ -88,6 +107,8 @@ test_e2e_bash_guard_blocks_commit() {
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
         -s danger-full-access \
+        -m "$CODEX_E2E_MODEL" \
+        -c 'model_reasoning_effort="xhigh"' \
         "Run this exact shell command: git commit -m 'test commit'" 2>&1) || exit_code=$?
 
     local head_msg
@@ -111,6 +132,8 @@ test_e2e_bash_guard_blocks_push() {
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
         -s danger-full-access \
+        -m "$CODEX_E2E_MODEL" \
+        -c 'model_reasoning_effort="xhigh"' \
         "Run this exact shell command: git push origin main" 2>&1) || exit_code=$?
 
     cleanup "$ws"
@@ -137,6 +160,8 @@ test_e2e_normal_commands_allowed() {
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
         -s danger-full-access \
+        -m "$CODEX_E2E_MODEL" \
+        -c 'model_reasoning_effort="xhigh"' \
         "Run this exact shell command and show the output: echo SDLC_E2E_CANARY" 2>&1) || exit_code=$?
 
     cleanup "$ws"
@@ -158,11 +183,13 @@ test_e2e_session_without_agents_md() {
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
         -s danger-full-access \
-        "Reply with exactly: SESSION_OK" 2>&1) || exit_code=$?
+        -m "$CODEX_E2E_MODEL" \
+        -c 'model_reasoning_effort="xhigh"' \
+        "Run this exact shell command and show the output: echo SESSION_OK" 2>&1) || exit_code=$?
 
     cleanup "$ws"
 
-    if [ "$exit_code" -eq 0 ] && [ -n "$output" ]; then
+    if [ "$exit_code" -eq 0 ] && echo "$output" | grep -q "SESSION_OK"; then
         pass "E2E: Session works without AGENTS.md (hook warns, doesn't crash)"
     else
         fail "E2E: Session crashed without AGENTS.md (exit=$exit_code)"

@@ -6,14 +6,14 @@
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
-- setup now layers deterministic scan plus live Codex `gpt-5.4` / `xhigh` refinement when available
+- setup now layers deterministic scan plus live Codex `gpt-5.5` / `xhigh` refinement when available
 - setup now keeps detected values automatically, asks inferred values conversationally, and asks only missing core repo facts directly
 - the repo-scoped Codex discovery bridge for `$sdlc` / `$adlc` is now part of the shipping path
 - consumer-path hardening for auth-heavy boundaries, capability detectors, and docs-strong scaffold repos is shipped
 - honest Codex architecture guidance, confidence/reporting guidance, direct-issue capture, and repo-focus rules are now part of the shipped path
 - the model-profile toggle is now shipped as a user choice:
-  - `mixed`: `gpt-5.4-mini` / `xhigh` main pass + `gpt-5.4` / `xhigh` review
-  - `maximum`: `gpt-5.4` / `xhigh` throughout
+  - `mixed`: `gpt-5.4-mini` main pass + `gpt-5.5` `xhigh` review
+  - `maximum`: `gpt-5.5` / `xhigh` throughout
 - setup/install now offer issue-ready feedback for obvious wizard-level failures instead of only failing vaguely
 - setup/update guidance now biases bootstrap work toward `maximum` while routine work can switch back to `mixed`
 - setup/update guidance now treats verification as diagnostic for product failures and stops before editing application code or application tests without explicit user consent
@@ -78,11 +78,11 @@ After the current backlog is under control, investigate whether Codex's built-in
 
 - evaluate `Skill Creator` as a possible future aid for skill-structure maintenance
 - evaluate `Plugin Creator` only as later research, since plugins are not part of the current shipping path
-- measure `gpt-5.4-mini` with `xhigh` for the main working pass while keeping `xhigh` for review or cross-model review, and compare that against simply running the whole slice on `gpt-5.4` at `xhigh`
+- measure `gpt-5.4-mini` for the main working pass while keeping `gpt-5.5` `xhigh` for review or cross-model review, and compare that against simply running the whole slice at `xhigh`
 - if the mixed mode proves out, add an easy toggle between two explicit profiles:
-  - `mixed`: `gpt-5.4-mini` / `xhigh` for the main pass plus `gpt-5.4` / `xhigh` review
-  - `maximum`: `gpt-5.4` / `xhigh` for the whole slice as the "ultimate mode"
-- do not change the default based on anecdotes: require a sample of 20 slices before recommending `gpt-5.4-mini` / `xhigh` plus `gpt-5.4` / `xhigh` review as the normal mode
+  - `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.5` `xhigh` review
+  - `maximum`: `gpt-5.5` / `xhigh` for the whole slice as the "ultimate mode"
+- do not change the default based on anecdotes: require a sample of 20 slices before recommending `gpt-5.4-mini` + `gpt-5.5` `xhigh` review as the normal mode
 - numeric target for recommending the mixed mode: at least 95% end-to-end success, follow-up rate <= 10%, and at least a 15% improvement in cycle time versus all-`xhigh`
 - keep abstract, complex, or high-blast-radius work on `high`/`xhigh` by default until separate numbers say otherwise
 - keep this behind the active workload so it does not compete with the active pilot-rollout and stabilization backlog

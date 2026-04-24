@@ -76,9 +76,9 @@ This adapter tracks the upstream [SDLC Wizard](https://github.com/BaseInfinity/a
 
 The wizard supports two wizard-owned model profiles:
 
-- `mixed`: `gpt-5.4-mini` at `xhigh` for the main pass plus `gpt-5.4` at `xhigh` for review.
-  Tradeoff: smaller/faster main model on routine work after bootstrap while keeping high reasoning pressure.
-- `maximum`: `gpt-5.4` at `xhigh` throughout.
+- `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.5` at `xhigh` for review.
+  Tradeoff: better speed, lower latency, and lower token usage on routine work after bootstrap.
+- `maximum`: `gpt-5.5` at `xhigh` throughout.
   Tradeoff: higher latency and token usage in exchange for the most stable and thorough "ultimate mode."
 
 How to choose:
@@ -109,8 +109,8 @@ It also writes the matching repo-local Codex config to `.codex/config.toml` so t
 
 ```toml
 model = "gpt-5.4-mini"
-model_reasoning_effort = "xhigh"
-review_model = "gpt-5.4"
+model_reasoning_effort = "medium"
+review_model = "gpt-5.5"
 
 [features]
 codex_hooks = true
@@ -119,7 +119,7 @@ codex_hooks = true
 `maximum` maps to:
 
 ```toml
-model = "gpt-5.4"
+model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 
 [features]
@@ -135,7 +135,7 @@ Bootstrap recommendation:
 
 Repo-specific maintainer rule:
 - consumer repos can choose `mixed` or `maximum`
-- this repo stays on `maximum`; `codex-sdlc-wizard` itself is unusually meta and high-blast-radius
+- this repo always stays on `maximum` (`gpt-5.5` at `xhigh` throughout); do not switch `codex-sdlc-wizard` maintenance to `mixed`, mini-only, or lower-reasoning profiles because it is unusually meta and high-blast-radius
 
 ## Repo-Scoped Skills
 

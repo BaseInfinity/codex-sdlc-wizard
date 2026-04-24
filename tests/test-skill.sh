@@ -156,16 +156,23 @@ test_skill_documents_model_profiles() {
 
 test_repo_contract_keeps_this_repo_on_maximum() {
     local has_maximum_rule=true
+    local has_gpt55_xhigh_rule=true
+    local has_no_downgrade_rule=true
     local has_meta_reason=true
 
     grep -Eqi 'this repo.*maximum|codex-sdlc-wizard itself.*maximum|maintaining this wizard repo.*maximum' "$REPO_AGENTS" || has_maximum_rule=false
+    grep -Eqi 'gpt-5\.5.*xhigh|xhigh.*gpt-5\.5' "$REPO_AGENTS" || has_gpt55_xhigh_rule=false
+    grep -Eqi 'do not.*(downgrade|switch).*(mixed|mini|lower)|always.*gpt-5\.5.*xhigh|gpt-5\.5.*xhigh.*always' "$REPO_AGENTS" || has_no_downgrade_rule=false
+    grep -Eqi 'explicitly asks for less|asks for less' "$REPO_AGENTS" && has_no_downgrade_rule=false
     grep -Eqi 'meta|high-blast-radius|too meta' "$REPO_AGENTS" || has_meta_reason=false
 
     if [ "$has_maximum_rule" = "true" ] &&
+       [ "$has_gpt55_xhigh_rule" = "true" ] &&
+       [ "$has_no_downgrade_rule" = "true" ] &&
        [ "$has_meta_reason" = "true" ]; then
-        pass "AGENTS.md keeps this wizard repo on maximum because the work is meta/high-blast-radius"
+        pass "AGENTS.md keeps this wizard repo on gpt-5.5 xhigh maximum because the work is meta/high-blast-radius"
     else
-        fail "AGENTS.md does not keep this wizard repo on maximum clearly enough"
+        fail "AGENTS.md does not keep this wizard repo on gpt-5.5 xhigh maximum clearly enough"
     fi
 }
 

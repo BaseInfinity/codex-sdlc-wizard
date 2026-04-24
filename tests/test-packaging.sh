@@ -113,7 +113,11 @@ test_installer_writes_default_model_profile() {
         has_profile=false
     elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.selected_profile === "mixed"'; then
         has_profile=false
-    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.maximum && data.profiles.maximum.main_model === "gpt-5.4"'; then
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.maximum && data.profiles.maximum.main_model === "gpt-5.5"'; then
+        has_profile=false
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.maximum && data.profiles.maximum.review_model === "gpt-5.5"'; then
+        has_profile=false
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.mixed && data.profiles.mixed.review_model === "gpt-5.5"'; then
         has_profile=false
     fi
 
@@ -121,7 +125,7 @@ test_installer_writes_default_model_profile() {
         has_profile=false
     elif ! grep -q '^model_reasoning_effort = "xhigh"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
-    elif ! grep -q '^review_model = "gpt-5.4"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+    elif ! grep -q '^review_model = "gpt-5.5"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
     elif ! grep -q '^codex_hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
@@ -446,6 +450,7 @@ test_readme_documents_model_profiles() {
     local has_mixed=true
     local has_maximum=true
     local has_tradeoff=true
+    local has_gpt55=true
     local has_confidence_rule=true
     local has_repo_maximum_rule=true
     local has_bootstrap_maximum_rule=true
@@ -454,6 +459,7 @@ test_readme_documents_model_profiles() {
     grep -q '^## Model Profiles$' "$README" || has_heading=false
     grep -q '`mixed`' "$README" || has_mixed=false
     grep -q '`maximum`' "$README" || has_maximum=false
+    grep -q 'gpt-5.5' "$README" || has_gpt55=false
     grep -Eqi 'speed|latency|token' "$README" || has_tradeoff=false
     grep -Eqi 'stability|ultimate' "$README" || has_tradeoff=false
     grep -Eqi '95%|xhigh review|research more first' "$README" || has_confidence_rule=false
@@ -464,6 +470,7 @@ test_readme_documents_model_profiles() {
     if [ "$has_heading" = "true" ] &&
        [ "$has_mixed" = "true" ] &&
        [ "$has_maximum" = "true" ] &&
+       [ "$has_gpt55" = "true" ] &&
        [ "$has_tradeoff" = "true" ] &&
        [ "$has_confidence_rule" = "true" ] &&
        [ "$has_repo_maximum_rule" = "true" ] &&
