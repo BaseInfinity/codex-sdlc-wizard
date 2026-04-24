@@ -7,16 +7,19 @@ const scriptDir = path.resolve(__dirname, "..");
 const rawArgs = process.argv.slice(2);
 
 function printHelp() {
-  process.stdout.write(`Usage: codex-sdlc-wizard [install|setup|check|update] [options]
+  process.stdout.write(`Usage: codex-sdlc-wizard [setup|check|update|install] [options]
 
 Commands:
-  install        Install AGENTS.md, hooks, and config into the current repo
-  setup          Run adaptive setup.sh in the current repo
+  setup          Run adaptive setup.sh in the current repo (default)
   check          Report managed-file drift for the current repo
   update         Apply selective updates for missing or drifted managed files
+  install        Advanced escape hatch: run install.sh without adaptive setup
+
+Default behavior: adaptive setup in the current repo.
+Bootstrap/setup recommendation: maximum.
+Routine work after bootstrap: mixed.
 
 Options:
-  --setup        Alias for the setup command
   --model-profile <mixed|maximum>
                 Wizard-owned profile toggle. Use 'maximum' for setup/bootstrap
                 work, then switch routine work back to 'mixed' for better
@@ -25,15 +28,15 @@ Options:
 
 Examples:
   npx codex-sdlc-wizard
-  npx codex-sdlc-wizard setup --yes
-  npx codex-sdlc-wizard setup --yes --model-profile maximum
+  npx codex-sdlc-wizard --model-profile maximum
+  npx codex-sdlc-wizard setup
   npx codex-sdlc-wizard check
   npx codex-sdlc-wizard update
-  npx codex-sdlc-wizard --setup --yes --force
+  npx codex-sdlc-wizard install
 `);
 }
 
-let command = "install";
+let command = "setup";
 let scriptArgs = rawArgs;
 
 if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
