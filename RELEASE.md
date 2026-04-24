@@ -44,6 +44,15 @@ bash tests/test-update.sh
 
 That smoke must stay clean on a fresh temp repo before release.
 
+For setup/install or Codex-handoff changes, also run one real external repo smoke from a representative target repo, not just temp-fixture coverage. On Windows, do it from a real PowerShell session where `codex` resolves through the normal PATH / `codex.cmd` behavior.
+
+Minimum expectation for that smoke:
+
+- run from a representative repo such as `C:\Users\stefa\gamelist` or another real target repo
+- verify `codex --version` works in that same PowerShell session
+- run the published package entrypoint from that repo
+- confirm the human path behaves as intended, not just the fixture path
+
 ## 3. Optional High-Cost Proof
 
 Run this when Codex auth is available and you want live CLI coverage before release:
