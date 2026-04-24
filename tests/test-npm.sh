@@ -272,19 +272,6 @@ test_default_interactive_hands_off_to_codex() {
     mkdir -p "$ws/tests"
     touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
 
-    cat > "$fakebin/codex" <<'EOF'
-#!/bin/sh
-set -eu
-args_file="${FAKE_CODEX_ARGS_FILE:-}"
-if [ -n "$args_file" ]; then
-  for arg in "$@"; do
-    printf '%s\n' "$arg" >> "$args_file"
-  done
-fi
-exit 0
-EOF
-    chmod +x "$fakebin/codex"
-
     cat > "$fakebin/codex.cmd" <<'EOF'
 @echo off
 if not "%FAKE_CODEX_ARGS_FILE%"=="" (

@@ -82,7 +82,7 @@ function spawnCodex(args, stdio) {
   return spawnSync(codexCommand, args, {
     cwd: process.cwd(),
     stdio,
-    shell: Boolean(process.platform === "win32" && process.env.CODEX_SDLC_CODEX_BIN)
+    shell: process.platform === "win32"
   });
 }
 
