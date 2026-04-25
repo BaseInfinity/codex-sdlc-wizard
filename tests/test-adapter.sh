@@ -164,7 +164,7 @@ test_live_hooks_file_is_windows_safe() {
 
     if grep -q 'git-guard\.ps1' "$ACTIVE_HOOKS_FILE" \
         && grep -q 'session-start\.ps1' "$ACTIVE_HOOKS_FILE" \
-        && ! grep -q 'bash-guard\.sh' "$ACTIVE_HOOKS_FILE"; then
+        && ! grep -q '\.sh' "$ACTIVE_HOOKS_FILE"; then
         pass "live hooks.json uses the quiet PowerShell hook set on Windows"
     else
         fail "live hooks.json still points at Bash hooks on Windows"
@@ -385,6 +385,48 @@ test_update_skill_has_idempotent_update_contract() {
         pass "update-wizard carries the idempotent selective-update contract"
     else
         fail "update-wizard is missing the idempotent selective-update contract"
+    fi
+}
+
+test_setup_and_update_skills_stop_before_product_remediation() {
+    local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local all_passed=true
+
+    for skill in "$setup_skill" "$update_skill"; do
+        if ! grep -q 'do not edit application code' "$skill"; then
+            fail "$(basename "$(dirname "$skill")") does not forbid application code edits during setup/update"
+            all_passed=false
+        fi
+
+        if ! grep -q 'application tests' "$skill"; then
+            fail "$(basename "$(dirname "$skill")") does not protect application tests during setup/update"
+            all_passed=false
+        fi
+
+        if ! grep -q 'verification is diagnostic' "$skill"; then
+            fail "$(basename "$(dirname "$skill")") does not make verification diagnostic by default"
+            all_passed=false
+        fi
+
+        if ! grep -q '\$codex-sdlc' "$skill"; then
+            fail "$(basename "$(dirname "$skill")") does not hand product regressions to codex-sdlc"
+            all_passed=false
+        fi
+
+        if ! grep -q 'exit and reopen Codex' "$skill"; then
+            fail "$(basename "$(dirname "$skill")") does not explicitly recommend restarting Codex after hook/skill changes"
+            all_passed=false
+        fi
+
+        if ! grep -q 'do not need to rerun' "$skill"; then
+            fail "$(basename "$(dirname "$skill")") does not say restart does not require rerunning setup/update"
+            all_passed=false
+        fi
+    done
+
+    if [ "$all_passed" = "true" ]; then
+        pass "setup/update skills stop before unrelated product remediation and recommend restart"
     fi
 }
 
@@ -658,6 +700,7 @@ test_install_backs_up_hooks_json
 test_agents_md_size
 test_setup_skill_has_confidence_setup_contract
 test_update_skill_has_idempotent_update_contract
+test_setup_and_update_skills_stop_before_product_remediation
 test_feedback_skill_has_privacy_prompt_and_dedupe
 test_sdlc_skill_has_docsync_learning_and_merge_guard
 test_repo_defaults_to_xhigh_reasoning

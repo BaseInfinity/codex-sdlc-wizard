@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.8` and `v0.7.8` are the current release target for the Windows `codex.cmd` handoff fix
+- `codex-sdlc-wizard@0.7.9` and `v0.7.9` are the current release target for the setup/update scope-control stabilization patch
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -16,6 +16,9 @@
   - `maximum`: `gpt-5.4` / `xhigh` throughout
 - setup/install now offer issue-ready feedback for obvious wizard-level failures instead of only failing vaguely
 - setup/update guidance now biases bootstrap work toward `maximum` while routine work can switch back to `mixed`
+- setup/update guidance now treats verification as diagnostic for product failures and stops before editing application code or application tests without explicit user consent
+- setup/update guidance now tells users to exit and reopen Codex after hook/skill repairs, without rerunning setup/update just for that restart
+- install/setup/update now write and repair repo-local `.codex/config.toml` model keys for the selected profile, while preserving unrelated MCP, sandbox, approval, and custom config
 - the repo now ships a consumer bug-report template for install/setup/runtime failures
 - the public README now leads with the real `@latest` adaptive setup path and keeps the top section consumer-focused
 - benchmark and pilot-rollout ledgers now exist so model/default-use decisions can be measured, not guessed
@@ -23,12 +26,12 @@
 
 ## Next Release Cycle
 
-### 0.7.8
+### 0.7.10
 
-Purpose: prove the post-`0.7.8` consumer path on real repos and stabilize any reusable wizard bugs without changing the default-use claim early.
+Purpose: prove the post-`0.7.9` consumer path on real repos and stabilize any reusable wizard bugs without changing the default-use claim early.
 
 Scope:
-- run `0.7.8` on 3-5 pilot repos and log results in `benchmarks/pilot-rollout.csv`
+- run `0.7.9` on 3-5 pilot repos and log results in `benchmarks/pilot-rollout.csv`
 - cut a stabilization patch only if pilots surface another reusable wizard bug
 - keep the default-use recommendation gated on the measurable pilot summary
 - keep the separate model experiment running, but do not let it block pilot rollout work
@@ -38,11 +41,11 @@ Scope:
 The issue tracker is currently clear.
 
 - open a new issue only when pilot consumption exposes a proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.8` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.9` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.8`, the main backlog is:
+After `0.7.9`, the main backlog is:
 
 - pilot rollout proof for default use on real repos
 - any reusable wizard fixes discovered during the pilot set
@@ -52,15 +55,15 @@ After `0.7.8`, the main backlog is:
 
 ## Working Order
 
-1. Prove the default-use gate on 3-5 pilot repos with `0.7.8`
-2. Ship `0.7.9` only if pilot rollout surfaces another reusable wizard bug
+1. Prove the default-use gate on 3-5 pilot repos with `0.7.9`
+2. Ship `0.7.10` only if pilot rollout surfaces another reusable wizard bug
 3. Keep creator-tool investigation behind the active backlog
 
 ## Default-Use Gate
 
 Before calling this the default Codex SDLC path, prove it on real pilot repos instead of just repo-self-tests.
 
-- run `0.7.8` on 3-5 pilot repos
+- run `0.7.9` on 3-5 pilot repos
 - require pilot success >= 95% before default use
 - allow no more than 1 reusable wizard bug across the pilot set
 - track the pilot set in `benchmarks/pilot-rollout.csv`
