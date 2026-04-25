@@ -85,10 +85,16 @@ function getSetupModelProfile(args) {
 
 function spawnCodex(args, stdio) {
   if (process.platform === "win32") {
-    return spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", codexCommand, ...args], {
+    const commandLine = [
+      quoteWindowsCmdCommand(codexCommand),
+      ...args.map(quoteWindowsCmdArg)
+    ].join(" ");
+
+    return spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", commandLine], {
       cwd: process.cwd(),
       stdio,
-      shell: false
+      shell: false,
+      windowsVerbatimArguments: true
     });
   }
 
@@ -97,6 +103,18 @@ function spawnCodex(args, stdio) {
     stdio,
     shell: false
   });
+}
+
+function quoteWindowsCmdCommand(value) {
+  return `call ${quoteWindowsCmdArg(value)}`;
+}
+
+function quoteWindowsCmdArg(value) {
+  if (!/[\s&|<>()^]/.test(value)) {
+    return value;
+  }
+
+  return `"${value.replace(/"/g, "\"\"")}"`;
 }
 
 function codexAvailable() {
