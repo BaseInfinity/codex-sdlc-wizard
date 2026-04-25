@@ -610,15 +610,21 @@ test_package_cli_is_honest_about_supported_flags() {
 
 test_package_uses_single_canonical_sdlc_skill_name() {
     local all_passed=true
+    local bad_slash_sdlc
 
     [ -f "$REPO_DIR/skills/sdlc/SKILL.md" ] || all_passed=false
     [ ! -e "$REPO_DIR/skills/codex-sdlc" ] || all_passed=false
     grep -q '^name: sdlc$' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
     grep -q '^  display_name: sdlc$' "$REPO_DIR/skills/sdlc/agents/openai.yaml" || all_passed=false
+    grep -Fq 'Canonical entrypoint: `$sdlc`' "$REPO_DIR/README.md" || all_passed=false
+    grep -Fq 'Canonical entrypoint: `$sdlc`' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
+    grep -Fq 'do not pretend Codex has a native `/sdlc` command' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
     grep -RE '\$codex-sdlc([^A-Za-z0-9_-]|$)' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skills" 2>/dev/null && all_passed=false
+    bad_slash_sdlc=$(grep -REin '(invoke|run|use|type|call|start|enter|execute)[[:space:]]+(the[[:space:]]+)?`?/sdlc`?' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skills" "$REPO_DIR/START-SDLC.md" "$REPO_DIR/SDLC-LOOP.md" 2>/dev/null || true)
+    [ -z "$bad_slash_sdlc" ] || all_passed=false
 
     if [ "$all_passed" = "true" ]; then
-        pass "package exposes one canonical SDLC skill name and display name: sdlc"
+        pass "package exposes one canonical SDLC skill name, display name, and entrypoint: sdlc"
     else
         fail "package still exposes duplicate or legacy SDLC skill naming"
     fi
