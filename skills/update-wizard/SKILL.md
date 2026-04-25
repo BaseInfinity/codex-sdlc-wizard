@@ -11,6 +11,8 @@ You are a guided update assistant. Your job is to show what changed, detect drif
 
 Do not blindly overwrite files.
 
+Version boundary: `$update-wizard` updates repo artifacts using the wizard version already installed in the active Codex skill/session. It does not self-update the npm package. To consume the newest published package first, tell the user to run `npx codex-sdlc-wizard@latest update` from the repo, then restart or resume Codex so refreshed skills/hooks/config load.
+
 ## Reasoning policy
 
 Default to `xhigh` in this repo. Update work is maintenance architecture, and customized drift makes lower-effort passes too risky by default.
@@ -19,7 +21,7 @@ Default to `xhigh` in this repo. Update work is maintenance architecture, and cu
 
 Update owns the wizard surface: repo metadata, Codex integration artifacts, hooks, skills, helper scripts, and SDLC docs.
 
-During update, do not edit application code, product logic, or application tests. Verification is diagnostic by default: if tests or validation fail outside setup-managed files, summarize the failures and stop. Ask the user before switching from update into implementation work, or hand the remediation to `$codex-sdlc`.
+During update, do not edit application code, product logic, or application tests. Verification is diagnostic by default: if tests or validation fail outside setup-managed files, summarize the failures and stop. Ask the user before switching from update into implementation work, or hand the remediation to `$sdlc`.
 
 Only auto-fix failures that are directly caused by wizard drift, such as broken hook paths, missing installed skills, contradictory generated docs, stale helper scripts, or Windows hook config that still points at Bash scripts.
 
@@ -56,7 +58,7 @@ Identify what exists now:
 
 Expected Codex SDLC surface includes:
 
-- `codex-sdlc`
+- `sdlc`
 - `setup-wizard`
 - `update-wizard`
 - `feedback`
@@ -104,11 +106,11 @@ After updates, verify:
 - customized files were preserved when requested
 - on Windows, active hook config does not still reference Bash hook scripts
 
-This verification is diagnostic for product behavior. If a failing command points at application code or application tests unrelated to wizard-managed changes, do not edit application code to force update green. Report the failure, identify why it appears outside update scope, and ask whether to continue under `$codex-sdlc`.
+This verification is diagnostic for product behavior. If a failing command points at application code or application tests unrelated to wizard-managed changes, do not edit application code to force update green. Report the failure, identify why it appears outside update scope, and ask whether to continue under `$sdlc`.
 
 ### Step 6: Restart and next steps
 
-If skills, hooks, hook config, or helper scripts were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun update just for that restart.
+If skills, hooks, hook config, or helper scripts were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun update just for that restart. If they closed an interrupted handoff and Codex printed a resume id, recommend `codex resume --full-auto <session-id>` for low-friction continuation, or plain `codex resume <session-id>` when they want manual confirmations.
 
 ## Rules
 

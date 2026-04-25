@@ -49,6 +49,15 @@ function Install-Skills {
         Copy-Item -LiteralPath $_.FullName -Destination $skillsRoot -Recurse
         Write-Host "Installed Codex skill: $skillName"
     }
+
+    $legacySkillPath = Join-Path $skillsRoot "codex-sdlc"
+    if (Test-Path -LiteralPath $legacySkillPath) {
+        $timestamp = Get-Date -Format "yyyyMMddHHmmss"
+        $backupPath = Join-Path $skillsBackupRoot "codex-sdlc.bak.$timestamp"
+        Copy-Item -LiteralPath $legacySkillPath -Destination $backupPath -Recurse
+        Remove-Item -LiteralPath $legacySkillPath -Recurse -Force
+        Write-Host "Removed legacy Codex skill: codex-sdlc (canonical: sdlc)"
+    }
 }
 
 function Merge-CodexModelConfig {
@@ -62,7 +71,7 @@ function Merge-CodexModelConfig {
         "mixed" {
             @{
                 model = "gpt-5.4-mini"
-                effort = "medium"
+                effort = "xhigh"
                 review = "gpt-5.4"
             }
         }
@@ -233,5 +242,6 @@ Write-Host "Recommended: use full access during setup, environment repair, and a
 Write-Host "Wrote repo-local .codex/config.toml model keys for this profile; mixed is wizard policy, not a native Codex mode."
 Write-Host "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
 Write-Host "Codex does not have a native /sdlc command. Use the installed skills plus START-SDLC.md and SDLC-LOOP.md as the honest equivalent."
-Write-Host "Restart Codex to pick up the new skills, then use /skills and invoke `$codex-sdlc, `$setup-wizard, `$update-wizard, or `$feedback."
-Write-Host "Run 'codex' to start a session with SDLC enforcement."
+Write-Host "Restart Codex to pick up the new skills, then use /skills and invoke `$sdlc, `$setup-wizard, `$update-wizard, or `$feedback."
+Write-Host "If you closed an interrupted session and Codex gave you a resume id, use 'codex resume --full-auto' to continue with low-friction SDLC."
+Write-Host "Run 'codex --full-auto' for low-friction SDLC, or plain 'codex' if you want more manual confirmation."

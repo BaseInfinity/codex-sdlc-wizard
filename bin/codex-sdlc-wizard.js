@@ -13,7 +13,7 @@ const interactiveSessionPrompt = [
   "This repo was just bootstrapped by codex-sdlc-wizard.",
   "Continue setup inside Codex: scan the repo, ask only unresolved questions, preserve intentional existing docs, generate or refresh repo-specific SDLC docs, verify the result, and finish setup.",
   "Use xhigh reasoning for setup."
-].join("\n\n");
+].join(" ");
 
 function printHelp() {
   process.stdout.write(`Usage: codex-sdlc-wizard [setup|check|update|install] [options]
@@ -21,7 +21,7 @@ function printHelp() {
 Commands:
   setup          Adaptive setup. Interactive default bootstraps then launches Codex for live setup
   check          Report managed-file drift for the current repo
-  update         Apply selective updates for missing or drifted managed files
+  update         Apply selective updates for missing or drifted managed files using this package version
   install        Advanced escape hatch: run install.sh without adaptive setup
 
 Default behavior: bootstrap the current repo, then hand off into a live plain Codex setup session.
@@ -29,12 +29,14 @@ Type 'full-auto' at the handoff prompt if you want codex --full-auto for first-r
 Automation/non-interactive behavior: use setup --yes to stay on the shell path.
 Bootstrap/setup recommendation: maximum.
 Routine work after bootstrap: mixed.
+Update boundary: update repairs repo artifacts with the invoked package; it does not self-update the npm package.
+To consume the newest release, run: npx codex-sdlc-wizard@latest update
 
 Options:
   --model-profile <mixed|maximum>
                 Wizard-owned profile toggle. Use 'maximum' for setup/bootstrap
                 work, then switch routine work back to 'mixed' for better
-                speed/token efficiency with xhigh review.
+                speed/token efficiency with xhigh main reasoning and review.
   --help, -h     Show this help
 
 Examples:
@@ -82,10 +84,18 @@ function getSetupModelProfile(args) {
 }
 
 function spawnCodex(args, stdio) {
+  if (process.platform === "win32") {
+    return spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", codexCommand, ...args], {
+      cwd: process.cwd(),
+      stdio,
+      shell: false
+    });
+  }
+
   return spawnSync(codexCommand, args, {
     cwd: process.cwd(),
     stdio,
-    shell: process.platform === "win32"
+    shell: false
   });
 }
 
@@ -154,8 +164,11 @@ async function askHandoffMode() {
 
   const prompt = [
     "",
-    "First-run Codex handoff defaults to plain codex.",
-    "Type 'full-auto' to use codex --full-auto instead, or press Enter for plain codex: "
+    "Choose first-run Codex handoff mode:",
+    "  Press Enter: plain codex (recommended)",
+    "  Type full-auto: codex --full-auto",
+    "  If interrupted later, resume with: codex resume --full-auto <session-id>",
+    "> "
   ].join("\n");
 
   if (!process.stdin.isTTY) {
@@ -201,7 +214,7 @@ async function handoffToCodex(modelProfile) {
     "-m",
     "gpt-5.4",
     "-c",
-    'model_reasoning_effort="xhigh"',
+    "model_reasoning_effort='xhigh'",
     interactiveSessionPrompt
   ];
 

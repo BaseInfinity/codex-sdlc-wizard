@@ -12,17 +12,19 @@ npx codex-sdlc-wizard@latest
 codex --full-auto
 ```
 
-`codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing and runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
+`codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing and runs stay low-friction. Use plain `codex` instead if you want more manual confirmation. If a handoff is interrupted and Codex prints a resume id, continue with `codex resume --full-auto <session-id>` for the same low-friction posture.
 
 Bare `npx codex-sdlc-wizard` is the adaptive interactive path. It bootstraps the repo-local guardrails first, then hands off into a live plain Codex setup session so the unresolved setup questions happen inside Codex instead of inside a shell checklist. At that first-run handoff prompt, press Enter for plain `codex` or type `full-auto` if you explicitly want `codex --full-auto`. `setup --yes` still exists for automation, but it is not the normal human path.
 
 Generic npm entrypoint examples: `npx codex-sdlc-wizard`, `npx codex-sdlc-wizard check`, and `npx codex-sdlc-wizard update`.
 
+`update` repairs repo artifacts using the package version you invoked; it does not self-update the npm package. To consume the newest release and apply its repo-side updates in one command, run `npx codex-sdlc-wizard@latest update`.
+
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.10 check
-npx codex-sdlc-wizard@0.7.10 update
+npx codex-sdlc-wizard@0.7.11 check
+npx codex-sdlc-wizard@0.7.11 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -74,8 +76,8 @@ This adapter tracks the upstream [SDLC Wizard](https://github.com/BaseInfinity/a
 
 The wizard supports two wizard-owned model profiles:
 
-- `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.4` at `xhigh` for review.
-  Tradeoff: better speed, lower latency, and lower token usage on routine work after bootstrap.
+- `mixed`: `gpt-5.4-mini` at `xhigh` for the main pass plus `gpt-5.4` at `xhigh` for review.
+  Tradeoff: smaller/faster main model on routine work after bootstrap while keeping high reasoning pressure.
 - `maximum`: `gpt-5.4` at `xhigh` throughout.
   Tradeoff: higher latency and token usage in exchange for the most stable and thorough "ultimate mode."
 
@@ -83,10 +85,10 @@ How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.10 --model-profile maximum
+npx codex-sdlc-wizard@0.7.11 --model-profile maximum
 
 # interactive bootstrap with the efficiency-first profile if you already know you want it
-npx codex-sdlc-wizard@0.7.10 --model-profile mixed
+npx codex-sdlc-wizard@0.7.11 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
@@ -107,7 +109,7 @@ It also writes the matching repo-local Codex config to `.codex/config.toml` so t
 
 ```toml
 model = "gpt-5.4-mini"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "xhigh"
 review_model = "gpt-5.4"
 
 [features]
@@ -186,7 +188,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.10
+npx codex-sdlc-wizard@0.7.11
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -196,7 +198,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.10 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.11 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow

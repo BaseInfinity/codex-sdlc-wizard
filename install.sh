@@ -132,6 +132,19 @@ install_global_skill() {
   echo "Installed Codex skill: $skill_name"
 }
 
+prune_legacy_global_skill() {
+  local legacy_name="$1"
+  local canonical_name="$2"
+  local legacy_path="$SKILLS_ROOT/$legacy_name"
+
+  [ -d "$legacy_path" ] || return 0
+
+  mkdir -p "$SKILLS_BACKUP_ROOT"
+  cp -R "$legacy_path" "$SKILLS_BACKUP_ROOT/$legacy_name.bak.$(date +%s)"
+  rm -rf "$legacy_path"
+  echo "Removed legacy Codex skill: $legacy_name (canonical: $canonical_name)"
+}
+
 write_model_profile() {
   mkdir -p .codex-sdlc
   cat > .codex-sdlc/model-profile.json <<EOF
@@ -140,10 +153,10 @@ write_model_profile() {
   "profiles": {
     "mixed": {
       "main_model": "gpt-5.4-mini",
-      "main_reasoning": "medium",
+      "main_reasoning": "xhigh",
       "review_model": "gpt-5.4",
       "review_reasoning": "xhigh",
-      "tradeoff": "Faster and more token-efficient for routine work, with xhigh review as the backstop."
+      "tradeoff": "Smaller/faster main model for routine work while keeping xhigh reasoning and xhigh review."
     },
     "maximum": {
       "main_model": "gpt-5.4",
@@ -173,6 +186,7 @@ mkdir -p "$SKILLS_ROOT" "$SKILLS_BACKUP_ROOT"
 for skill_path in "$SCRIPT_DIR"/skills/*; do
   install_global_skill "$skill_path"
 done
+prune_legacy_global_skill "codex-sdlc" "sdlc"
 
 mkdir -p .codex/hooks
 
@@ -211,8 +225,9 @@ echo ""
 echo "SDLC Wizard for Codex installed."
 echo "Recommended start: 'codex --full-auto' for low-friction SDLC inside the repo guardrails."
 echo "Use plain 'codex' instead if you want more manual confirmation."
+echo "If you close or interrupt the handoff, resume with 'codex resume --full-auto' when Codex gives you a resume id."
 echo "Model profile: '$MODEL_PROFILE'."
-echo "  - mixed: gpt-5.4-mini main pass + gpt-5.4 xhigh review for better speed, lower latency, and lower token usage."
+echo "  - mixed: gpt-5.4-mini xhigh main pass + gpt-5.4 xhigh review for better speed, lower latency, and lower token usage."
 echo "  - maximum: gpt-5.4 xhigh throughout for maximum stability and the most thorough \"ultimate mode\"."
 echo "Wrote repo-local .codex/config.toml model keys for this profile; mixed is wizard policy, not a native Codex mode."
 echo "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
