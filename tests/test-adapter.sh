@@ -614,10 +614,11 @@ test_package_uses_single_canonical_sdlc_skill_name() {
     [ -f "$REPO_DIR/skills/sdlc/SKILL.md" ] || all_passed=false
     [ ! -e "$REPO_DIR/skills/codex-sdlc" ] || all_passed=false
     grep -q '^name: sdlc$' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
+    grep -q '^  display_name: sdlc$' "$REPO_DIR/skills/sdlc/agents/openai.yaml" || all_passed=false
     grep -RE '\$codex-sdlc([^A-Za-z0-9_-]|$)' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skills" 2>/dev/null && all_passed=false
 
     if [ "$all_passed" = "true" ]; then
-        pass "package exposes one canonical SDLC skill name: sdlc"
+        pass "package exposes one canonical SDLC skill name and display name: sdlc"
     else
         fail "package still exposes duplicate or legacy SDLC skill naming"
     fi
