@@ -23,8 +23,8 @@ Generic npm entrypoint examples: `npx codex-sdlc-wizard`, `npx codex-sdlc-wizard
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.12 check
-npx codex-sdlc-wizard@0.7.12 update
+npx codex-sdlc-wizard@0.7.13 check
+npx codex-sdlc-wizard@0.7.13 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -85,10 +85,10 @@ How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.12 --model-profile maximum
+npx codex-sdlc-wizard@0.7.13 --model-profile maximum
 
 # interactive bootstrap with the efficiency-first profile if you already know you want it
-npx codex-sdlc-wizard@0.7.12 --model-profile mixed
+npx codex-sdlc-wizard@0.7.13 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
@@ -146,6 +146,8 @@ Repo-scoped skill coverage is still a work in progress:
 - `$sdlc` is the supported public workflow skill today
 - `gdlc` (gaming) and `rdlc` (research) are the next planned repo-scoped skills
 
+Canonical entrypoint: `$sdlc`. `/sdlc` is historical shorthand for the missing slash-command idea, not an invocation command. Adapter-specific SDLC aliases are legacy migration debris and should not appear as second user-facing workflows.
+
 These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so repo-scoped skills are loaded cleanly.
 
 The bridge here is explicit, not magical: this adapter ships the Codex-native skill copies that target repos consume. It does not depend on local `.claude/skills/*` paths being present in the target repo.
@@ -188,7 +190,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.12
+npx codex-sdlc-wizard@0.7.13
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -198,7 +200,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.12 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.13 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow

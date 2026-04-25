@@ -30,6 +30,8 @@ During setup, do not edit application code, product logic, or application tests.
 
 Only auto-fix failures that are directly caused by setup drift, such as broken hook paths, contradictory generated docs, missing wizard artifacts, or Windows hook config that still points at Bash scripts.
 
+Canonical SDLC entrypoint: `$sdlc`. `/sdlc` is historical shorthand for the missing slash-command idea, not an invocation command. Do not create adapter-specific SDLC aliases as second user-facing workflows.
+
 ## Mandatory first action
 
 Before doing anything else, read the repo-local context that already exists.

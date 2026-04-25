@@ -25,6 +25,8 @@ During update, do not edit application code, product logic, or application tests
 
 Only auto-fix failures that are directly caused by wizard drift, such as broken hook paths, missing installed skills, contradictory generated docs, stale helper scripts, or Windows hook config that still points at Bash scripts.
 
+Canonical SDLC entrypoint: `$sdlc`. `/sdlc` is historical shorthand for the missing slash-command idea, not an invocation command. Do not create adapter-specific SDLC aliases as second user-facing workflows.
+
 ## Mandatory first action
 
 Read the local repo context first:
