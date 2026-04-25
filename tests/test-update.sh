@@ -57,6 +57,12 @@ run_setup_local() {
     (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 CODEX_HOME="$project_dir/.codex-home" bash "$SETUP_SH" --yes >/dev/null 2>&1)
 }
 
+run_setup_local_args() {
+    local project_dir="$1"
+    shift
+    (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 CODEX_HOME="$project_dir/.codex-home" bash "$SETUP_SH" --yes "$@" >/dev/null 2>&1)
+}
+
 run_update() {
     local project_dir="$1"
     shift
@@ -331,6 +337,68 @@ test_update_repairs_missing_native_skills() {
     fi
 }
 
+# ---- Test 9: update removes legacy codex-sdlc skill after canonical sdlc is installed ----
+test_update_removes_legacy_codex_sdlc_skill() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    mkdir -p "$ws/.codex-home/skills/codex-sdlc"
+    echo "LEGACY" > "$ws/.codex-home/skills/codex-sdlc/marker.txt"
+
+    local output valid=true
+    output=$(run_update "$ws")
+
+    [ -f "$ws/.codex-home/skills/sdlc/SKILL.md" ] || valid=false
+    [ ! -d "$ws/.codex-home/skills/codex-sdlc" ] || valid=false
+    find "$ws/.codex-home/backups/skills" -maxdepth 1 -name 'codex-sdlc.bak.*' 2>/dev/null | grep -q . || valid=false
+    echo "$output" | grep -qi 'legacy.*codex-sdlc\|codex-sdlc.*legacy' 2>/dev/null || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update removes legacy codex-sdlc after canonical sdlc is installed"
+    else
+        fail "update left legacy codex-sdlc alongside canonical sdlc"
+    fi
+}
+
+# ---- Test 10: update repairs mixed profile drift to xhigh main reasoning ----
+test_update_repairs_mixed_profile_reasoning_drift() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local_args "$ws" --model-profile mixed
+    cat > "$ws/.codex/config.toml" <<'EOF'
+model = "gpt-5.4-mini"
+model_reasoning_effort = "medium"
+review_model = "gpt-5.4"
+
+[features]
+codex_hooks = true
+EOF
+
+    local output check_output valid=true
+    output=$(run_update "$ws")
+    check_output=$(run_check "$ws")
+
+    grep -q '^model = "gpt-5.4-mini"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^review_model = "gpt-5.4"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    echo "$output" | grep -q '.codex/config.toml' 2>/dev/null || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/config.toml"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update repairs mixed profile drift to xhigh main reasoning"
+    else
+        fail "update did not repair mixed profile drift to xhigh main reasoning"
+    fi
+}
+
 test_update_reports_uninitialized_repo
 test_update_check_only_reports_missing_without_repair
 test_update_repairs_missing_generated_docs
@@ -339,6 +407,8 @@ test_update_force_all_replaces_customized_docs
 test_update_repairs_windows_hook_drift
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills
+test_update_removes_legacy_codex_sdlc_skill
+test_update_repairs_mixed_profile_reasoning_drift
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

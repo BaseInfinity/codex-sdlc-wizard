@@ -1109,7 +1109,33 @@ EOF
     fi
 }
 
-# ---- Test 34: setup falls back to deterministic scan when codex reasoning fails ----
+# ---- Test 34: setup writes mixed profile with xhigh main reasoning ----
+test_setup_writes_mixed_profile_with_xhigh_reasoning() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_args "$ws" --yes --model-profile mixed >/dev/null 2>&1
+
+    local valid=true
+    grep -q '^model = "gpt-5.4-mini"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^review_model = "gpt-5.4"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    if ! json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.main_reasoning' "xhigh"; then
+        valid=false
+    fi
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup writes mixed profile with xhigh main reasoning"
+    else
+        fail "setup did not write mixed profile with xhigh main reasoning"
+    fi
+}
+
+# ---- Test 35: setup falls back to deterministic scan when codex reasoning fails ----
 test_setup_falls_back_when_codex_reasoning_fails() {
     local ws
     local fakebin
@@ -1181,6 +1207,7 @@ test_setup_verify_only_reports_missing_files
 test_setup_regenerate_rebuilds_docs_from_manifest
 test_setup_hashes_manifest_without_shell_hash_tools
 test_setup_uses_codex_xhigh_reasoning_when_available
+test_setup_writes_mixed_profile_with_xhigh_reasoning
 test_setup_falls_back_when_codex_reasoning_fails
 
 echo ""

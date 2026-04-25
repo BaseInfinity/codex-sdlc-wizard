@@ -86,6 +86,8 @@ test_npm_pack_includes_runtime_files() {
     local has_hooks=true
     local has_bin=true
     local has_skill=true
+    local has_canonical_sdlc_skill=true
+    local has_legacy_sdlc_skill=false
     local has_openai_yaml=true
     local has_repo_sdlc_skill=true
     local has_repo_adlc_skill=true
@@ -106,6 +108,8 @@ test_npm_pack_includes_runtime_files() {
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/bash-guard.sh") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "bin/codex-sdlc-wizard.js") ? "yes" : ""')" = "yes" ] || has_bin=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "SKILL.md") ? "yes" : ""')" = "yes" ] || has_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_canonical_sdlc_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path.startsWith("skills/codex-sdlc/")) ? "yes" : ""')" = "yes" ] && has_legacy_sdlc_skill=true
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_openai_yaml=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_sdlc_skill=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/adlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_adlc_skill=false
@@ -119,6 +123,8 @@ test_npm_pack_includes_runtime_files() {
        [ "$has_hooks" = "true" ] &&
        [ "$has_bin" = "true" ] &&
        [ "$has_skill" = "true" ] &&
+       [ "$has_canonical_sdlc_skill" = "true" ] &&
+       [ "$has_legacy_sdlc_skill" = "false" ] &&
        [ "$has_openai_yaml" = "true" ] &&
        [ "$has_repo_sdlc_skill" = "true" ] &&
        [ "$has_repo_adlc_skill" = "true" ]; then
@@ -320,10 +326,14 @@ EOF
     grep -Fq -- '-C' "$args_file" 2>/dev/null || valid=false
     grep -Fq -- '-m' "$args_file" 2>/dev/null || valid=false
     grep -Fq 'gpt-5.4' "$args_file" 2>/dev/null || valid=false
-    grep -Fq 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
+    grep -Fq "model_reasoning_effort='xhigh'" "$args_file" 2>/dev/null || valid=false
     grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
-    echo "$output" | grep -Fq 'First-run Codex handoff defaults to plain codex' || valid=false
+    echo "$output" | grep -Fq 'Choose first-run Codex handoff mode' || valid=false
+    echo "$output" | grep -Fq 'Press Enter: plain codex (recommended)' || valid=false
+    echo "$output" | grep -Fq 'Type full-auto: codex --full-auto' || valid=false
+    echo "$output" | grep -Fq 'codex resume --full-auto' || valid=false
     echo "$output" | grep -Fq 'Handing off into Codex for live setup using plain codex' || valid=false
+    ! echo "$output" | grep -Fq 'DEP0190' || valid=false
     ! echo "$output" | grep -Fq 'Scanning project...' || valid=false
 
     rm -rf "$ws" "$fakebin" "$codex_home"
@@ -464,6 +474,21 @@ test_cli_help_documents_bootstrap_profile_policy() {
     fi
 }
 
+test_cli_help_explains_update_version_boundary() {
+    local output
+    output=$(node "$REPO_DIR/bin/codex-sdlc-wizard.js" --help 2>&1) || true
+
+    local valid=true
+    echo "$output" | grep -Fq 'npx codex-sdlc-wizard@latest update' || valid=false
+    echo "$output" | grep -Fq 'does not self-update the npm package' || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "CLI help explains that update repairs repo artifacts using the invoked package version"
+    else
+        fail "CLI help does not explain the npm-version boundary for update"
+    fi
+}
+
 test_package_metadata_exists
 test_package_version_matches_roadmap_current_release
 test_npm_pack_includes_runtime_files
@@ -474,6 +499,7 @@ test_default_interactive_hands_off_to_codex
 test_full_auto_handoff_choice_is_explicit
 test_ci_mode_keeps_shell_setup_path
 test_cli_help_documents_bootstrap_profile_policy
+test_cli_help_explains_update_version_boundary
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

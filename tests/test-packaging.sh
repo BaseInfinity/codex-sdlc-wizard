@@ -119,7 +119,7 @@ test_installer_writes_default_model_profile() {
 
     if ! grep -q '^model = "gpt-5.4-mini"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
-    elif ! grep -q '^model_reasoning_effort = "medium"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+    elif ! grep -q '^model_reasoning_effort = "xhigh"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
     elif ! grep -q '^review_model = "gpt-5.4"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
@@ -130,9 +130,38 @@ test_installer_writes_default_model_profile() {
     rm -rf "$adapter_clone" "$target_repo"
 
     if [ "$has_profile" = "true" ]; then
-        pass "Installer writes the default mixed model profile into metadata and repo-local Codex config"
+        pass "Installer writes the default mixed model profile with xhigh reasoning into metadata and repo-local Codex config"
     else
-        fail "Installer did not write the expected default model profile into metadata and .codex/config.toml"
+        fail "Installer did not write the expected xhigh default mixed model profile into metadata and .codex/config.toml"
+    fi
+}
+
+test_installer_uses_canonical_sdlc_skill_name() {
+    local adapter_clone
+    local target_repo
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+    mkdir -p "$target_repo/.codex-home/skills/codex-sdlc"
+    echo "LEGACY" > "$target_repo/.codex-home/skills/codex-sdlc/marker.txt"
+
+    (
+        cd "$target_repo"
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" >/dev/null 2>&1
+    )
+
+    local valid=true
+    [ -f "$target_repo/.codex-home/skills/sdlc/SKILL.md" ] || valid=false
+    [ ! -d "$target_repo/.codex-home/skills/codex-sdlc" ] || valid=false
+    find "$target_repo/.codex-home/backups/skills" -maxdepth 1 -name 'codex-sdlc.bak.*' 2>/dev/null | grep -q . || valid=false
+
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if [ "$valid" = "true" ]; then
+        pass "Installer uses canonical sdlc skill name and prunes legacy codex-sdlc"
+    else
+        fail "Installer left duplicate SDLC skill names installed"
     fi
 }
 
@@ -562,6 +591,7 @@ test_consumer_bug_report_template_exists() {
 
 test_installer_smoke_test_clean_project
 test_installer_scaffolds_repo_scope_skills
+test_installer_uses_canonical_sdlc_skill_name
 test_installer_writes_default_model_profile
 test_installer_recommends_full_auto
 test_installer_mentions_model_profile_tradeoff

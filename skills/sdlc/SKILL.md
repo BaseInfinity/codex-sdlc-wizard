@@ -1,9 +1,9 @@
 ---
-name: codex-sdlc
+name: sdlc
 description: Full SDLC workflow for Codex. Use when implementing features, fixing bugs, refactoring, testing, or reviewing work that needs planning, TDD, proof, and self-review.
 ---
 
-# Codex SDLC
+# SDLC
 
 ## Purpose
 
@@ -120,6 +120,11 @@ If the session uncovered reusable lessons, capture learnings in the right local 
 - hooks are silent, event-driven enforcement
 - this skill is the user-facing workflow layer
 - do not pretend Codex has a native `/sdlc` command if it does not
+
+## Naming
+
+- Canonical entrypoint: `$sdlc`
+- Early adapter-specific SDLC skill names should be removed by setup/update so users do not see two SDLC workflows for the same contract.
 
 ## Quality bar
 
