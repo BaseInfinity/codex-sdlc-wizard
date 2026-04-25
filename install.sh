@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/json-node.sh"
+source "$SCRIPT_DIR/lib/codex-config.sh"
 require_node
 
 case "$(uname -s)" in
@@ -175,26 +176,8 @@ done
 
 mkdir -p .codex/hooks
 
-if [ -f ".codex/config.toml" ]; then
-  if grep -v '^[[:space:]]*#' .codex/config.toml | grep -qE 'codex_hooks[[:space:]]*=[[:space:]]*false'; then
-    sed -i.bak -E 's/^([^#]*codex_hooks[[:space:]]*=[[:space:]]*)false/\1true/' .codex/config.toml
-    rm -f .codex/config.toml.bak
-    echo "Set codex_hooks = true in existing config.toml"
-  elif grep -v '^[[:space:]]*#' .codex/config.toml | grep -q 'codex_hooks[[:space:]]*=[[:space:]]*true'; then
-    echo "config.toml already has codex_hooks = true - skipping"
-  elif grep -q '^\[features\]' .codex/config.toml; then
-    awk '/^\[features\]/{print; print "codex_hooks = true"; next}1' .codex/config.toml > .codex/config.toml.tmp
-    mv .codex/config.toml.tmp .codex/config.toml
-    echo "Added codex_hooks = true to existing [features] table"
-  else
-    printf '\n[features]\ncodex_hooks = true\n' >> .codex/config.toml
-    echo "Added [features] codex_hooks = true to config.toml"
-  fi
-else
-  mkdir -p .codex
-  cp "$SCRIPT_DIR/.codex/config.toml" .codex/
-  echo "Created .codex/config.toml"
-fi
+merge_codex_config_profile ".codex/config.toml" "$MODEL_PROFILE"
+echo "Merged repo-local Codex config for model profile '$MODEL_PROFILE'"
 
 if [ -f ".codex/hooks.json" ]; then
   cp .codex/hooks.json ".codex/hooks.json.bak.$(date +%s)"
@@ -205,7 +188,7 @@ cp "$SCRIPT_DIR/.codex/hooks/"*.sh .codex/hooks/
 chmod +x .codex/hooks/*.sh
 
 if [ "$IS_WINDOWS" = "true" ]; then
-  cp "$SCRIPT_DIR/.codex/hooks.json" .codex/hooks.json
+  cp "$SCRIPT_DIR/.codex/windows-hooks.json" .codex/hooks.json
   cp "$SCRIPT_DIR/.codex/hooks/git-guard.ps1" .codex/hooks/
   cp "$SCRIPT_DIR/.codex/hooks/session-start.ps1" .codex/hooks/
   copy_if_missing "$SCRIPT_DIR/start-sdlc.ps1" "start-sdlc.ps1" "start-sdlc.ps1"
@@ -231,6 +214,8 @@ echo "Use plain 'codex' instead if you want more manual confirmation."
 echo "Model profile: '$MODEL_PROFILE'."
 echo "  - mixed: gpt-5.4-mini main pass + gpt-5.4 xhigh review for better speed, lower latency, and lower token usage."
 echo "  - maximum: gpt-5.4 xhigh throughout for maximum stability and the most thorough \"ultimate mode\"."
+echo "Wrote repo-local .codex/config.toml model keys for this profile; mixed is wizard policy, not a native Codex mode."
+echo "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
 echo "If confidence drops below 95%, research more first. If it still stays below 95%, escalate review to xhigh."
 echo "Repo-scoped skills are still a work in progress. Today the supported public workflow skill is '\$sdlc'."
 echo "Future repo-scoped skills like 'gdlc' and 'rdlc' are planned next."

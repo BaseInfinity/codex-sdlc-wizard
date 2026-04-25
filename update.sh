@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/json-node.sh"
+source "$SCRIPT_DIR/lib/codex-config.sh"
 
 require_node
 
@@ -98,20 +99,7 @@ repair_managed_file() {
             repair_hooks_bundle
             ;;
         .codex/config.toml)
-            ensure_parent_dir ".codex/config.toml"
-            if [ ! -f ".codex/config.toml" ]; then
-                copy_static_file ".codex/config.toml"
-            elif grep -v '^[[:space:]]*#' .codex/config.toml | grep -qE 'codex_hooks[[:space:]]*=[[:space:]]*false'; then
-                sed -i.bak -E 's/^([^#]*codex_hooks[[:space:]]*=[[:space:]]*)false/\1true/' .codex/config.toml
-                rm -f .codex/config.toml.bak
-            elif grep -v '^[[:space:]]*#' .codex/config.toml | grep -q 'codex_hooks[[:space:]]*=[[:space:]]*true'; then
-                :
-            elif grep -q '^\[features\]' .codex/config.toml; then
-                awk '/^\[features\]/{print; print "codex_hooks = true"; next}1' .codex/config.toml > .codex/config.toml.tmp
-                mv .codex/config.toml.tmp .codex/config.toml
-            else
-                printf '\n[features]\ncodex_hooks = true\n' >> .codex/config.toml
-            fi
+            merge_codex_config_profile ".codex/config.toml" "$MODEL_PROFILE"
             ;;
         *)
             copy_static_file "$relative_path"
@@ -120,15 +108,7 @@ repair_managed_file() {
 }
 
 config_needs_repair() {
-    if [ ! -f ".codex/config.toml" ]; then
-        return 0
-    fi
-
-    if grep -v '^[[:space:]]*#' .codex/config.toml | grep -q 'codex_hooks[[:space:]]*=[[:space:]]*true'; then
-        return 1
-    fi
-
-    return 0
+    codex_config_needs_profile_repair ".codex/config.toml" "$MODEL_PROFILE"
 }
 
 repair_skill() {
@@ -180,6 +160,14 @@ CHECK_JSON="$(bash "$SCRIPT_DIR/check.sh")"
 REPO_STATE="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.repo_state || ""')"
 INSTALLED_VERSION="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.adapter_version || ""')"
 BROKEN_REASON="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.reason || ""')"
+MODEL_PROFILE="$(json_get_file ".codex-sdlc/manifest.json" 'data.model_profile?.selected_profile || ""')"
+[ -n "$MODEL_PROFILE" ] || MODEL_PROFILE="$(json_get_file ".codex-sdlc/model-profile.json" 'data.selected_profile || ""')"
+[ -n "$MODEL_PROFILE" ] || MODEL_PROFILE="maximum"
+
+case "$MODEL_PROFILE" in
+    mixed|maximum) ;;
+    *) MODEL_PROFILE="maximum" ;;
+esac
 
 if [ "$REPO_STATE" != "initialized" ]; then
     echo "Update cannot continue: repo is uninitialized (${BROKEN_REASON:-unknown})."
@@ -230,7 +218,14 @@ for line in "${STATUS_LINES[@]}"; do
     action="keep"
     case "$status" in
         match)
-            action="keep"
+            if [ "$relative_path" = ".codex/config.toml" ] && config_needs_repair; then
+                action="merge managed model/profile settings"
+                CHANGES_PENDING=true
+                RUN_REGENERATE=true
+                queue_static_repair "$relative_path"
+            else
+                action="keep"
+            fi
             ;;
         missing|"drift / broken")
             action="repair"
@@ -242,7 +237,7 @@ for line in "${STATUS_LINES[@]}"; do
             ;;
         customized)
             if [ "$relative_path" = ".codex/config.toml" ] && config_needs_repair; then
-                action="merge managed setting"
+                action="merge managed model/profile settings"
                 CHANGES_PENDING=true
                 RUN_REGENERATE=true
                 queue_static_repair "$relative_path"

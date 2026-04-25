@@ -1,2 +1,6 @@
+model = "gpt-5.4-mini"
+model_reasoning_effort = "medium"
+review_model = "gpt-5.4"
+
 [features]
 codex_hooks = true
