@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
+const readline = require("node:readline/promises");
 
 const scriptDir = path.resolve(__dirname, "..");
 const rawArgs = process.argv.slice(2);
@@ -22,7 +24,8 @@ Commands:
   update         Apply selective updates for missing or drifted managed files
   install        Advanced escape hatch: run install.sh without adaptive setup
 
-Default behavior: bootstrap the current repo, then hand off into a live Codex setup session.
+Default behavior: bootstrap the current repo, then hand off into a live plain Codex setup session.
+Type 'full-auto' at the handoff prompt if you want codex --full-auto for first-run setup.
 Automation/non-interactive behavior: use setup --yes to stay on the shell path.
 Bootstrap/setup recommendation: maximum.
 Routine work after bootstrap: mixed.
@@ -140,7 +143,42 @@ function runScript(scriptName, args) {
   });
 }
 
-function handoffToCodex(modelProfile) {
+async function askHandoffMode() {
+  if (process.env.CODEX_SDLC_HANDOFF_MODE === "full-auto") {
+    return "full-auto";
+  }
+
+  if (process.env.CODEX_SDLC_HANDOFF_MODE === "plain") {
+    return "plain";
+  }
+
+  const prompt = [
+    "",
+    "First-run Codex handoff defaults to plain codex.",
+    "Type 'full-auto' to use codex --full-auto instead, or press Enter for plain codex: "
+  ].join("\n");
+
+  if (!process.stdin.isTTY) {
+    process.stdout.write(prompt);
+    const answer = fs.readFileSync(0, "utf8").split(/\r?\n/, 1)[0].trim().toLowerCase();
+    process.stdout.write("\n");
+    return answer === "full-auto" ? "full-auto" : "plain";
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  try {
+    const answer = (await rl.question(prompt)).trim().toLowerCase();
+    return answer === "full-auto" ? "full-auto" : "plain";
+  } finally {
+    rl.close();
+  }
+}
+
+async function handoffToCodex(modelProfile) {
   const installArgs = ["--model-profile", modelProfile];
   const installResult = runScript("install.sh", installArgs);
 
@@ -153,10 +191,11 @@ function handoffToCodex(modelProfile) {
     process.exit(installResult.status === null ? 1 : installResult.status);
   }
 
-  process.stdout.write("\nHanding off into Codex for live setup...\n");
+  const handoffMode = await askHandoffMode();
+  const modeLabel = handoffMode === "full-auto" ? "codex --full-auto" : "plain codex";
+  process.stdout.write(`\nHanding off into Codex for live setup using ${modeLabel}...\n`);
 
   const codexArgs = [
-    "--full-auto",
     "-C",
     process.cwd(),
     "-m",
@@ -166,6 +205,10 @@ function handoffToCodex(modelProfile) {
     interactiveSessionPrompt
   ];
 
+  if (handoffMode === "full-auto") {
+    codexArgs.unshift("--full-auto");
+  }
+
   const codexResult = spawnCodex(codexArgs, "inherit");
 
   if (codexResult.error) {
@@ -173,26 +216,32 @@ function handoffToCodex(modelProfile) {
     process.exit(1);
   }
 
-  process.exit(codexResult.status === null ? 1 : codexResult.status);
+  return codexResult.status === null ? 1 : codexResult.status;
 }
 
-if (shouldHandoffToCodex()) {
-  handoffToCodex(getSetupModelProfile(scriptArgs));
+async function main() {
+  if (shouldHandoffToCodex()) {
+    process.exit(await handoffToCodex(getSetupModelProfile(scriptArgs)));
+  }
+
+  const scriptName = command === "setup"
+    ? "setup.sh"
+    : command === "check"
+      ? "check.sh"
+      : command === "update"
+        ? "update.sh"
+        : "install.sh";
+  const result = runScript(scriptName, scriptArgs);
+
+  if (result.error) {
+    process.stderr.write(`${result.error.message}\n`);
+    process.exit(1);
+  }
+
+  process.exit(result.status === null ? 1 : result.status);
 }
 
-const scriptName = command === "setup"
-  ? "setup.sh"
-  : command === "check"
-    ? "check.sh"
-    : command === "update"
-      ? "update.sh"
-      : "install.sh";
-const scriptPath = path.join(scriptDir, scriptName);
-const result = runScript(scriptName, scriptArgs);
-
-if (result.error) {
-  process.stderr.write(`${result.error.message}\n`);
+main().catch((error) => {
+  process.stderr.write(`${error.message}\n`);
   process.exit(1);
-}
-
-process.exit(result.status === null ? 1 : result.status);
+});
