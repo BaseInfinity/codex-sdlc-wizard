@@ -1,6 +1,6 @@
 {
   "name": "codex-sdlc-wizard",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "description": "Codex SDLC adaptive setup wizard and maintenance CLI for npx distribution",
   "license": "MIT",
   "repository": {

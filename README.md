@@ -14,15 +14,15 @@ codex --full-auto
 
 `codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing and runs stay low-friction. Use plain `codex` instead if you want more manual confirmation.
 
-Bare `npx codex-sdlc-wizard` is the adaptive interactive path. It bootstraps the repo-local guardrails first, then hands off into a live Codex setup session so the unresolved setup questions happen inside Codex instead of inside a shell checklist. `setup --yes` still exists for automation, but it is not the normal human path.
+Bare `npx codex-sdlc-wizard` is the adaptive interactive path. It bootstraps the repo-local guardrails first, then hands off into a live plain Codex setup session so the unresolved setup questions happen inside Codex instead of inside a shell checklist. At that first-run handoff prompt, press Enter for plain `codex` or type `full-auto` if you explicitly want `codex --full-auto`. `setup --yes` still exists for automation, but it is not the normal human path.
 
 Generic npm entrypoint examples: `npx codex-sdlc-wizard`, `npx codex-sdlc-wizard check`, and `npx codex-sdlc-wizard update`.
 
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.9 check
-npx codex-sdlc-wizard@0.7.9 update
+npx codex-sdlc-wizard@0.7.10 check
+npx codex-sdlc-wizard@0.7.10 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -83,10 +83,10 @@ How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.9 --model-profile maximum
+npx codex-sdlc-wizard@0.7.10 --model-profile maximum
 
 # interactive bootstrap with the efficiency-first profile if you already know you want it
-npx codex-sdlc-wizard@0.7.9 --model-profile mixed
+npx codex-sdlc-wizard@0.7.10 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
@@ -186,7 +186,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.9
+npx codex-sdlc-wizard@0.7.10
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -196,7 +196,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.9 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.10 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow
