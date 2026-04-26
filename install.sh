@@ -89,6 +89,7 @@ done
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
+GLOBAL_HELPER_SKILLS=("feedback" "setup-wizard" "update-wizard")
 
 copy_if_missing() {
   local source="$1"
@@ -130,6 +131,35 @@ install_global_skill() {
   fi
   cp -R "$skill_path" "$SKILLS_ROOT/"
   echo "Installed Codex skill: $skill_name"
+}
+
+global_skill_matches_bundle() {
+  local skill_name="$1"
+  local bundled_path="$SCRIPT_DIR/skills/$skill_name"
+  local target_path="$SKILLS_ROOT/$skill_name"
+
+  [ -d "$bundled_path" ] || return 1
+  [ -d "$target_path" ] || return 1
+
+  diff -qr "$bundled_path" "$target_path" >/dev/null 2>&1
+}
+
+remove_wizard_managed_global_skill() {
+  local skill_name="$1"
+  local reason="$2"
+  local target_path="$SKILLS_ROOT/$skill_name"
+
+  [ -d "$target_path" ] || return 0
+
+  if ! global_skill_matches_bundle "$skill_name"; then
+    echo "Preserved user-owned global Codex skill: $skill_name"
+    return 0
+  fi
+
+  mkdir -p "$SKILLS_BACKUP_ROOT"
+  cp -R "$target_path" "$SKILLS_BACKUP_ROOT/$skill_name.bak.$(date +%s)"
+  rm -rf "$target_path"
+  echo "Removed wizard-managed global Codex skill: $skill_name ($reason)"
 }
 
 prune_legacy_global_skill() {
@@ -183,9 +213,10 @@ copy_if_missing "$SCRIPT_DIR/START-SDLC.md" "START-SDLC.md" "START-SDLC.md"
 copy_if_missing "$SCRIPT_DIR/PROVE-IT.md" "PROVE-IT.md" "PROVE-IT.md"
 
 mkdir -p "$SKILLS_ROOT" "$SKILLS_BACKUP_ROOT"
-for skill_path in "$SCRIPT_DIR"/skills/*; do
-  install_global_skill "$skill_path"
+for skill_name in "${GLOBAL_HELPER_SKILLS[@]}"; do
+  install_global_skill "$SCRIPT_DIR/skills/$skill_name"
 done
+remove_wizard_managed_global_skill "sdlc" "repo-scoped .agents/skills/sdlc is the canonical \$sdlc entrypoint"
 prune_legacy_global_skill "codex-sdlc" "sdlc"
 
 mkdir -p .codex/hooks
@@ -238,6 +269,7 @@ echo "Wrote repo-local .codex/config.toml model keys for this profile; mixed is 
 echo "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
 echo "If confidence drops below 95%, research more first. If it still stays below 95%, escalate review to xhigh."
 echo "Repo-scoped skills are still a work in progress. Today the supported public workflow skill is '\$sdlc'."
+echo "Codex treats same-name skills from different scopes as distinct choices; normal setup installs global helper skills only and keeps repo-scoped '\$sdlc' canonical."
 echo "Future repo-scoped skills like 'gdlc' and 'rdlc' are planned next."
 echo "Auth-heavy note: for Windows / WAM / MFA or other live sign-in flows, the prompt itself stays user-owned."
 echo "This wizard still owns command shape, checks, and the verify/resume steps after you complete sign-in."
