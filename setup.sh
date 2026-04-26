@@ -62,6 +62,8 @@ refine_scan_with_codex() {
     "coverage_config": { "type": "string" },
     "ci": { "type": "string" },
     "domain": { "type": "string" },
+    "mcp_browser_tooling": { "type": "string" },
+    "mcp_browser_profile_policy": { "type": "string" },
     "confidence_map": {
       "type": "object",
       "additionalProperties": false,
@@ -81,7 +83,9 @@ refine_scan_with_codex() {
         "test_types": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
         "coverage_config": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
         "ci": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
-        "domain": { "type": "string", "enum": ["detected", "inferred", "unresolved"] }
+        "domain": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "mcp_browser_tooling": { "type": "string", "enum": ["detected", "inferred", "unresolved"] },
+        "mcp_browser_profile_policy": { "type": "string", "enum": ["detected", "inferred", "unresolved"] }
       }
     }
   }
@@ -230,6 +234,8 @@ load_regenerate_state() {
     COVERAGE_CONFIG=$(json_get_file "$manifest" 'data.resolved_values?.coverage_config || data.scan?.coverage_config || ""')
     CI=$(json_get_file "$manifest" 'data.resolved_values?.ci || data.scan?.ci || ""')
     DOMAIN=$(json_get_file "$manifest" 'data.resolved_values?.domain || data.scan?.domain || "web"')
+    MCP_BROWSER_TOOLING=$(json_get_file "$manifest" 'data.resolved_values?.mcp_browser_tooling || data.scan?.mcp_browser_tooling || ""')
+    MCP_BROWSER_PROFILE_POLICY=$(json_get_file "$manifest" 'data.resolved_values?.mcp_browser_profile_policy || data.scan?.mcp_browser_profile_policy || ""')
 
     SCAN_SOURCE_DIR_RAW=$(json_get_file "$manifest" 'data.scan?.source_dir || ""')
     SCAN_TEST_DIR_RAW=$(json_get_file "$manifest" 'data.scan?.test_dir || ""')
@@ -247,6 +253,8 @@ load_regenerate_state() {
     SCAN_COVERAGE_CONFIG_RAW=$(json_get_file "$manifest" 'data.scan?.coverage_config || ""')
     SCAN_CI_RAW=$(json_get_file "$manifest" 'data.scan?.ci || ""')
     SCAN_DOMAIN_RAW=$(json_get_file "$manifest" 'data.scan?.domain || ""')
+    SCAN_MCP_BROWSER_TOOLING_RAW=$(json_get_file "$manifest" 'data.scan?.mcp_browser_tooling || ""')
+    SCAN_MCP_BROWSER_PROFILE_POLICY_RAW=$(json_get_file "$manifest" 'data.scan?.mcp_browser_profile_policy || ""')
 
     ADAPTER_VERSION=$(cat "$SCRIPT_DIR/UPSTREAM_VERSION" 2>/dev/null | tr -d '[:space:]')
     [ -z "$ADAPTER_VERSION" ] && ADAPTER_VERSION=$(json_get_file "$manifest" 'data.adapter_version || ""')
@@ -280,6 +288,27 @@ load_regenerate_state() {
     COVERAGE_CONFIG_STATE=$(json_get_file "$manifest" 'data.confidence_map?.coverage_config || ""')
     CI_STATE=$(json_get_file "$manifest" 'data.confidence_map?.ci || ""')
     DOMAIN_STATE=$(json_get_file "$manifest" 'data.confidence_map?.domain || ""')
+    MCP_BROWSER_TOOLING_STATE=$(json_get_file "$manifest" 'data.confidence_map?.mcp_browser_tooling || ""')
+    MCP_BROWSER_PROFILE_POLICY_STATE=$(json_get_file "$manifest" 'data.confidence_map?.mcp_browser_profile_policy || ""')
+
+    local refresh_scan refresh_tooling refresh_profile_policy
+    refresh_scan=$(bash "$SCRIPT_DIR/lib/scan.sh" 2>/dev/null || true)
+    if [ -n "$refresh_scan" ]; then
+        refresh_tooling=$(printf '%s' "$refresh_scan" | json_get_stdin 'data.mcp_browser_tooling || ""')
+        refresh_profile_policy=$(printf '%s' "$refresh_scan" | json_get_stdin 'data.mcp_browser_profile_policy || ""')
+
+        if [ -n "$refresh_tooling" ]; then
+            SCAN_MCP_BROWSER_TOOLING_RAW="$refresh_tooling"
+            MCP_BROWSER_TOOLING="$refresh_tooling"
+            MCP_BROWSER_TOOLING_STATE="detected"
+        fi
+
+        if [ -n "$refresh_profile_policy" ]; then
+            SCAN_MCP_BROWSER_PROFILE_POLICY_RAW="$refresh_profile_policy"
+            MCP_BROWSER_PROFILE_POLICY="$refresh_profile_policy"
+            MCP_BROWSER_PROFILE_POLICY_STATE="detected"
+        fi
+    fi
 
     [ -n "$SOURCE_DIR_STATE" ] || SOURCE_DIR_STATE=$([ -n "$SOURCE_DIR" ] && printf 'detected' || printf 'unresolved')
     [ -n "$TEST_DIR_STATE" ] || TEST_DIR_STATE=$([ -n "$TEST_DIR" ] && printf 'detected' || printf 'unresolved')
@@ -297,6 +326,8 @@ load_regenerate_state() {
     [ -n "$COVERAGE_CONFIG_STATE" ] || COVERAGE_CONFIG_STATE=$([ -n "$COVERAGE_CONFIG" ] && printf 'detected' || printf 'unresolved')
     [ -n "$CI_STATE" ] || CI_STATE=$([ -n "$CI" ] && printf 'detected' || printf 'unresolved')
     [ -n "$DOMAIN_STATE" ] || DOMAIN_STATE=$([ "$DOMAIN" = "web" ] && printf 'inferred' || printf 'detected')
+    [ -n "$MCP_BROWSER_TOOLING_STATE" ] || MCP_BROWSER_TOOLING_STATE=$([ -n "$MCP_BROWSER_TOOLING" ] && printf 'detected' || printf 'unresolved')
+    [ -n "$MCP_BROWSER_PROFILE_POLICY_STATE" ] || MCP_BROWSER_PROFILE_POLICY_STATE=$([ -n "$MCP_BROWSER_PROFILE_POLICY" ] && printf 'detected' || printf 'unresolved')
 
     return 0
 }
@@ -370,6 +401,8 @@ else
     COVERAGE_CONFIG=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.coverage_config')
     CI=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.ci')
     DOMAIN=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.domain')
+    MCP_BROWSER_TOOLING=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.mcp_browser_tooling')
+    MCP_BROWSER_PROFILE_POLICY=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.mcp_browser_profile_policy')
     SCAN_SOURCE_DIR_RAW="$SOURCE_DIR"
     SCAN_TEST_DIR_RAW="$TEST_DIR"
     SCAN_TEST_FRAMEWORK_RAW="$TEST_FRAMEWORK"
@@ -386,6 +419,8 @@ else
     SCAN_COVERAGE_CONFIG_RAW="$COVERAGE_CONFIG"
     SCAN_CI_RAW="$CI"
     SCAN_DOMAIN_RAW="$DOMAIN"
+    SCAN_MCP_BROWSER_TOOLING_RAW="$MCP_BROWSER_TOOLING"
+    SCAN_MCP_BROWSER_PROFILE_POLICY_RAW="$MCP_BROWSER_PROFILE_POLICY"
     SCAN_SOURCE_DIR_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.source_dir || ""')
     SCAN_TEST_DIR_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.test_dir || ""')
     SCAN_TEST_FRAMEWORK_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.test_framework || ""')
@@ -402,6 +437,8 @@ else
     SCAN_COVERAGE_CONFIG_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.coverage_config || ""')
     SCAN_CI_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.ci || ""')
     SCAN_DOMAIN_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.domain || ""')
+    SCAN_MCP_BROWSER_TOOLING_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.mcp_browser_tooling || ""')
+    SCAN_MCP_BROWSER_PROFILE_POLICY_STATE_OVERRIDE=$(printf '%s' "$SCAN_JSON" | json_get_stdin 'data.confidence_map?.mcp_browser_profile_policy || ""')
     ADAPTER_VERSION=$(cat "$SCRIPT_DIR/UPSTREAM_VERSION" 2>/dev/null | tr -d '[:space:]')
     INSTALLED_AT_VALUE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     SETUP_DATE=$(date -u +%Y-%m-%d)
@@ -563,6 +600,22 @@ domain_state() {
     fi
 }
 
+mcp_browser_tooling_state() {
+    if [ -z "$MCP_BROWSER_TOOLING" ]; then
+        printf 'unresolved'
+    else
+        printf 'detected'
+    fi
+}
+
+mcp_browser_profile_policy_state() {
+    if [ -z "$MCP_BROWSER_PROFILE_POLICY" ]; then
+        printf 'unresolved'
+    else
+        printf 'detected'
+    fi
+}
+
 if [ "$SETUP_MODE" != "regenerate" ]; then
     SOURCE_DIR_STATE=$(preferred_state "${SCAN_SOURCE_DIR_STATE_OVERRIDE:-}" "$([ -n "$SOURCE_DIR" ] && printf 'detected' || printf 'unresolved')")
     TEST_DIR_STATE=$(preferred_state "${SCAN_TEST_DIR_STATE_OVERRIDE:-}" "$([ -n "$TEST_DIR" ] && printf 'detected' || printf 'unresolved')")
@@ -580,6 +633,8 @@ if [ "$SETUP_MODE" != "regenerate" ]; then
     COVERAGE_CONFIG_STATE=$(preferred_state "${SCAN_COVERAGE_CONFIG_STATE_OVERRIDE:-}" "$(coverage_config_state)")
     CI_STATE=$(preferred_state "${SCAN_CI_STATE_OVERRIDE:-}" "$([ -n "$CI" ] && printf 'detected' || printf 'unresolved')")
     DOMAIN_STATE=$(preferred_state "${SCAN_DOMAIN_STATE_OVERRIDE:-}" "$(domain_state)")
+    MCP_BROWSER_TOOLING_STATE=$(preferred_state "${SCAN_MCP_BROWSER_TOOLING_STATE_OVERRIDE:-}" "$(mcp_browser_tooling_state)")
+    MCP_BROWSER_PROFILE_POLICY_STATE=$(preferred_state "${SCAN_MCP_BROWSER_PROFILE_POLICY_STATE_OVERRIDE:-}" "$(mcp_browser_profile_policy_state)")
 fi
 
 echo ""
@@ -605,6 +660,8 @@ echo "  Test types:     ${TEST_TYPES:-<none>}"
 echo "  Coverage:       ${COVERAGE_CONFIG:-<none>}"
 echo "  CI:             ${CI:-<none>}"
 echo "  Domain:         $DOMAIN"
+echo "  MCP browser:    ${MCP_BROWSER_TOOLING:-<none>}"
+echo "  MCP profile:    ${MCP_BROWSER_PROFILE_POLICY:-<none>}"
 echo ""
 
 prompt_with_default() {
@@ -974,6 +1031,8 @@ substitute_template() {
         -e "s|{{COVERAGE_CONFIG}}|${COVERAGE_CONFIG:-N/A}|g" \
         -e "s|{{CI}}|${CI:-N/A}|g" \
         -e "s|{{DOMAIN}}|${DOMAIN}|g" \
+        -e "s|{{MCP_BROWSER_TOOLING}}|${MCP_BROWSER_TOOLING:-N/A}|g" \
+        -e "s|{{MCP_BROWSER_PROFILE_POLICY}}|${MCP_BROWSER_PROFILE_POLICY:-N/A}|g" \
         -e "s|{{REPO_SHAPE}}|${REPO_SHAPE}|g" \
         -e "s|{{SETUP_CONFIDENCE}}|${SETUP_CONFIDENCE}|g" \
         -e "s|{{SETUP_KNOWN_SUMMARY}}|${SETUP_KNOWN_SUMMARY}|g" \
@@ -1101,6 +1160,8 @@ SCAN_TEST_TYPES="$SCAN_TEST_TYPES_RAW" \
 SCAN_COVERAGE_CONFIG="$SCAN_COVERAGE_CONFIG_RAW" \
 SCAN_CI="$SCAN_CI_RAW" \
 SCAN_DOMAIN="$SCAN_DOMAIN_RAW" \
+SCAN_MCP_BROWSER_TOOLING="$SCAN_MCP_BROWSER_TOOLING_RAW" \
+SCAN_MCP_BROWSER_PROFILE_POLICY="$SCAN_MCP_BROWSER_PROFILE_POLICY_RAW" \
 SETUP_RESPONSE_DETAIL="$RESPONSE_DETAIL" \
 SETUP_TESTING_APPROACH="$TESTING_APPROACH" \
 SETUP_MOCKING_PHILOSOPHY="$MOCKING_PHILOSOPHY" \
@@ -1122,6 +1183,8 @@ RESOLVED_TEST_TYPES="$TEST_TYPES" \
 RESOLVED_COVERAGE_CONFIG="$COVERAGE_CONFIG" \
 RESOLVED_CI="$CI" \
 RESOLVED_DOMAIN="$DOMAIN" \
+RESOLVED_MCP_BROWSER_TOOLING="$MCP_BROWSER_TOOLING" \
+RESOLVED_MCP_BROWSER_PROFILE_POLICY="$MCP_BROWSER_PROFILE_POLICY" \
 CONF_SOURCE_DIR="$SOURCE_DIR_STATE" \
 CONF_TEST_DIR="$TEST_DIR_STATE" \
 CONF_TEST_FRAMEWORK="$TEST_FRAMEWORK_STATE" \
@@ -1138,6 +1201,8 @@ CONF_TEST_TYPES="$TEST_TYPES_STATE" \
 CONF_COVERAGE_CONFIG="$COVERAGE_CONFIG_STATE" \
 CONF_CI="$CI_STATE" \
 CONF_DOMAIN="$DOMAIN_STATE" \
+CONF_MCP_BROWSER_TOOLING="$MCP_BROWSER_TOOLING_STATE" \
+CONF_MCP_BROWSER_PROFILE_POLICY="$MCP_BROWSER_PROFILE_POLICY_STATE" \
 MODEL_PROFILE_SELECTED="$MODEL_PROFILE" \
 AGENTS_HASH="$(compute_hash AGENTS.md)" \
 SDLC_HASH="$(compute_hash SDLC.md)" \
@@ -1174,7 +1239,9 @@ const manifest = {
     test_duration: process.env.SCAN_TEST_DURATION || "",
     test_types: process.env.SCAN_TEST_TYPES || "",
     coverage_config: process.env.SCAN_COVERAGE_CONFIG || "",
-    ci: process.env.SCAN_CI || ""
+    ci: process.env.SCAN_CI || "",
+    mcp_browser_tooling: process.env.SCAN_MCP_BROWSER_TOOLING || "",
+    mcp_browser_profile_policy: process.env.SCAN_MCP_BROWSER_PROFILE_POLICY || ""
   },
   setup_answers: {
     git_workflow: process.env.SETUP_GIT_WORKFLOW || "",
@@ -1199,7 +1266,9 @@ const manifest = {
     test_types: process.env.RESOLVED_TEST_TYPES || "",
     coverage_config: process.env.RESOLVED_COVERAGE_CONFIG || "",
     ci: process.env.RESOLVED_CI || "",
-    domain: process.env.RESOLVED_DOMAIN || ""
+    domain: process.env.RESOLVED_DOMAIN || "",
+    mcp_browser_tooling: process.env.RESOLVED_MCP_BROWSER_TOOLING || "",
+    mcp_browser_profile_policy: process.env.RESOLVED_MCP_BROWSER_PROFILE_POLICY || ""
   },
   confidence_map: {
     source_dir: process.env.CONF_SOURCE_DIR || "",
@@ -1217,7 +1286,9 @@ const manifest = {
     test_types: process.env.CONF_TEST_TYPES || "",
     coverage_config: process.env.CONF_COVERAGE_CONFIG || "",
     ci: process.env.CONF_CI || "",
-    domain: process.env.CONF_DOMAIN || ""
+    domain: process.env.CONF_DOMAIN || "",
+    mcp_browser_tooling: process.env.CONF_MCP_BROWSER_TOOLING || "",
+    mcp_browser_profile_policy: process.env.CONF_MCP_BROWSER_PROFILE_POLICY || ""
   },
   model_profile: {
     selected_profile: process.env.MODEL_PROFILE_SELECTED || ""

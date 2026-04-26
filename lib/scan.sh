@@ -440,11 +440,44 @@ detect_existing_docs() {
     fi
 }
 
+# ---- MCP Browser Detection ----
+detect_mcp_browser_tooling() {
+    if [ -f ".mcp.json" ] && grep -Eiq '@playwright/mcp|playwright' ".mcp.json" 2>/dev/null; then
+        echo "playwright-mcp"
+        return
+    fi
+
+    if [ -f "package.json" ] && json_has_truthy_file "package.json" 'data.dependencies?.["@playwright/mcp"] || data.devDependencies?.["@playwright/mcp"]'; then
+        echo "playwright-mcp"
+        return
+    fi
+
+    echo ""
+}
+
+detect_mcp_browser_profile_policy() {
+    local tooling="$1"
+
+    if [ "$tooling" != "playwright-mcp" ]; then
+        echo ""
+        return
+    fi
+
+    if [ -f ".mcp.json" ] && grep -Eiq -- '--isolated|isolated' ".mcp.json" 2>/dev/null; then
+        echo "isolated"
+    elif [ -f ".mcp.json" ] && grep -Eiq -- 'userDataDir|user-data-dir|persistent|profile|browser-state' ".mcp.json" 2>/dev/null; then
+        echo "shared/persistent"
+    else
+        echo "unknown"
+    fi
+}
+
 # ---- Main: run all detections, output JSON ----
 main() {
     local language source_dir test_dir test_framework test_command
     local lint_command typecheck_command single_test_command build_command deployment_setup
     local databases cache_layer test_duration test_types coverage_config ci domain existing_docs
+    local mcp_browser_tooling mcp_browser_profile_policy
 
     language=$(detect_language)
     source_dir=$(detect_source_dir)
@@ -464,6 +497,8 @@ main() {
     ci=$(detect_ci)
     domain=$(detect_domain)
     existing_docs=$(detect_existing_docs)
+    mcp_browser_tooling=$(detect_mcp_browser_tooling)
+    mcp_browser_profile_policy=$(detect_mcp_browser_profile_policy "$mcp_browser_tooling")
 
     SCAN_LANGUAGE="$language" \
     SCAN_SOURCE_DIR="$source_dir" \
@@ -483,6 +518,8 @@ main() {
     SCAN_CI="$ci" \
     SCAN_DOMAIN="$domain" \
     SCAN_EXISTING_DOCS="$existing_docs" \
+    SCAN_MCP_BROWSER_TOOLING="$mcp_browser_tooling" \
+    SCAN_MCP_BROWSER_PROFILE_POLICY="$mcp_browser_profile_policy" \
     node -e '
 const data = {
   language: process.env.SCAN_LANGUAGE || "",
@@ -502,7 +539,9 @@ const data = {
   coverage_config: process.env.SCAN_COVERAGE_CONFIG || "",
   ci: process.env.SCAN_CI || "",
   domain: process.env.SCAN_DOMAIN || "",
-  existing_docs: JSON.parse(process.env.SCAN_EXISTING_DOCS || "[]")
+  existing_docs: JSON.parse(process.env.SCAN_EXISTING_DOCS || "[]"),
+  mcp_browser_tooling: process.env.SCAN_MCP_BROWSER_TOOLING || "",
+  mcp_browser_profile_policy: process.env.SCAN_MCP_BROWSER_PROFILE_POLICY || ""
 };
 
 process.stdout.write(`${JSON.stringify(data)}\n`);

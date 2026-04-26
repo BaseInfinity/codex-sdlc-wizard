@@ -9,6 +9,7 @@ REPO_DIR="$SCRIPT_DIR/.."
 SCAN_SH="$REPO_DIR/lib/scan.sh"
 SETUP_SH="$REPO_DIR/setup.sh"
 CHECK_SH="$REPO_DIR/check.sh"
+UPDATE_SH="$REPO_DIR/update.sh"
 PASSED=0
 FAILED=0
 
@@ -830,7 +831,81 @@ EOF
     fi
 }
 
-# ---- Test 28: setup writes extended commands and infra into generated docs ----
+# ---- Test 28: scan detects Playwright MCP browser profile policy ----
+test_detect_playwright_mcp_policy() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    cat > "$ws/package.json" <<'EOF'
+{"name":"mcp-app","scripts":{"test":"playwright test"}}
+EOF
+    mkdir -p "$ws/tests"
+    cat > "$ws/.mcp.json" <<'EOF'
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}
+EOF
+
+    local output
+    output=$(run_scan "$ws")
+    rm -rf "$ws"
+
+    if json_text_equals "$output" 'data.mcp_browser_tooling' "playwright-mcp" \
+        && json_text_equals "$output" 'data.mcp_browser_profile_policy' "unknown"; then
+        pass "scan detects Playwright MCP browser profile policy"
+    else
+        fail "scan did not detect Playwright MCP browser profile policy"
+    fi
+}
+
+# ---- Test 29: setup documents Playwright MCP profile isolation policy ----
+test_setup_documents_playwright_mcp_profile_policy() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    cat > "$ws/package.json" <<'EOF'
+{"name":"mcp-app","scripts":{"test":"playwright test"}}
+EOF
+    mkdir -p "$ws/tests"
+    cat > "$ws/.mcp.json" <<'EOF'
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--user-data-dir=.browser-state/playwright-mcp"]
+    }
+  }
+}
+EOF
+    local mcp_before
+    mcp_before=$(cat "$ws/.mcp.json")
+
+    run_setup "$ws"
+    (
+        cd "$ws"
+        CODEX_HOME="$ws/.codex-home" bash "$UPDATE_SH" force-all >/dev/null 2>&1
+    )
+
+    local valid=true
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.scan.mcp_browser_tooling' "playwright-mcp" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.scan.mcp_browser_profile_policy' "shared/persistent" || valid=false
+    grep -qi 'profile-lock collision' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    grep -qi 'explicit opt-in isolation' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    grep -qi 'stateful.*auth-heavy\|auth-heavy.*stateful' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    [ "$(cat "$ws/.mcp.json")" = "$mcp_before" ] || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup documents Playwright MCP profile isolation policy without overwriting .mcp.json"
+    else
+        fail "setup did not document Playwright MCP isolation policy or changed .mcp.json"
+    fi
+}
+
+# ---- Test 30: setup writes extended commands and infra into generated docs ----
 test_setup_generates_extended_setup_docs() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -870,7 +945,7 @@ EOF
     fi
 }
 
-# ---- Test 29: interactive setup allows overriding detected values instead of aborting ----
+# ---- Test 31: interactive setup allows overriding detected values instead of aborting ----
 test_setup_interactive_allows_overriding_detected_values() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -1201,6 +1276,8 @@ test_check_reports_customized
 test_check_reports_missing
 test_check_reports_windows_hook_drift
 test_detect_extended_setup_fields
+test_detect_playwright_mcp_policy
+test_setup_documents_playwright_mcp_profile_policy
 test_setup_generates_extended_setup_docs
 test_setup_interactive_allows_overriding_detected_values
 test_setup_verify_only_reports_missing_files

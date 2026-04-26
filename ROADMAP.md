@@ -23,6 +23,8 @@
 - first-run handoff now uses a clearer prompt, recommends `codex resume --full-auto` for interrupted handoffs, and avoids the deprecated Windows `shell:true` plus args launcher path
 - update guidance now states the npm version boundary: `$update-wizard` repairs repo artifacts, while `npx codex-sdlc-wizard@latest update` consumes the newest package
 - the package now treats `$sdlc` as the single canonical public workflow entrypoint, keeps the Codex display name lowercase, and blocks legacy `$codex-sdlc` or imperative `/sdlc` wording from returning
+- setup/install now keep `$sdlc` repo-scoped and install only global helper skills, avoiding same-name global/repo skill collisions
+- setup now detects Playwright MCP browser tooling/profile policy and documents explicit opt-in isolation versus shared persistent auth-heavy flows without rewriting `.mcp.json`
 - the repo now ships a consumer bug-report template for install/setup/runtime failures
 - the public README now leads with the real `@latest` adaptive setup path and keeps the top section consumer-focused
 - benchmark and pilot-rollout ledgers now exist so model/default-use decisions can be measured, not guessed
@@ -42,10 +44,8 @@ Scope:
 
 ## Tracker Cleanup
 
-The active issue tracker currently has two real stabilization items:
+The issue tracker is currently clear after the stabilization items found during pilot consumption.
 
-- #21: avoid same-name `$sdlc` skill collisions across global and repo scopes
-- #22: add explicit Playwright MCP profile isolation policy for agent clients
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
 - avoid speculative backlog churn while `0.7.14` is being consumed on real repos
 
@@ -54,7 +54,7 @@ The active issue tracker currently has two real stabilization items:
 After `0.7.14`, the main backlog is:
 
 - pilot rollout proof for default use on real repos
-- any reusable wizard fixes discovered during the pilot set, starting with #21 and #22
+- any new reusable wizard fixes discovered during the pilot set
 - model-profile measurement data collection for `mixed` vs `maximum`
 - top-level proof-run parallelization to reduce release-wall-clock time without weakening suite coverage
 - later creator-tool research after the active backlog stays under control
