@@ -59,9 +59,10 @@ setup_workspace() {
     local ws
     ws=$(mktemp -d)
     git init "$ws" >/dev/null 2>&1
-    git -C "$ws" config user.email "codex-sdlc-e2e@example.invalid"
     git -C "$ws" config user.name "Codex SDLC E2E"
-    (cd "$ws" && git commit --allow-empty -m "init" >/dev/null 2>&1)
+    git -C "$ws" config user.email "codex-sdlc-e2e@example.invalid"
+    git -C "$ws" commit --allow-empty -m "init" >/dev/null 2>&1
+    git -C "$ws" rev-parse --verify HEAD >/dev/null 2>&1
     (cd "$ws" && bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
     echo "$ws"
 }
