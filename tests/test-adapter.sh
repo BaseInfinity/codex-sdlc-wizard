@@ -747,6 +747,16 @@ test_readme_mentions_npx_entrypoint() {
     fi
 }
 
+test_e2e_requires_explicit_token_opt_in() {
+    if grep -q 'CODEX_E2E:-0' "$REPO_DIR/tests/test-e2e.sh" \
+        && grep -q 'CODEX_E2E=1 bash tests/test-e2e.sh' "$REPO_DIR/README.md" \
+        && grep -qi 'token-consuming' "$REPO_DIR/README.md"; then
+        pass "E2E tests require explicit token-consuming opt-in"
+    else
+        fail "E2E tests should be opt-in so normal verification does not consume tokens"
+    fi
+}
+
 test_pretool_blocks_commit
 test_pretool_blocks_push
 test_pretool_allows_safe_command
@@ -780,6 +790,7 @@ test_package_cli_help_mentions_update
 test_package_cli_runs_check_command
 test_package_cli_runs_update_command
 test_readme_mentions_npx_entrypoint
+test_e2e_requires_explicit_token_opt_in
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
