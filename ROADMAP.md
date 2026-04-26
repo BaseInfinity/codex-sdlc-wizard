@@ -36,15 +36,20 @@ Purpose: continue proving the post-`0.7.14` consumer path on real repos and stab
 
 Scope:
 - run `0.7.14` on 3-5 pilot repos and log results in `benchmarks/pilot-rollout.csv`
-- cut a stabilization patch only if pilots surface another reusable wizard bug
+- fix the active stabilization issues already surfaced by pilot/consumer usage:
+  - #21: avoid same-name `$sdlc` skill collisions across global and repo scopes
+  - #22: add explicit Playwright MCP profile isolation policy for agent clients
+- cut `0.7.15` only after those active stabilization items are proven or intentionally deferred
 - keep the default-use recommendation gated on the measurable pilot summary
 - keep separate model-profile measurement running, but do not let it block pilot rollout work
 
 ## Tracker Cleanup
 
-The issue tracker is currently clear.
+The issue tracker has active 0.7.15 stabilization work.
 
-- open a new issue only when pilot consumption exposes a proven reusable wizard bug
+- #21 tracks the wizard-owned `$sdlc` skill collision fix after Codex confirmed same-name skills from different scopes are intentionally distinct
+- #22 tracks explicit Playwright MCP profile isolation guidance/config for agent clients without relying on an upstream breaking default change
+- open additional issues only when pilot consumption exposes another proven reusable wizard bug
 - avoid speculative backlog churn while `0.7.14` is being consumed on real repos
 
 ## Remaining Backlog
@@ -52,7 +57,8 @@ The issue tracker is currently clear.
 After `0.7.14`, the main backlog is:
 
 - pilot rollout proof for default use on real repos
-- any reusable wizard fixes discovered during the pilot set
+- active stabilization fixes for #21 and #22
+- any additional reusable wizard fixes discovered during the pilot set
 - model-profile measurement data collection for `mixed` vs `maximum`
 - top-level proof-run parallelization to reduce release-wall-clock time without weakening suite coverage
 - later creator-tool research after the active backlog stays under control
@@ -60,7 +66,7 @@ After `0.7.14`, the main backlog is:
 ## Working Order
 
 1. Prove the default-use gate on 3-5 pilot repos with `0.7.14`
-2. Ship `0.7.15` only if pilot rollout surfaces another reusable wizard bug
+2. Fix or explicitly defer #21 and #22 before cutting `0.7.15`
 3. Keep creator-tool investigation behind the active backlog
 
 ## Default-Use Gate

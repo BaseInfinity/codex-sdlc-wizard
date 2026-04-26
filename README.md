@@ -132,6 +132,8 @@ Bootstrap recommendation:
 - setup/update should use `maximum`; routine work after bootstrap should use `mixed`
 - use `maximum` for setup/update because bootstrap work has higher blast radius
 - switch back to `mixed` for routine day-to-day work after the repo is stable
+- if you mostly want reliable results and are not sure which profile to choose, use `maximum` / `xhigh`; slow and steady wins the race once the SDLC harness is installed
+- `mixed` and advisory-review patterns can work well after a repo has a good test harness and low-to-medium complexity, but results vary by project
 
 Repo-specific maintainer rule:
 - consumer repos can choose `mixed` or `maximum`

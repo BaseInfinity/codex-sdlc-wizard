@@ -458,6 +458,7 @@ test_readme_documents_model_profiles() {
     local has_repo_maximum_rule=true
     local has_bootstrap_maximum_rule=true
     local has_routine_mixed_rule=true
+    local has_results_first_xhigh_rule=true
 
     grep -q '^## Model Profiles$' "$README" || has_heading=false
     grep -q '`mixed`' "$README" || has_mixed=false
@@ -469,6 +470,7 @@ test_readme_documents_model_profiles() {
     grep -Eqi 'this repo.*maximum|wizard repo.*maximum|codex-sdlc-wizard itself.*maximum' "$README" || has_repo_maximum_rule=false
     grep -Eqi 'setup/update.*maximum|bootstrap.*maximum' "$README" || has_bootstrap_maximum_rule=false
     grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' "$README" || has_routine_mixed_rule=false
+    grep -Eqi 'if.*not sure.*xhigh|just want results.*xhigh|slow and steady wins|good harness.*mixed|advisory role' "$README" || has_results_first_xhigh_rule=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$has_mixed" = "true" ] &&
@@ -478,10 +480,11 @@ test_readme_documents_model_profiles() {
        [ "$has_confidence_rule" = "true" ] &&
        [ "$has_repo_maximum_rule" = "true" ] &&
        [ "$has_bootstrap_maximum_rule" = "true" ] &&
-       [ "$has_routine_mixed_rule" = "true" ]; then
-        pass "README documents the bootstrap maximum rule, routine mixed guidance, and this repo's maximum-only policy"
+       [ "$has_routine_mixed_rule" = "true" ] &&
+       [ "$has_results_first_xhigh_rule" = "true" ]; then
+        pass "README documents the bootstrap maximum rule, routine mixed guidance, results-first xhigh rule, and this repo's maximum-only policy"
     else
-        fail "README does not document the bootstrap maximum rule, routine mixed guidance, and this repo's maximum-only policy clearly enough"
+        fail "README does not document the bootstrap maximum rule, routine mixed guidance, results-first xhigh rule, and this repo's maximum-only policy clearly enough"
     fi
 }
 
