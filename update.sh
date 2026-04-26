@@ -27,7 +27,8 @@ FORCE_ALL=false
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
-CORE_SKILLS=("sdlc" "feedback" "setup-wizard" "update-wizard")
+CORE_SKILLS=("feedback" "setup-wizard" "update-wizard")
+COLLIDING_GLOBAL_SKILLS=("sdlc:repo-scoped .agents/skills/sdlc")
 LEGACY_SKILLS=("codex-sdlc:sdlc")
 
 for arg in "$@"; do
@@ -143,6 +144,28 @@ remove_legacy_skill() {
     rm -rf "$target_path"
 }
 
+global_skill_matches_bundle() {
+    local skill_name="$1"
+    local bundled_path="$SCRIPT_DIR/skills/$skill_name"
+    local target_path="$SKILLS_ROOT/$skill_name"
+
+    [ -d "$bundled_path" ] || return 1
+    [ -d "$target_path" ] || return 1
+
+    diff -qr "$bundled_path" "$target_path" >/dev/null 2>&1
+}
+
+remove_colliding_global_skill() {
+    local skill_name="$1"
+    local target_path="$SKILLS_ROOT/$skill_name"
+
+    [ -d "$target_path" ] || return 0
+
+    mkdir -p "$SKILLS_BACKUP_ROOT"
+    cp -R "$target_path" "$SKILLS_BACKUP_ROOT/$skill_name.bak.$(date +%s)"
+    rm -rf "$target_path"
+}
+
 restore_skipped_hashes() {
     local manifest_path=".codex-sdlc/manifest.json"
     local skipped_hashes_json="$1"
@@ -203,6 +226,7 @@ for (const [relativePath, info] of Object.entries(data.managed_files || {}).sort
 declare -a PLAN_LINES=()
 declare -a STATIC_REPAIRS=()
 declare -a SKILL_REPAIRS=()
+declare -a COLLIDING_SKILL_REMOVALS=()
 declare -a LEGACY_SKILL_REMOVALS=()
 declare -a SKIPPED_CUSTOMIZED_PATHS=()
 CHANGES_PENDING=false
@@ -234,6 +258,13 @@ queue_skill_repair() {
     local skill_name="$1"
     if [ "${#SKILL_REPAIRS[@]}" -eq 0 ] || ! array_contains "$skill_name" "${SKILL_REPAIRS[@]}"; then
         SKILL_REPAIRS+=("$skill_name")
+    fi
+}
+
+queue_colliding_skill_removal() {
+    local skill_name="$1"
+    if [ "${#COLLIDING_SKILL_REMOVALS[@]}" -eq 0 ] || ! array_contains "$skill_name" "${COLLIDING_SKILL_REMOVALS[@]}"; then
+        COLLIDING_SKILL_REMOVALS+=("$skill_name")
     fi
 }
 
@@ -315,6 +346,17 @@ for skill_name in "${CORE_SKILLS[@]}"; do
     PLAN_LINES+=("skills/$skill_name|$skill_status|$skill_action")
 done
 
+for collision_spec in "${COLLIDING_GLOBAL_SKILLS[@]}"; do
+    IFS=':' read -r skill_name canonical_scope <<< "$collision_spec"
+    [ -n "$skill_name" ] || continue
+
+    if global_skill_matches_bundle "$skill_name"; then
+        PLAN_LINES+=("skills/$skill_name|same-name collision|remove (canonical: $canonical_scope)")
+        CHANGES_PENDING=true
+        queue_colliding_skill_removal "$skill_name"
+    fi
+done
+
 for legacy_spec in "${LEGACY_SKILLS[@]}"; do
     IFS=':' read -r legacy_name canonical_name <<< "$legacy_spec"
     [ -n "$legacy_name" ] || continue
@@ -388,6 +430,13 @@ if [ "${#SKILL_REPAIRS[@]}" -gt 0 ]; then
     for skill_name in "${SKILL_REPAIRS[@]}"; do
         repair_skill "$skill_name"
         echo "Applied: skills/$skill_name"
+    done
+fi
+
+if [ "${#COLLIDING_SKILL_REMOVALS[@]}" -gt 0 ]; then
+    for skill_name in "${COLLIDING_SKILL_REMOVALS[@]}"; do
+        remove_colliding_global_skill "$skill_name"
+        echo "Removed same-name global skill collision: skills/$skill_name (repo-scoped .agents/skills/sdlc is canonical)"
     done
 fi
 

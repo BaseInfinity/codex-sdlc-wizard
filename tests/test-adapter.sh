@@ -221,19 +221,25 @@ test_install_creates_skill() {
     tmpdir=$(mktemp -d)
     (cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
     local all_present=true
-    for skill in "sdlc" "setup-wizard" "update-wizard" "feedback"; do
+    for skill in "setup-wizard" "update-wizard" "feedback"; do
         if [ ! -f "$tmpdir/.codex-home/skills/$skill/SKILL.md" ]; then
             all_present=false
             break
         fi
     done
+    if [ -d "$tmpdir/.codex-home/skills/sdlc" ]; then
+        all_present=false
+    fi
+    if [ ! -f "$tmpdir/.agents/skills/sdlc/SKILL.md" ]; then
+        all_present=false
+    fi
     if [ -d "$tmpdir/.codex-home/skills/codex-sdlc" ]; then
         all_present=false
     fi
     if [ "$all_present" = "true" ]; then
-        pass "install.sh creates the native Codex skills with canonical sdlc naming"
+        pass "install.sh creates global helper skills and one repo-scoped sdlc entrypoint"
     else
-        fail "install.sh did not create the canonical native Codex skills"
+        fail "install.sh created duplicate global/repo sdlc skills or missed helper skills"
     fi
     rm -rf "$tmpdir"
 }
@@ -243,7 +249,7 @@ test_install_keeps_skill_backups_out_of_skills_and_prunes_legacy_sdlc() {
     tmpdir=$(mktemp -d)
 
     mkdir -p "$tmpdir/.codex-home/skills/sdlc" "$tmpdir/.codex-home/skills/codex-sdlc"
-    echo "OLD" > "$tmpdir/.codex-home/skills/sdlc/marker.txt"
+    echo "USER OWNED" > "$tmpdir/.codex-home/skills/sdlc/marker.txt"
     echo "LEGACY" > "$tmpdir/.codex-home/skills/codex-sdlc/marker.txt"
 
     (cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
@@ -255,17 +261,20 @@ test_install_keeps_skill_backups_out_of_skills_and_prunes_legacy_sdlc() {
     legacy_backup_count=$(find "$tmpdir/.codex-home/backups/skills" -maxdepth 1 -name 'codex-sdlc.bak.*' 2>/dev/null | wc -l | tr -d ' ')
     leaked_backup_count=$(find "$tmpdir/.codex-home/skills" -maxdepth 1 \( -name 'sdlc.bak.*' -o -name 'codex-sdlc.bak.*' \) | wc -l | tr -d ' ')
     local legacy_present=false
+    local user_skill_preserved=false
     [ -d "$tmpdir/.codex-home/skills/codex-sdlc" ] && legacy_present=true
+    grep -q 'USER OWNED' "$tmpdir/.codex-home/skills/sdlc/marker.txt" 2>/dev/null && user_skill_preserved=true
 
     rm -rf "$tmpdir"
 
-    if [ "$backup_count" -ge 1 ] &&
+    if [ "$backup_count" = "0" ] &&
        [ "$legacy_backup_count" -ge 1 ] &&
        [ "$leaked_backup_count" = "0" ] &&
-       [ "$legacy_present" = "false" ]; then
-        pass "install.sh keeps skill backups out of live skills and prunes legacy codex-sdlc"
+       [ "$legacy_present" = "false" ] &&
+       [ "$user_skill_preserved" = "true" ]; then
+        pass "install.sh preserves user-owned global sdlc and prunes legacy codex-sdlc"
     else
-        fail "install.sh leaked skill backups or left legacy codex-sdlc installed"
+        fail "install.sh overwrote user-owned sdlc, leaked backups, or left legacy codex-sdlc installed"
     fi
 }
 
@@ -617,6 +626,8 @@ test_package_uses_single_canonical_sdlc_skill_name() {
     grep -q '^name: sdlc$' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
     grep -q '^  display_name: sdlc$' "$REPO_DIR/skills/sdlc/agents/openai.yaml" || all_passed=false
     grep -Fq 'Canonical entrypoint: `$sdlc`' "$REPO_DIR/README.md" || all_passed=false
+    grep -Fq 'Codex treats same-name skills from different scopes as distinct choices' "$REPO_DIR/README.md" || all_passed=false
+    grep -Fq 'normal setup installs global helper skills only' "$REPO_DIR/README.md" || all_passed=false
     grep -Fq 'Canonical entrypoint: `$sdlc`' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
     grep -Fq 'do not pretend Codex has a native `/sdlc` command' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
     grep -RE '\$codex-sdlc([^A-Za-z0-9_-]|$)' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skills" 2>/dev/null && all_passed=false

@@ -42,9 +42,11 @@ Scope:
 
 ## Tracker Cleanup
 
-The issue tracker is currently clear.
+The active issue tracker currently has two real stabilization items:
 
-- open a new issue only when pilot consumption exposes a proven reusable wizard bug
+- #21: avoid same-name `$sdlc` skill collisions across global and repo scopes
+- #22: add explicit Playwright MCP profile isolation policy for agent clients
+- open a new issue only when pilot consumption exposes another proven reusable wizard bug
 - avoid speculative backlog churn while `0.7.14` is being consumed on real repos
 
 ## Remaining Backlog
@@ -52,7 +54,7 @@ The issue tracker is currently clear.
 After `0.7.14`, the main backlog is:
 
 - pilot rollout proof for default use on real repos
-- any reusable wizard fixes discovered during the pilot set
+- any reusable wizard fixes discovered during the pilot set, starting with #21 and #22
 - model-profile measurement data collection for `mixed` vs `maximum`
 - top-level proof-run parallelization to reduce release-wall-clock time without weakening suite coverage
 - later creator-tool research after the active backlog stays under control

@@ -148,6 +148,8 @@ Repo-scoped skill coverage is still a work in progress:
 
 Canonical entrypoint: `$sdlc`. `/sdlc` is historical shorthand for the missing slash-command idea, not an invocation command. Adapter-specific SDLC aliases are legacy migration debris and should not appear as second user-facing workflows.
 
+Codex treats same-name skills from different scopes as distinct choices. To avoid duplicate `$sdlc` workflow rows, normal setup installs global helper skills only (`feedback`, `setup-wizard`, and `update-wizard`) and keeps `.agents/skills/sdlc` as the canonical repo-scoped workflow.
+
 These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so repo-scoped skills are loaded cleanly.
 
 The bridge here is explicit, not magical: this adapter ships the Codex-native skill copies that target repos consume. It does not depend on local `.claude/skills/*` paths being present in the target repo.
@@ -237,9 +239,9 @@ The workflow uses GitHub OIDC trusted publishing, validates that the tag matches
 4. Installs `.codex/hooks.json` (backs up existing)
 5. Copies hook scripts to `.codex/hooks/`
 6. Installs repo-scoped skills at `.agents/skills/sdlc/SKILL.md` and `.agents/skills/adlc/SKILL.md`
-7. Installs the current global Codex skill set under `~/.codex/skills`
+7. Installs global helper skills under `~/.codex/skills` without installing a global `sdlc` duplicate
 
-In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/*`, and the repo-scoped skills. It also writes `.codex-sdlc/model-profile.json` so the chosen profile is explicit. Existing `.codex/config.toml` files are merged: model keys and `[features].codex_hooks` are patched, while MCP, sandbox, approval, and other custom settings are preserved.
+In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/*`, and the repo-scoped skills. It also writes `.codex-sdlc/model-profile.json` so the chosen profile is explicit. Existing `.codex/config.toml` files are merged: model keys and `[features].codex_hooks` are patched, while MCP, sandbox, approval, and other custom settings are preserved. If an older wizard-managed global `sdlc` skill is detected, update/setup backs it up and removes it; user-owned global `sdlc` skills are preserved.
 
 ### Requirements
 
