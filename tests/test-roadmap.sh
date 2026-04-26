@@ -93,10 +93,11 @@ test_roadmap_lists_next_release_cycle() {
     fi
 }
 
-test_roadmap_calls_out_stale_issue_cleanup() {
+test_roadmap_tracks_active_0715_stabilization_issues() {
     local has_heading=true
-    local has_tracker_clear=true
-    local has_new_issue_rule=true
+    local has_active_tracker=true
+    local has_skill_collision=true
+    local has_playwright_mcp=true
     local avoids_old_issue_refs=true
     local cleanup_section
 
@@ -107,17 +108,19 @@ test_roadmap_calls_out_stale_issue_cleanup() {
     ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    echo "$cleanup_section" | grep -Eqi 'tracker is currently clear|issue tracker is currently clear' || has_tracker_clear=false
-    echo "$cleanup_section" | grep -Eqi 'open a new issue|pilot consumption exposes' || has_new_issue_rule=false
+    echo "$cleanup_section" | grep -Eqi 'active tracker|issue tracker is active|tracker has active' || has_active_tracker=false
+    echo "$cleanup_section" | grep -Eqi '#21|same-name.*sdlc|skill collision' || has_skill_collision=false
+    echo "$cleanup_section" | grep -Eqi '#22|Playwright MCP|profile isolation' || has_playwright_mcp=false
     echo "$cleanup_section" | grep -Eq '#15|#16|#17' && avoids_old_issue_refs=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_tracker_clear" = "true" ] &&
-       [ "$has_new_issue_rule" = "true" ] &&
+       [ "$has_active_tracker" = "true" ] &&
+       [ "$has_skill_collision" = "true" ] &&
+       [ "$has_playwright_mcp" = "true" ] &&
        [ "$avoids_old_issue_refs" = "true" ]; then
-        pass "Roadmap reflects the clear tracker and the rule for opening new issues from real consumption"
+        pass "Roadmap tracks the active 0.7.15 stabilization issues"
     else
-        fail "Roadmap does not call out tracker cleanup clearly"
+        fail "Roadmap does not track the active 0.7.15 stabilization issues"
     fi
 }
 
@@ -234,7 +237,7 @@ test_roadmap_prioritizes_pilot_rollout_before_creator_investigation() {
 test_roadmap_exists
 test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
-test_roadmap_calls_out_stale_issue_cleanup
+test_roadmap_tracks_active_0715_stabilization_issues
 test_roadmap_tracks_late_creator_investigation
 test_roadmap_tracks_review_model_measurement
 test_roadmap_sets_numeric_model_profile_targets
