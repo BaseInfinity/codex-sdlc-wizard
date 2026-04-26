@@ -271,8 +271,8 @@ bash tests/test-adapter.sh
 bash tests/test-setup.sh
 bash tests/test-update.sh
 
-# E2E tests (requires codex CLI + auth, costs tokens)
-bash tests/test-e2e.sh
+# E2E tests (opt-in: requires codex CLI + auth, consumes tokens)
+CODEX_E2E=1 bash tests/test-e2e.sh
 ```
 
 - Release contract tests for semver tags, GitHub Releases, and README release docs
@@ -280,7 +280,7 @@ bash tests/test-e2e.sh
 - Skill packaging tests for SKILL.md, agents/openai.yaml, and dual-distribution docs
 - npm packaging smoke tests for package metadata, packed contents, and npm exec
 - Adapter, setup, and update tests for the Codex-specific behavior surface
-- E2E integration tests for real Codex sessions proving hooks fire
+- E2E integration tests are token-consuming and opt-in; use `CODEX_E2E=1 bash tests/test-e2e.sh` when you explicitly want real Codex sessions proving hooks fire
 
 ## Upstream
 

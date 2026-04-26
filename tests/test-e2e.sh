@@ -10,6 +10,7 @@ REPO_DIR="$SCRIPT_DIR/.."
 PASSED=0
 FAILED=0
 SKIPPED=0
+CODEX_E2E="${CODEX_E2E:-0}"
 CODEX_E2E_MODEL="${CODEX_E2E_MODEL:-gpt-5.5}"
 
 RED='\033[0;31m'
@@ -20,6 +21,13 @@ NC='\033[0m'
 pass() { echo -e "${GREEN}PASS${NC}: $1"; PASSED=$((PASSED + 1)); }
 fail() { echo -e "${RED}FAIL${NC}: $1"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "${YELLOW}SKIP${NC}: $1"; SKIPPED=$((SKIPPED + 1)); }
+
+if [ "$CODEX_E2E" != "1" ]; then
+    skip "E2E: real Codex sessions are token-consuming; set CODEX_E2E=1 to run"
+    echo ""
+    echo "=== E2E Results: $PASSED passed, $FAILED failed, $SKIPPED skipped ==="
+    exit 0
+fi
 
 codex_transport_unavailable() {
     echo "$1" | grep -Eqi 'failed to lookup address|failed to connect to websocket|stream disconnected before completion|api\.openai\.com'
@@ -59,9 +67,10 @@ setup_workspace() {
     local ws
     ws=$(mktemp -d)
     git init "$ws" >/dev/null 2>&1
-    git -C "$ws" config user.email "codex-sdlc-e2e@example.invalid"
     git -C "$ws" config user.name "Codex SDLC E2E"
-    (cd "$ws" && git commit --allow-empty -m "init" >/dev/null 2>&1)
+    git -C "$ws" config user.email "codex-sdlc-e2e@example.invalid"
+    git -C "$ws" commit --allow-empty -m "init" >/dev/null 2>&1
+    git -C "$ws" rev-parse --verify HEAD >/dev/null 2>&1
     (cd "$ws" && bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
     echo "$ws"
 }
