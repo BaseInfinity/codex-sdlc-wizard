@@ -109,6 +109,26 @@ repair_managed_file() {
     esac
 }
 
+manifest_needs_mcp_browser_policy_refresh() {
+    local manifest_path=".codex-sdlc/manifest.json"
+    local live_scan live_tooling live_profile_policy manifest_tooling manifest_profile_policy
+
+    [ -f "$manifest_path" ] || return 1
+
+    live_scan=$(bash "$SCRIPT_DIR/lib/scan.sh" 2>/dev/null || true)
+    [ -n "$live_scan" ] || return 1
+
+    live_tooling=$(printf '%s' "$live_scan" | json_get_stdin 'data.mcp_browser_tooling || ""')
+    live_profile_policy=$(printf '%s' "$live_scan" | json_get_stdin 'data.mcp_browser_profile_policy || ""')
+    [ -n "$live_tooling" ] || return 1
+    [ -n "$live_profile_policy" ] || return 1
+
+    manifest_tooling=$(json_get_file "$manifest_path" 'data.scan?.mcp_browser_tooling || data.resolved_values?.mcp_browser_tooling || ""')
+    manifest_profile_policy=$(json_get_file "$manifest_path" 'data.scan?.mcp_browser_profile_policy || data.resolved_values?.mcp_browser_profile_policy || ""')
+
+    [ "$manifest_tooling" != "$live_tooling" ] || [ "$manifest_profile_policy" != "$live_profile_policy" ]
+}
+
 config_needs_repair() {
     codex_config_needs_profile_repair ".codex/config.toml" "$MODEL_PROFILE"
 }
@@ -229,6 +249,8 @@ declare -a SKILL_REPAIRS=()
 declare -a COLLIDING_SKILL_REMOVALS=()
 declare -a LEGACY_SKILL_REMOVALS=()
 declare -a SKIPPED_CUSTOMIZED_PATHS=()
+declare -a MATCHED_GENERATED_DOCS=()
+declare -a REGENERATE_EXISTING_DOCS=()
 CHANGES_PENDING=false
 RUN_REGENERATE=false
 REGENERATE_FORCE=false
@@ -275,6 +297,13 @@ queue_legacy_skill_removal() {
     fi
 }
 
+queue_regenerate_existing_doc() {
+    local relative_path="$1"
+    if [ "${#REGENERATE_EXISTING_DOCS[@]}" -eq 0 ] || ! array_contains "$relative_path" "${REGENERATE_EXISTING_DOCS[@]}"; then
+        REGENERATE_EXISTING_DOCS+=("$relative_path")
+    fi
+}
+
 for line in "${STATUS_LINES[@]}"; do
     IFS=$'\t' read -r relative_path status <<< "$line"
     [ -n "$relative_path" ] || continue
@@ -289,6 +318,9 @@ for line in "${STATUS_LINES[@]}"; do
                 queue_static_repair "$relative_path"
             else
                 action="keep"
+                if is_generated_doc "$relative_path"; then
+                    MATCHED_GENERATED_DOCS+=("$relative_path")
+                fi
             fi
             ;;
         missing|"drift / broken")
@@ -326,6 +358,17 @@ for line in "${STATUS_LINES[@]}"; do
 
     PLAN_LINES+=("$relative_path|$status|$action")
 done
+
+if manifest_needs_mcp_browser_policy_refresh; then
+    PLAN_LINES+=(".codex-sdlc/manifest.json|MCP browser policy missing|refresh generated docs from live scan")
+    CHANGES_PENDING=true
+    RUN_REGENERATE=true
+    if [ "$FORCE_ALL" = "true" ]; then
+        REGENERATE_FORCE=true
+    elif array_contains "ARCHITECTURE.md" "${MATCHED_GENERATED_DOCS[@]}"; then
+        queue_regenerate_existing_doc "ARCHITECTURE.md"
+    fi
+fi
 
 for skill_name in "${CORE_SKILLS[@]}"; do
     skill_status="present"
@@ -448,6 +491,15 @@ if [ "${#LEGACY_SKILL_REMOVALS[@]}" -gt 0 ]; then
 fi
 
 if [ "$RUN_REGENERATE" = "true" ]; then
+    if [ "$REGENERATE_FORCE" = "false" ] && [ "${#REGENERATE_EXISTING_DOCS[@]}" -gt 0 ]; then
+        for relative_path in "${REGENERATE_EXISTING_DOCS[@]}"; do
+            if [ -f "$relative_path" ]; then
+                rm -f "$relative_path"
+                echo "Prepared for regeneration: $relative_path"
+            fi
+        done
+    fi
+
     if [ "$REGENERATE_FORCE" = "true" ]; then
         bash "$SCRIPT_DIR/setup.sh" regenerate --force
     else

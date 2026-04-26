@@ -9,6 +9,8 @@
 - **Databases:** {{DATABASES}}
 - **Cache layer:** {{CACHE_LAYER}}
 - **CI:** {{CI}}
+- **MCP browser tooling:** {{MCP_BROWSER_TOOLING}}
+- **MCP browser profile policy:** {{MCP_BROWSER_PROFILE_POLICY}}
 
 ## Overview
 
@@ -26,3 +28,12 @@
 
 <!-- Document key architectural decisions and their rationale -->
 <!-- Consider using ADRs in docs/decisions/ for significant choices -->
+
+## Playwright MCP Browser Profile Policy
+
+- Detected browser MCP tooling: `{{MCP_BROWSER_TOOLING}}`
+- Detected browser profile policy: `{{MCP_BROWSER_PROFILE_POLICY}}`
+- Use explicit opt-in isolation for agent-managed Playwright MCP visual/debug sessions when multiple agents or clients may run concurrently.
+- Treat shared or persistent MCP browser profiles as user-owned state. Do not overwrite `.mcp.json`, profile paths, storage state, or auth continuity settings without an explicit request.
+- Watch for profile-lock collision risk when multiple long-lived MCP/browser sessions reuse the same browser profile.
+- Keep stateful/auth-heavy operator flows separate from deterministic isolated test runs; auth-heavy flows may intentionally need a real shared browser profile.

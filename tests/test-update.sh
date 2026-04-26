@@ -440,6 +440,125 @@ EOF
     fi
 }
 
+# ---- Test 12: update refreshes Playwright MCP policy for old manifests ----
+test_update_refreshes_playwright_mcp_policy_for_old_manifest() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"playwright test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+
+    run_setup_local "$ws"
+    cat > "$ws/ARCHITECTURE.md" <<'EOF'
+# Architecture
+
+## Tech Stack
+
+- **Language:** javascript
+
+## Overview
+
+Older generated architecture document without MCP browser policy guidance.
+EOF
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" ARCH_PATH="$ws/ARCHITECTURE.md" node - <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+const manifestPath = process.env.MANIFEST_PATH;
+const archPath = process.env.ARCH_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+const hash = crypto.createHash("sha256").update(fs.readFileSync(archPath)).digest("hex");
+
+manifest.managed_files["ARCHITECTURE.md"] = `sha256:${hash}`;
+delete manifest.scan.mcp_browser_tooling;
+delete manifest.scan.mcp_browser_profile_policy;
+delete manifest.resolved_values.mcp_browser_tooling;
+delete manifest.resolved_values.mcp_browser_profile_policy;
+delete manifest.confidence_map.mcp_browser_tooling;
+delete manifest.confidence_map.mcp_browser_profile_policy;
+
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    cat > "$ws/.mcp.json" <<'EOF'
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--user-data-dir=.browser-state/playwright-mcp"]
+    }
+  }
+}
+EOF
+    local mcp_before
+    mcp_before=$(cat "$ws/.mcp.json")
+
+    local output check_output valid=true
+    output=$(run_update "$ws")
+    check_output=$(run_check "$ws")
+
+    echo "$output" | grep -qi 'MCP browser policy\|mcp browser policy' 2>/dev/null || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.scan.mcp_browser_tooling' "playwright-mcp" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.scan.mcp_browser_profile_policy' "shared/persistent" || valid=false
+    grep -qi 'profile-lock collision' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    grep -qi 'explicit opt-in isolation' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    [ "$(cat "$ws/.mcp.json")" = "$mcp_before" ] || valid=false
+    json_text_equals "$check_output" 'data.managed_files["ARCHITECTURE.md"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update refreshes Playwright MCP profile policy for old manifests without overwriting .mcp.json"
+    else
+        fail "update did not refresh Playwright MCP profile policy for an old manifest"
+    fi
+}
+
+# ---- Test 13: update refreshes changed Playwright MCP policy ----
+test_update_refreshes_changed_playwright_mcp_policy() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"playwright test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    cat > "$ws/.mcp.json" <<'EOF'
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}
+EOF
+
+    run_setup_local "$ws"
+    cat > "$ws/.mcp.json" <<'EOF'
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--user-data-dir=.browser-state/playwright-mcp"]
+    }
+  }
+}
+EOF
+    local mcp_before
+    mcp_before=$(cat "$ws/.mcp.json")
+
+    local check_output valid=true
+    run_update "$ws" >/dev/null
+    check_output=$(run_check "$ws")
+
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.scan.mcp_browser_profile_policy' "shared/persistent" || valid=false
+    grep -q 'Detected browser profile policy: `shared/persistent`' "$ws/ARCHITECTURE.md" 2>/dev/null || valid=false
+    [ "$(cat "$ws/.mcp.json")" = "$mcp_before" ] || valid=false
+    json_text_equals "$check_output" 'data.managed_files["ARCHITECTURE.md"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update refreshes changed Playwright MCP profile policy without overwriting .mcp.json"
+    else
+        fail "update did not refresh a changed Playwright MCP profile policy"
+    fi
+}
+
 test_update_reports_uninitialized_repo
 test_update_check_only_reports_missing_without_repair
 test_update_repairs_missing_generated_docs
@@ -451,6 +570,8 @@ test_update_repairs_missing_native_skills
 test_update_removes_legacy_codex_sdlc_skill
 test_update_preserves_user_owned_global_sdlc_skill
 test_update_repairs_mixed_profile_reasoning_drift
+test_update_refreshes_playwright_mcp_policy_for_old_manifest
+test_update_refreshes_changed_playwright_mcp_policy
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
