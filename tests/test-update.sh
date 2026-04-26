@@ -345,26 +345,67 @@ test_update_removes_legacy_codex_sdlc_skill() {
     mkdir -p "$ws/src"
 
     run_setup_local "$ws"
+    rm -rf "$ws/.codex-home/skills/sdlc"
+    cp -R "$REPO_DIR/skills/sdlc" "$ws/.codex-home/skills/sdlc"
     mkdir -p "$ws/.codex-home/skills/codex-sdlc"
     echo "LEGACY" > "$ws/.codex-home/skills/codex-sdlc/marker.txt"
+
+    local check_output output valid=true
+    check_output=$(run_update "$ws" check-only)
+    echo "$check_output" | grep -q 'skills/sdlc' 2>/dev/null || valid=false
+    echo "$check_output" | grep -qi 'same-name\|collision\|repo-scoped' 2>/dev/null || valid=false
+
+    output=$(run_update "$ws")
+
+    [ ! -d "$ws/.codex-home/skills/sdlc" ] || valid=false
+    [ ! -d "$ws/.codex-home/skills/codex-sdlc" ] || valid=false
+    find "$ws/.codex-home/backups/skills" -maxdepth 1 -name 'sdlc.bak.*' 2>/dev/null | grep -q . || valid=false
+    find "$ws/.codex-home/backups/skills" -maxdepth 1 -name 'codex-sdlc.bak.*' 2>/dev/null | grep -q . || valid=false
+    echo "$output" | grep -qi 'legacy.*codex-sdlc\|codex-sdlc.*legacy' 2>/dev/null || valid=false
+    echo "$output" | grep -qi 'same-name\|collision\|repo-scoped' 2>/dev/null || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update removes wizard-managed global sdlc collisions and legacy codex-sdlc"
+    else
+        fail "update left duplicate global/repo sdlc skills or legacy codex-sdlc"
+    fi
+}
+
+# ---- Test 10: update preserves user-owned global sdlc skill ----
+test_update_preserves_user_owned_global_sdlc_skill() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    rm -rf "$ws/.codex-home/skills/sdlc"
+    mkdir -p "$ws/.codex-home/skills/sdlc"
+    cat > "$ws/.codex-home/skills/sdlc/SKILL.md" <<'EOF'
+---
+name: sdlc
+description: User-owned SDLC skill that is intentionally not managed by codex-sdlc-wizard.
+---
+
+# User SDLC
+EOF
 
     local output valid=true
     output=$(run_update "$ws")
 
-    [ -f "$ws/.codex-home/skills/sdlc/SKILL.md" ] || valid=false
-    [ ! -d "$ws/.codex-home/skills/codex-sdlc" ] || valid=false
-    find "$ws/.codex-home/backups/skills" -maxdepth 1 -name 'codex-sdlc.bak.*' 2>/dev/null | grep -q . || valid=false
-    echo "$output" | grep -qi 'legacy.*codex-sdlc\|codex-sdlc.*legacy' 2>/dev/null || valid=false
+    grep -q 'User-owned SDLC' "$ws/.codex-home/skills/sdlc/SKILL.md" 2>/dev/null || valid=false
+    echo "$output" | grep -q 'skills/sdlc' 2>/dev/null && valid=false
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "update removes legacy codex-sdlc after canonical sdlc is installed"
+        pass "update preserves user-owned global sdlc skill"
     else
-        fail "update left legacy codex-sdlc alongside canonical sdlc"
+        fail "update removed or reported a user-owned global sdlc skill"
     fi
 }
 
-# ---- Test 10: update repairs mixed profile drift to xhigh main reasoning ----
+# ---- Test 11: update repairs mixed profile drift to xhigh main reasoning ----
 test_update_repairs_mixed_profile_reasoning_drift() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -408,6 +449,7 @@ test_update_repairs_windows_hook_drift
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills
 test_update_removes_legacy_codex_sdlc_skill
+test_update_preserves_user_owned_global_sdlc_skill
 test_update_repairs_mixed_profile_reasoning_drift
 
 echo ""

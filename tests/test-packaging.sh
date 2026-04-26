@@ -156,16 +156,20 @@ test_installer_uses_canonical_sdlc_skill_name() {
     )
 
     local valid=true
-    [ -f "$target_repo/.codex-home/skills/sdlc/SKILL.md" ] || valid=false
+    [ ! -d "$target_repo/.codex-home/skills/sdlc" ] || valid=false
+    [ -f "$target_repo/.codex-home/skills/setup-wizard/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.codex-home/skills/update-wizard/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.codex-home/skills/feedback/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || valid=false
     [ ! -d "$target_repo/.codex-home/skills/codex-sdlc" ] || valid=false
     find "$target_repo/.codex-home/backups/skills" -maxdepth 1 -name 'codex-sdlc.bak.*' 2>/dev/null | grep -q . || valid=false
 
     rm -rf "$adapter_clone" "$target_repo"
 
     if [ "$valid" = "true" ]; then
-        pass "Installer uses canonical sdlc skill name and prunes legacy codex-sdlc"
+        pass "Installer uses repo-scoped sdlc only and prunes legacy codex-sdlc"
     else
-        fail "Installer left duplicate SDLC skill names installed"
+        fail "Installer left duplicate global/repo SDLC skill names installed"
     fi
 }
 
