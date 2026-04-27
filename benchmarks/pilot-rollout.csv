@@ -1,1 +1,4 @@
 repo_name,install_version,install_success,reusable_wizard_bug,confidence_after_install,recommended_next_step,notes
+playwright-mcp-isolation,0.7.15,1,0,98%,continue-pilot-rollout,published tarball setup check update-check passed in tmp clone with maximum profile deterministic shell path
+codex-sandbox-fix,0.7.15,1,0,98%,continue-pilot-rollout,published tarball setup check update-check passed in tmp clone with maximum profile deterministic shell path
+afterhours,0.7.15,1,0,98%,continue-pilot-rollout,published tarball setup check update-check passed in tmp clone with maximum profile deterministic shell path
