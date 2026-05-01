@@ -467,6 +467,22 @@ test_feedback_skill_has_privacy_prompt_and_dedupe() {
     fi
 }
 
+test_setup_docs_include_codex_desktop_handoff() {
+    local skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local loop="$REPO_DIR/SDLC-LOOP.md"
+
+    if grep -q 'Codex Desktop handoff' "$loop" \
+        && grep -q 'macOS and Windows' "$loop" \
+        && grep -q 'codex app .' "$loop" \
+        && grep -q 'credentials, MFA, tenant consent' "$loop" \
+        && grep -q 'Codex Desktop handoff' "$skill" \
+        && grep -q 'computer-use' "$skill"; then
+        pass "setup docs include Codex Desktop handoff guidance"
+    else
+        fail "setup docs are missing Codex Desktop handoff guidance"
+    fi
+}
+
 test_sdlc_skill_has_docsync_learning_and_merge_guard() {
     local skill="$REPO_DIR/skills/sdlc/SKILL.md"
 
@@ -789,6 +805,7 @@ test_setup_skill_has_confidence_setup_contract
 test_update_skill_has_idempotent_update_contract
 test_setup_and_update_skills_stop_before_product_remediation
 test_feedback_skill_has_privacy_prompt_and_dedupe
+test_setup_docs_include_codex_desktop_handoff
 test_sdlc_skill_has_docsync_learning_and_merge_guard
 test_repo_defaults_to_xhigh_reasoning
 test_package_has_npm_release_surface

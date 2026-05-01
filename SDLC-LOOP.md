@@ -37,3 +37,21 @@ For setup, installs, PATH repair, and auth-heavy workflows:
 - Capture before/after evidence.
 - Re-run the bootstrap or health check after each fix.
 - Treat the health check as the prove-it gate.
+
+## Codex Desktop handoff
+
+Use Codex Desktop handoff when setup crosses a browser, desktop app, admin portal, screenshot, or auth window that CLI cannot see. Codex Desktop is available on macOS and Windows.
+
+From the repo root:
+
+```bash
+codex app .
+```
+
+Computer-use work must report back as evidence, not just chat. Prefer a repo-local `.reviews/desktop-computer-use-report.md` or equivalent artifact with findings, blockers, screenshots by path, and the next CLI action.
+
+Human-in-the-loop boundary:
+
+- Codex may navigate, read screens, click non-destructive controls, and explain state.
+- The user handles credentials, MFA, tenant consent, sends, deletes, license/admin changes, and policy publishing.
+- Return to CLI for code changes, tests, commits, and push.
