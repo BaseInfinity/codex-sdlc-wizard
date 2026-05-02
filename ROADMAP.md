@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.15` and `v0.7.15` are the current release target for same-name `$sdlc` collision avoidance plus Playwright MCP profile policy stabilization
+- `codex-sdlc-wizard@0.7.16` and `v0.7.16` are the current release target for universal Node hook entrypoints that work across shared macOS/Windows repos
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -25,6 +25,7 @@
 - the package now treats `$sdlc` as the single canonical public workflow entrypoint, keeps the Codex display name lowercase, and blocks legacy `$codex-sdlc` or imperative `/sdlc` wording from returning
 - setup/install now keep `$sdlc` repo-scoped and install only global helper skills, avoiding same-name global/repo skill collisions
 - setup now detects Playwright MCP browser tooling/profile policy and documents explicit opt-in isolation versus shared persistent auth-heavy flows without rewriting `.mcp.json`
+- setup/update now repair stale platform-specific hook wiring and install universal Node hook entrypoints so a checked-in `.codex/hooks.json` does not flip between macOS Bash and Windows PowerShell commands
 - the repo now ships a consumer bug-report template for install/setup/runtime failures
 - the public README now leads with the real `@latest` adaptive setup path and keeps the top section consumer-focused
 - benchmark and pilot-rollout ledgers now exist so model/default-use decisions can be measured, not guessed
@@ -32,14 +33,14 @@
 
 ## Next Release Cycle
 
-### 0.7.16
+### 0.7.17
 
-Purpose: continue proving the post-`0.7.15` consumer path on real repos and stabilize any reusable wizard bugs without changing the default-use claim early.
+Purpose: continue resolving the post-`0.7.16` docs/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
 
 Scope:
-- run `0.7.15` on 3-5 pilot repos and log results in `benchmarks/pilot-rollout.csv`
-- cut a stabilization patch only if pilots surface another reusable wizard bug
-- keep the default-use recommendation gated on the measurable pilot summary
+- keep `0.7.16` as the cross-platform hook stabilization baseline for shared macOS/Windows repos
+- address the README/discovery/sponsor backlog only in small, separately verified slices
+- cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work
 
 ## Tracker Cleanup
@@ -47,13 +48,13 @@ Scope:
 The issue tracker is currently clear after the stabilization items found during pilot consumption.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.15` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.16` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.15`, the main backlog is:
+After `0.7.16`, the main backlog is:
 
-- pilot rollout proof for default use on real repos
+- README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
 - model-profile measurement data collection for `mixed` vs `maximum`
 - top-level proof-run parallelization to reduce release-wall-clock time without weakening suite coverage
@@ -61,15 +62,15 @@ After `0.7.15`, the main backlog is:
 
 ## Working Order
 
-1. Prove the default-use gate on 3-5 pilot repos with `0.7.15`
-2. Ship `0.7.16` only if pilot rollout surfaces another reusable wizard bug
+1. Keep pilot rollout and stabilization patches tied to real consumption bugs
+2. Work the README/discovery backlog in small verified slices
 3. Keep creator-tool investigation behind the active backlog
 
 ## Default-Use Gate
 
 Before calling this the default Codex SDLC path, prove it on real pilot repos instead of just repo-self-tests.
 
-- run `0.7.15` on 3-5 pilot repos
+- run released builds on 3-5 pilot repos before broadening the default-use claim
 - require pilot success >= 95% before default use
 - allow no more than 1 reusable wizard bug across the pilot set
 - track the pilot set in `benchmarks/pilot-rollout.csv`
