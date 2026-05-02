@@ -561,6 +561,23 @@ test_readme_puts_quick_start_near_the_top() {
     fi
 }
 
+test_sponsor_metadata_exists() {
+    local funding_file="$REPO_DIR/.github/FUNDING.yml"
+    local has_github_funding=true
+    local has_npm_funding=true
+
+    [ -f "$funding_file" ] || has_github_funding=false
+    grep -Eq '^github:[[:space:]]*BaseInfinity$' "$funding_file" 2>/dev/null || has_github_funding=false
+    json_has_truthy_file "$PACKAGE_JSON" 'data.funding && data.funding.type === "github" && data.funding.url === "https://github.com/sponsors/BaseInfinity"' || has_npm_funding=false
+
+    if [ "$has_github_funding" = "true" ] &&
+       [ "$has_npm_funding" = "true" ]; then
+        pass "Sponsor metadata exists for GitHub and npm"
+    else
+        fail "Sponsor metadata is missing or does not match the BaseInfinity convention"
+    fi
+}
+
 test_consumer_bug_report_template_exists() {
     local template="$REPO_DIR/.github/ISSUE_TEMPLATE/consumer-bug-report.yml"
     local has_file=true
@@ -627,6 +644,7 @@ test_readme_documents_feedback_flow_and_repo_focus
 test_readme_documents_model_profiles
 test_readme_uses_real_release_examples
 test_readme_puts_quick_start_near_the_top
+test_sponsor_metadata_exists
 test_consumer_bug_report_template_exists
 
 echo ""
