@@ -106,6 +106,8 @@ test_npm_pack_includes_runtime_files() {
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "install.sh") ? "yes" : ""')" = "yes" ] || has_install=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "setup.sh") ? "yes" : ""')" = "yes" ] || has_setup=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/bash-guard.sh") ? "yes" : ""')" = "yes" ] || has_hooks=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/git-guard.js") ? "yes" : ""')" = "yes" ] || has_hooks=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/session-start.js") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "bin/codex-sdlc-wizard.js") ? "yes" : ""')" = "yes" ] || has_bin=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "SKILL.md") ? "yes" : ""')" = "yes" ] || has_skill=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_canonical_sdlc_skill=false
@@ -163,21 +165,22 @@ test_local_npx_installs_into_clean_repo() {
     [ -f "$target_repo/.codex/config.toml" ] || installed=false
     [ -f "$target_repo/.codex/hooks.json" ] || installed=false
     [ -x "$target_repo/.codex/hooks/bash-guard.sh" ] || installed=false
+    [ -f "$target_repo/.codex/hooks/git-guard.js" ] || installed=false
+    [ -f "$target_repo/.codex/hooks/session-start.js" ] || installed=false
     [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || installed=false
     [ -f "$target_repo/.agents/skills/adlc/SKILL.md" ] || installed=false
     [ -f "$target_repo/.codex-sdlc/manifest.json" ] || installed=false
-    if [ "$IS_WINDOWS" = "true" ]; then
-        grep -q 'git-guard\.ps1' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
-        grep -q 'session-start\.ps1' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
-        grep -q '\.sh' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
-    fi
+    grep -q 'node \.codex/hooks/git-guard\.js' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
+    grep -q 'node \.codex/hooks/session-start\.js' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
+    grep -q 'powershell\.exe' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
+    grep -q 'bash-guard\.sh' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
 
     rm -rf "$pack_dir" "$target_repo" "$npm_cache"
 
     if [ "$installed" = "true" ]; then
-        pass "local npm exec defaults to adaptive setup with platform-native hooks when automation passes --yes"
+        pass "local npm exec defaults to adaptive setup with universal Node hooks when automation passes --yes"
     else
-        fail "local npm exec did not route the default command through adaptive setup with platform-native hooks"
+        fail "local npm exec did not route the default command through adaptive setup with universal Node hooks"
     fi
 }
 
