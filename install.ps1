@@ -231,11 +231,13 @@ if (Test-Path -LiteralPath $hooksPath) {
 }
 
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\windows-hooks.json") -Destination $hooksPath
+Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\git-guard.js") -Destination ".codex\hooks\git-guard.js"
+Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\session-start.js") -Destination ".codex\hooks\session-start.js"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\git-guard.ps1") -Destination ".codex\hooks\git-guard.ps1"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\session-start.ps1") -Destination ".codex\hooks\session-start.ps1"
 
-Write-Host "Installed .codex/hooks.json (Windows PowerShell hooks)"
-Write-Host "Installed PowerShell hook scripts"
+Write-Host "Installed .codex/hooks.json (universal Node hooks)"
+Write-Host "Installed Node and PowerShell hook scripts"
 Write-Host ""
 Write-Host "SDLC Wizard for Codex installed."
 $startModel = if ($ModelProfile -eq "maximum") { "gpt-5.5" } else { "gpt-5.4-mini" }

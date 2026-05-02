@@ -237,7 +237,7 @@ The workflow uses GitHub OIDC trusted publishing, validates that the tag matches
 2. Copies `SDLC-LOOP.md`, `START-SDLC.md`, and `PROVE-IT.md` if missing
 3. Creates or merges `.codex/config.toml` with `codex_hooks = true`
 4. Installs `.codex/hooks.json` (backs up existing)
-5. Copies hook scripts to `.codex/hooks/`
+5. Copies universal Node hook entrypoints plus legacy shell/PowerShell helpers to `.codex/hooks/`
 6. Installs repo-scoped skills at `.agents/skills/sdlc/SKILL.md` and `.agents/skills/adlc/SKILL.md`
 7. Installs global helper skills under `~/.codex/skills` without installing a global `sdlc` duplicate
 
@@ -247,7 +247,7 @@ In other words, `install.sh` mutates the target repo by adding or updating `AGEN
 
 - Codex CLI (`npm i -g @openai/codex`)
 - `bash` (3.x+ macOS, 4.x+ Linux, Git Bash on Windows for the shell path)
-- Node.js 18+
+- Node.js 18+; active Codex hooks use Node entrypoints so the same checked-in hook config works across macOS, Linux, and Windows
 
 ## E2E Proven
 

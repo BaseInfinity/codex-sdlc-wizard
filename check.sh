@@ -46,13 +46,18 @@ try {
   process.exit(0);
 }
 
-function hasWindowsHookDrift(relativePath, absolutePath) {
-  if (process.platform !== "win32" || relativePath !== ".codex/hooks.json") {
+function hasPlatformHookDrift(relativePath, absolutePath) {
+  if (relativePath !== ".codex/hooks.json") {
     return false;
   }
 
   const content = fs.readFileSync(absolutePath, "utf8");
-  return content.includes("bash-guard.sh") || content.includes("session-start.sh");
+
+  if (process.platform === "win32") {
+    return content.includes("bash-guard.sh") || content.includes("session-start.sh");
+  }
+
+  return content.includes("powershell.exe");
 }
 
 const managedFiles = {};
@@ -76,7 +81,7 @@ for (const [relativePath, expectedHash] of Object.entries(manifest.managed_files
     status = "missing";
   } else {
     actualHash = sha256File(absolutePath);
-    if (hasWindowsHookDrift(relativePath, absolutePath)) {
+    if (hasPlatformHookDrift(relativePath, absolutePath)) {
       status = "drift / broken";
     } else if (actualHash === expectedHash) {
       status = "match";

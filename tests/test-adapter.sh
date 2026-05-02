@@ -4,6 +4,9 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 HOOKS_DIR="$REPO_DIR/.codex/hooks"
+ACTIVE_HOOKS_FILE="$REPO_DIR/.codex/hooks.json"
+UNIVERSAL_PRETOOL_SCRIPT="$HOOKS_DIR/git-guard.js"
+UNIVERSAL_SESSION_SCRIPT="$HOOKS_DIR/session-start.js"
 PASSED=0
 FAILED=0
 
@@ -54,6 +57,20 @@ run_session_hook() {
     fi
 }
 
+run_node_json_hook() {
+    local payload="$1"
+    local script_path="$2"
+
+    printf '%s' "$payload" | node "$script_path" 2>/dev/null
+}
+
+run_node_session_hook() {
+    local tmpdir="$1"
+    local script_path="$2"
+
+    (cd "$tmpdir" && node "$script_path" 2>/dev/null)
+}
+
 echo "=== Codex SDLC Adapter Tests ==="
 echo ""
 
@@ -61,7 +78,6 @@ if [ "$IS_WINDOWS" = "true" ]; then
     PRETOOL_SCRIPT="$HOOKS_DIR/git-guard.ps1"
     SESSION_SCRIPT="$HOOKS_DIR/session-start.ps1"
     HOOKS_FILE="$REPO_DIR/.codex/windows-hooks.json"
-    ACTIVE_HOOKS_FILE="$REPO_DIR/.codex/hooks.json"
     EXPECTED_HELPER="start-sdlc.ps1"
 else
     PRETOOL_SCRIPT="$HOOKS_DIR/bash-guard.sh"
@@ -137,6 +153,29 @@ test_session_silent_when_present() {
     fi
 }
 
+test_universal_pretool_blocks_commit() {
+    local output
+    output=$(run_node_json_hook '{"tool_input":{"command":"git commit -m '\''test'\''"}}' "$UNIVERSAL_PRETOOL_SCRIPT")
+    if echo "$output" | grep -q '"decision":"block"'; then
+        pass "universal pre-tool hook blocks git commit"
+    else
+        fail "universal pre-tool hook did not block git commit (output: $output)"
+    fi
+}
+
+test_universal_session_warns_missing() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local output
+    output=$(run_node_session_hook "$tmpdir" "$UNIVERSAL_SESSION_SCRIPT")
+    rm -rf "$tmpdir"
+    if echo "$output" | grep -q '"additionalContext"'; then
+        pass "universal session hook warns when AGENTS.md is missing"
+    else
+        fail "universal session hook did not warn when AGENTS.md was missing"
+    fi
+}
+
 test_hooks_json_matcher() {
     local matcher
     matcher=$(grep -o '"matcher":[[:space:]]*"[^"]*"' "$HOOKS_FILE" | head -1 | sed 's/.*"matcher":[[:space:]]*"\([^"]*\)"/\1/')
@@ -157,17 +196,30 @@ test_hooks_json_valid() {
     fi
 }
 
+test_live_hooks_file_uses_universal_node_hooks() {
+    if grep -q 'node \.codex/hooks/git-guard\.js' "$ACTIVE_HOOKS_FILE" \
+        && grep -q 'node \.codex/hooks/session-start\.js' "$ACTIVE_HOOKS_FILE" \
+        && ! grep -q 'powershell\.exe' "$ACTIVE_HOOKS_FILE" \
+        && ! grep -q 'bash-guard\.sh' "$ACTIVE_HOOKS_FILE" \
+        && ! grep -q 'session-start\.sh' "$ACTIVE_HOOKS_FILE"; then
+        pass "live hooks.json uses universal Node hook entrypoints"
+    else
+        fail "live hooks.json still uses platform-specific hook commands"
+    fi
+}
+
 test_live_hooks_file_is_windows_safe() {
     if [ "$IS_WINDOWS" != "true" ]; then
         return
     fi
 
-    if grep -q 'git-guard\.ps1' "$ACTIVE_HOOKS_FILE" \
-        && grep -q 'session-start\.ps1' "$ACTIVE_HOOKS_FILE" \
+    if grep -q 'node \.codex/hooks/git-guard\.js' "$ACTIVE_HOOKS_FILE" \
+        && grep -q 'node \.codex/hooks/session-start\.js' "$ACTIVE_HOOKS_FILE" \
+        && ! grep -q 'powershell\.exe' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q '\.sh' "$ACTIVE_HOOKS_FILE"; then
-        pass "live hooks.json uses the quiet PowerShell hook set on Windows"
+        pass "live hooks.json uses universal Node hooks on Windows"
     else
-        fail "live hooks.json still points at Bash hooks on Windows"
+        fail "live hooks.json still points at platform-specific hooks on Windows"
     fi
 }
 
@@ -774,8 +826,11 @@ test_pretool_allows_safe_command
 test_pretool_reads_command_field
 test_session_warns_missing
 test_session_silent_when_present
+test_universal_pretool_blocks_commit
+test_universal_session_warns_missing
 test_hooks_json_matcher
 test_hooks_json_valid
+test_live_hooks_file_uses_universal_node_hooks
 test_live_hooks_file_is_windows_safe
 test_config_enables_hooks
 test_install_preserves_agents_md

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .codex/hooks/git-guard.ps1"
+            "command": "node .codex/hooks/git-guard.js"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .codex/hooks/session-start.ps1"
+            "command": "node .codex/hooks/session-start.js"
           }
         ]
       }

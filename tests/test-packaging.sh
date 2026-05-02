@@ -49,18 +49,22 @@ test_installer_smoke_test_clean_project() {
     local has_config=true
     local has_hooks_json=true
     local has_bash_guard=true
+    local has_node_guard=true
 
     [ -f "$target_repo/AGENTS.md" ] || has_agents=false
     [ -f "$target_repo/.codex/config.toml" ] || has_config=false
     [ -f "$target_repo/.codex/hooks.json" ] || has_hooks_json=false
     [ -x "$target_repo/.codex/hooks/bash-guard.sh" ] || has_bash_guard=false
+    [ -f "$target_repo/.codex/hooks/git-guard.js" ] || has_node_guard=false
+    grep -q 'node \.codex/hooks/git-guard\.js' "$target_repo/.codex/hooks.json" 2>/dev/null || has_node_guard=false
 
     rm -rf "$adapter_clone" "$target_repo"
 
     if [ "$has_agents" = "true" ] &&
        [ "$has_config" = "true" ] &&
        [ "$has_hooks_json" = "true" ] &&
-       [ "$has_bash_guard" = "true" ]; then
+       [ "$has_bash_guard" = "true" ] &&
+       [ "$has_node_guard" = "true" ]; then
         pass "Installer smoke test succeeds in a clean temp project"
     else
         fail "Installer smoke test did not produce the expected project files"

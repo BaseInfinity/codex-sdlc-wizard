@@ -162,7 +162,7 @@ Recommend Codex-specific follow-ups where appropriate:
 
 When a model profile is selected, ensure the repo-local `.codex/config.toml` matches it. Preserve existing custom config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].codex_hooks` settings. Explain that `mixed` is wizard policy, not a native Codex mode, and that project config only loads after the repo is trusted.
 
-On Windows, treat `.codex/hooks.json` that still references Bash hook scripts such as `bash-guard.sh` or `session-start.sh` as broken drift, not as an acceptable customization. Repair it to the PowerShell hook set.
+Treat platform-specific `.codex/hooks.json` wiring as broken drift, not as an acceptable customization. On Windows, stale Bash hook commands such as `bash-guard.sh` or `session-start.sh` are broken. On macOS/Linux, stale `powershell.exe` hook commands are broken. Repair both cases to the universal Node hook entrypoints.
 
 Do not pretend Codex has a native `/sdlc` command if it does not.
 
@@ -174,7 +174,7 @@ Before calling setup complete, verify:
 - SDLC docs are internally consistent
 - hooks/docs/skills do not contradict each other
 - any suggested commands actually match the repo
-- on Windows, active hook config does not still point at Bash hook scripts
+- active hook config uses the universal Node hook entrypoints instead of OS-specific Bash or PowerShell commands
 
 This verification is diagnostic for product behavior. If a failing command points at application code or application tests unrelated to setup changes, do not edit application code to force setup green. Report the failure, identify why it appears outside setup scope, and ask whether to continue under `$sdlc`.
 
