@@ -3,6 +3,10 @@
   "version": "0.7.16",
   "description": "Codex SDLC adaptive setup wizard and maintenance CLI for npx distribution",
   "license": "MIT",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/BaseInfinity"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BaseInfinity/codex-sdlc-wizard.git"
