@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/bash-guard.sh"
+            "command": "node .codex/hooks/git-guard.js"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/session-start.sh"
+            "command": "node .codex/hooks/session-start.js"
           }
         ]
       }

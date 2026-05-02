@@ -81,6 +81,8 @@ copy_static_file() {
 repair_hooks_bundle() {
     ensure_parent_dir ".codex/hooks.json"
     ensure_parent_dir ".codex/hooks/dummy"
+    copy_static_file ".codex/hooks/git-guard.js"
+    copy_static_file ".codex/hooks/session-start.js"
 
     if [ "$IS_WINDOWS" = "true" ]; then
         copy_static_file ".codex/windows-hooks.json" ".codex/hooks.json"

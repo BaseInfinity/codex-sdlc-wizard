@@ -584,11 +584,7 @@ test_manifest_created() {
         if ! echo "$hash" | grep -q '^sha256:'; then
             valid=false
         fi
-        if [ "$IS_WINDOWS" = "true" ]; then
-            if ! json_eval_stdin 'data.managed_files[".codex/hooks/git-guard.ps1"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
-                valid=false
-            fi
-        elif ! json_eval_stdin 'data.managed_files[".codex/hooks/bash-guard.sh"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+        if ! json_eval_stdin 'data.managed_files[".codex/hooks/git-guard.js"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
             valid=false
         fi
     fi
@@ -642,14 +638,15 @@ EOF
     run_setup "$ws"
 
     local repaired=false
-    if grep -q 'git-guard\.ps1' "$ws/.codex/hooks.json" 2>/dev/null \
-        && ! grep -q 'bash-guard\.sh' "$ws/.codex/hooks.json" 2>/dev/null; then
+    if grep -q 'node \.codex/hooks/git-guard\.js' "$ws/.codex/hooks.json" 2>/dev/null \
+        && ! grep -q 'bash-guard\.sh' "$ws/.codex/hooks.json" 2>/dev/null \
+        && ! grep -q 'powershell\.exe' "$ws/.codex/hooks.json" 2>/dev/null; then
         repaired=true
     fi
     rm -rf "$ws"
 
     if [ "$repaired" = "true" ]; then
-        pass "setup.sh repairs stale Windows Bash hooks"
+        pass "setup.sh repairs stale Windows Bash hooks with universal Node hooks"
     else
         fail "setup.sh left stale Windows Bash hooks in place"
     fi
@@ -685,10 +682,7 @@ test_check_reports_matches() {
     output=$(run_check "$ws")
     rm -rf "$ws"
 
-    local hook_expr='data.managed_files[".codex/hooks/bash-guard.sh"].status'
-    if [ "$IS_WINDOWS" = "true" ]; then
-        hook_expr='data.managed_files[".codex/hooks/git-guard.ps1"].status'
-    fi
+    local hook_expr='data.managed_files[".codex/hooks/git-guard.js"].status'
 
     if json_text_equals "$output" 'data.repo_state' "initialized" \
         && json_text_equals "$output" 'data.managed_files["AGENTS.md"].status' "match" \
@@ -793,6 +787,76 @@ EOF
         pass "check.sh reports stale Windows Bash hook wiring as drift / broken"
     else
         fail "check.sh did not report Windows hook drift (got: $(json_text_get "$output" 'data.managed_files[\".codex/hooks.json\"].status'))"
+    fi
+}
+
+# ---- Test 27: check.sh reports platform-specific hook wiring as drift / broken even when hashes match ----
+test_check_reports_platform_hook_drift() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup "$ws"
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        cat > "$ws/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/bash-guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+    else
+        cat > "$ws/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .codex/hooks/git-guard.ps1"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+    fi
+
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" HOOKS_PATH="$ws/.codex/hooks.json" node - <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+const manifestPath = process.env.MANIFEST_PATH;
+const hooksPath = process.env.HOOKS_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+const hash = crypto.createHash("sha256").update(fs.readFileSync(hooksPath)).digest("hex");
+manifest.managed_files[".codex/hooks.json"] = `sha256:${hash}`;
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    local output
+    output=$(run_check "$ws")
+    rm -rf "$ws"
+
+    if json_text_equals "$output" 'data.managed_files[".codex/hooks.json"].status' "drift / broken"; then
+        pass "check.sh reports platform-specific hook wiring as drift / broken"
+    else
+        fail "check.sh did not report platform-specific hook drift (got: $(json_text_get "$output" 'data.managed_files[\".codex/hooks.json\"].status'))"
     fi
 }
 
@@ -1275,6 +1339,7 @@ test_check_reports_matches
 test_check_reports_customized
 test_check_reports_missing
 test_check_reports_windows_hook_drift
+test_check_reports_platform_hook_drift
 test_detect_extended_setup_fields
 test_detect_playwright_mcp_policy
 test_setup_documents_playwright_mcp_profile_policy

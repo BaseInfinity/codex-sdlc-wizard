@@ -79,6 +79,8 @@ for required in \
   ".codex/hooks/bash-guard.sh" \
   ".codex/hooks/session-start.sh" \
   ".codex/hooks/sdlc-prompt-check.sh" \
+  ".codex/hooks/git-guard.js" \
+  ".codex/hooks/session-start.js" \
   ".codex/hooks/git-guard.ps1" \
   ".codex/hooks/session-start.ps1" \
   ".agents/skills/sdlc/SKILL.md" \
@@ -231,19 +233,20 @@ fi
 
 cp "$SCRIPT_DIR/.codex/hooks/"*.sh .codex/hooks/
 chmod +x .codex/hooks/*.sh
+cp "$SCRIPT_DIR/.codex/hooks/"*.js .codex/hooks/
 
 if [ "$IS_WINDOWS" = "true" ]; then
   cp "$SCRIPT_DIR/.codex/windows-hooks.json" .codex/hooks.json
   cp "$SCRIPT_DIR/.codex/hooks/git-guard.ps1" .codex/hooks/
   cp "$SCRIPT_DIR/.codex/hooks/session-start.ps1" .codex/hooks/
   copy_if_missing "$SCRIPT_DIR/start-sdlc.ps1" "start-sdlc.ps1" "start-sdlc.ps1"
-  echo "Installed .codex/hooks.json (Windows PowerShell hooks)"
-  echo "Installed PowerShell hook scripts"
+  echo "Installed .codex/hooks.json (universal Node hooks)"
+  echo "Installed Node and PowerShell hook scripts"
 else
   cp "$SCRIPT_DIR/.codex/unix-hooks.json" .codex/hooks.json
   copy_if_missing "$SCRIPT_DIR/start-sdlc.sh" "start-sdlc.sh" "start-sdlc.sh"
   chmod +x start-sdlc.sh
-  echo "Installed .codex/hooks.json"
+  echo "Installed .codex/hooks.json (universal Node hooks)"
 fi
 
 echo "Installed shell hook scripts"

@@ -75,7 +75,7 @@ Group findings as:
 - customized
 - drift / broken
 
-On Windows, `.codex/hooks.json` that still points at Bash hook scripts is `drift / broken`, not a customization to preserve.
+Platform-specific hook wiring is `drift / broken`, not a customization to preserve. On Windows, `.codex/hooks.json` that still points at Bash hook scripts is broken. On macOS/Linux, `.codex/hooks.json` that still points at `powershell.exe` is broken. Repair both cases to the universal Node hook entrypoints.
 
 If `.codex-sdlc/model-profile.json` or `SDLC.md` says one model profile but `.codex/config.toml` still inherits a different user/global model, classify that as drift. Preserve unrelated config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].codex_hooks` settings. Explain that `mixed` is wizard policy, not a native Codex mode, and that project config only loads after the repo is trusted.
 
@@ -106,7 +106,7 @@ After updates, verify:
 - hooks still match the intended quiet enforcement set
 - repo-local docs are internally consistent
 - customized files were preserved when requested
-- on Windows, active hook config does not still reference Bash hook scripts
+- active hook config uses the universal Node hook entrypoints instead of OS-specific Bash or PowerShell commands
 
 This verification is diagnostic for product behavior. If a failing command points at application code or application tests unrelated to wizard-managed changes, do not edit application code to force update green. Report the failure, identify why it appears outside update scope, and ask whether to continue under `$sdlc`.
 

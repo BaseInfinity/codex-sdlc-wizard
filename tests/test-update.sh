@@ -257,7 +257,8 @@ EOF
     output=$(run_update "$ws")
     check_output=$(run_check "$ws")
 
-    grep -q 'git-guard\.ps1' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    grep -q 'node \.codex/hooks/git-guard\.js' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    grep -q 'powershell\.exe' "$ws/.codex/hooks.json" 2>/dev/null && valid=false
     if grep -q 'bash-guard\.sh' "$ws/.codex/hooks.json" 2>/dev/null; then
         valid=false
     fi
@@ -266,7 +267,7 @@ EOF
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "update repairs Windows hook drift by default"
+        pass "update repairs Windows hook drift with universal Node hooks by default"
     else
         fail "update did not repair the Windows hook drift"
     fi
