@@ -32,8 +32,8 @@ After either path changes skills, hooks, hook config, or helper scripts, restart
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.21 check
-npx codex-sdlc-wizard@0.7.21 update
+npx codex-sdlc-wizard@0.7.22 check
+npx codex-sdlc-wizard@0.7.22 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -95,10 +95,10 @@ How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.21 --model-profile maximum
+npx codex-sdlc-wizard@0.7.22 --model-profile maximum
 
 # interactive bootstrap with the efficiency-first profile if you already know you want it
-npx codex-sdlc-wizard@0.7.21 --model-profile mixed
+npx codex-sdlc-wizard@0.7.22 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
@@ -221,7 +221,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.21
+npx codex-sdlc-wizard@0.7.22
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -231,7 +231,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.21 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.22 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow
