@@ -43,7 +43,7 @@ test_installer_smoke_test_clean_project() {
 
     output=$(
         cd "$target_repo"
-        bash "$adapter_clone/install.sh" 2>&1
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" 2>&1
     )
 
     local has_agents=true
@@ -85,7 +85,7 @@ test_installer_scaffolds_only_default_repo_scope_sdlc_skill() {
 
     (
         cd "$target_repo"
-        bash "$adapter_clone/install.sh" >/dev/null 2>&1
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" >/dev/null 2>&1
     )
 
     local has_sdlc_skill=true
@@ -113,7 +113,7 @@ test_installer_writes_default_model_profile() {
 
     (
         cd "$target_repo"
-        bash "$adapter_clone/install.sh" >/dev/null 2>&1
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" >/dev/null 2>&1
     )
 
     local has_profile=true
@@ -192,7 +192,7 @@ test_installer_recommends_full_auto_and_restart_resume() {
 
     output=$(
         cd "$target_repo" &&
-        bash "$adapter_clone/install.sh" 2>&1
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" 2>&1
     )
 
     rm -rf "$adapter_clone" "$target_repo"
@@ -218,7 +218,7 @@ test_installer_mentions_model_profile_tradeoff() {
 
     output=$(
         cd "$target_repo" &&
-        bash "$adapter_clone/install.sh" 2>&1
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" 2>&1
     )
 
     rm -rf "$adapter_clone" "$target_repo"
@@ -244,7 +244,7 @@ test_installer_calls_out_auth_heavy_boundary() {
 
     output=$(
         cd "$target_repo" &&
-        bash "$adapter_clone/install.sh" 2>&1
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" 2>&1
     )
 
     rm -rf "$adapter_clone" "$target_repo"
@@ -270,7 +270,7 @@ test_installer_offers_issue_ready_feedback_on_wizard_failure() {
 
     output=$(
         cd "$target_repo" &&
-        bash "$adapter_clone/install.sh" 2>&1
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" 2>&1
     ) || true
 
     rm -rf "$adapter_clone" "$target_repo"
