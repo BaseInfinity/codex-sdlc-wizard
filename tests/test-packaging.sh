@@ -207,6 +207,34 @@ test_installer_recommends_full_auto_and_restart_resume() {
     fi
 }
 
+test_installer_prints_explicit_yolo_style_flags() {
+    local adapter_clone
+    local target_repo
+    local output
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+
+    output=$(
+        cd "$target_repo" &&
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" --model-profile maximum 2>&1
+    )
+
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if echo "$output" | grep -qi 'yolo-style sessions' &&
+       echo "$output" | grep -q -- '--sandbox danger-full-access' &&
+       echo "$output" | grep -q -- '--ask-for-approval never' &&
+       echo "$output" | grep -Fq "codex -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' --sandbox danger-full-access --ask-for-approval never" &&
+       echo "$output" | grep -Fq "codex resume -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' --sandbox danger-full-access --ask-for-approval never" &&
+       echo "$output" | grep -Eqi 'fully trust|full-trust'; then
+        pass "Installer output prints explicit sandbox/approval flags for yolo-style sessions"
+    else
+        fail "Installer output does not print explicit sandbox/approval flags for yolo-style sessions"
+    fi
+}
+
 test_installer_mentions_model_profile_tradeoff() {
     local adapter_clone
     local target_repo
@@ -666,6 +694,7 @@ test_installer_scaffolds_only_default_repo_scope_sdlc_skill
 test_installer_uses_canonical_sdlc_skill_name
 test_installer_writes_default_model_profile
 test_installer_recommends_full_auto_and_restart_resume
+test_installer_prints_explicit_yolo_style_flags
 test_installer_mentions_model_profile_tradeoff
 test_installer_calls_out_auth_heavy_boundary
 test_installer_offers_issue_ready_feedback_on_wizard_failure
