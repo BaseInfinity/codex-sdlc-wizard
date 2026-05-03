@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.16` and `v0.7.16` are the current release target for universal Node hook entrypoints that work across shared macOS/Windows repos
+- `codex-sdlc-wizard@0.7.17` and `v0.7.17` are the current release target for post-`0.7.16` docs/discovery stabilization on top of the universal Node hook baseline
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -21,7 +21,10 @@
 - install/setup/update now write and repair repo-local `.codex/config.toml` model keys for the selected profile, while preserving unrelated MCP, sandbox, approval, and custom config
 - first-run live setup now defaults to plain `codex` after bootstrap and requires an explicit `full-auto` choice to start that setup handoff with `codex --full-auto`
 - first-run handoff now uses a clearer prompt, recommends `codex resume --full-auto` for interrupted handoffs, and avoids the deprecated Windows `shell:true` plus args launcher path
-- update guidance now states the npm version boundary: `$update-wizard` repairs repo artifacts, while `npx codex-sdlc-wizard@latest update` consumes the newest package
+- update guidance now frontloads the npm version boundary: `$update-wizard` repairs repo artifacts, while `npx codex-sdlc-wizard@latest update` consumes the newest package
+- setup guidance now includes Codex Desktop handoff notes for auth-heavy browser/computer-use setup flows
+- setup guidance now includes Microsoft 365 auth-lane proof rules for tenant-bound Graph PowerShell and fallback OAuth evidence
+- sponsor metadata is now shipped for GitHub Sponsors and npm funding surfaces
 - the package now treats `$sdlc` as the single canonical public workflow entrypoint, keeps the Codex display name lowercase, and blocks legacy `$codex-sdlc` or imperative `/sdlc` wording from returning
 - setup/install now keep `$sdlc` repo-scoped and install only global helper skills, avoiding same-name global/repo skill collisions
 - setup now detects Playwright MCP browser tooling/profile policy and documents explicit opt-in isolation versus shared persistent auth-heavy flows without rewriting `.mcp.json`
@@ -33,9 +36,9 @@
 
 ## Next Release Cycle
 
-### 0.7.17
+### 0.7.18
 
-Purpose: continue resolving the post-`0.7.16` docs/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
+Purpose: continue resolving the post-`0.7.17` README/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
 
 Scope:
 - keep `0.7.16` as the cross-platform hook stabilization baseline for shared macOS/Windows repos
@@ -45,14 +48,14 @@ Scope:
 
 ## Tracker Cleanup
 
-The issue tracker is currently clear after the stabilization items found during pilot consumption.
+The stabilization tracker is currently clear after the reusable bugs found during pilot consumption. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.16` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.17` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.16`, the main backlog is:
+After `0.7.17`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
