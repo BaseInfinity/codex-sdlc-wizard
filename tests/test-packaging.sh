@@ -500,6 +500,36 @@ test_readme_documents_model_profiles() {
     fi
 }
 
+test_readme_documents_native_codex_review() {
+    local has_review_command=true
+    local has_uncommitted=true
+    local has_base=true
+    local has_commit=true
+    local has_review_model=true
+    local explains_auto_review_boundary=true
+    local avoids_autoreview_requirement=true
+
+    grep -q 'codex review' "$README" || has_review_command=false
+    grep -q 'codex review --uncommitted' "$README" || has_uncommitted=false
+    grep -q 'codex review --base' "$README" || has_base=false
+    grep -q 'codex review --commit' "$README" || has_commit=false
+    grep -q 'review_model = "gpt-5.5"' "$README" || has_review_model=false
+    grep -Eqi 'auto_review.*approval|approval.*auto_review' "$README" || explains_auto_review_boundary=false
+    grep -Eqi '(must|always|requires).*/autoreview|/autoreview.*(must|always)' "$README" && avoids_autoreview_requirement=false
+
+    if [ "$has_review_command" = "true" ] &&
+       [ "$has_uncommitted" = "true" ] &&
+       [ "$has_base" = "true" ] &&
+       [ "$has_commit" = "true" ] &&
+       [ "$has_review_model" = "true" ] &&
+       [ "$explains_auto_review_boundary" = "true" ] &&
+       [ "$avoids_autoreview_requirement" = "true" ]; then
+        pass "README documents native Codex review without requiring unsupported autoreview slash commands"
+    else
+        fail "README does not document native Codex review and the auto_review boundary clearly enough"
+    fi
+}
+
 test_readme_uses_real_release_examples() {
     local has_current_npx=true
     local has_latest_npx=true
@@ -649,6 +679,7 @@ test_readme_documents_repo_scope_skills
 test_readme_documents_honest_codex_shape
 test_readme_documents_feedback_flow_and_repo_focus
 test_readme_documents_model_profiles
+test_readme_documents_native_codex_review
 test_readme_uses_real_release_examples
 test_readme_puts_quick_start_near_the_top
 test_sponsor_metadata_exists
