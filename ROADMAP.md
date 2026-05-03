@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.20` and `v0.7.20` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.21` and `v0.7.21` are the current release target for the SDLC-only default repo skill surface
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -24,6 +24,7 @@
 - first-run live Codex handoff now runs as a managed child process with opt-in timeout cleanup, POSIX signal forwarding, process-group termination, repeated-interrupt handling, and explicit retry/resume guidance
 - update guidance now frontloads the npm version boundary: `$update-wizard` repairs repo artifacts, while `npx codex-sdlc-wizard@latest update` consumes the newest package
 - setup guidance now includes Codex Desktop handoff notes for auth-heavy browser/computer-use setup flows
+- generated setup docs and shipped skills now include a task-routing gate that identifies CLI, Desktop/computer-use, browser automation, or human-only lanes before giving execution steps
 - setup guidance now includes Microsoft 365 auth-lane proof rules for tenant-bound Graph PowerShell and fallback OAuth evidence
 - sponsor metadata is now shipped for GitHub Sponsors and npm funding surfaces
 - the package now treats `$sdlc` as the single canonical public workflow entrypoint, keeps the Codex display name lowercase, and blocks legacy `$codex-sdlc` or imperative `/sdlc` wording from returning
@@ -40,9 +41,9 @@
 
 ## Next Release Cycle
 
-### 0.7.21
+### 0.7.22
 
-Purpose: continue pilot rollout and the post-`0.7.20` README/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
+Purpose: continue pilot rollout and the post-`0.7.21` README/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
 
 Scope:
 - keep `0.7.16` as the cross-platform hook stabilization baseline for shared macOS/Windows repos
@@ -55,11 +56,11 @@ Scope:
 The stabilization tracker is currently clear after the reusable bugs found during pilot consumption. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.20` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.21` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.20`, the main backlog is:
+After `0.7.21`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set

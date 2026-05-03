@@ -30,8 +30,8 @@ After either path changes skills, hooks, hook config, or helper scripts, restart
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.20 check
-npx codex-sdlc-wizard@0.7.20 update
+npx codex-sdlc-wizard@0.7.21 check
+npx codex-sdlc-wizard@0.7.21 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -59,6 +59,7 @@ This adapter brings the SDLC Wizard discipline into Codex today with hard guardr
 - AGENTS.md guidance for planning, confidence tracking, TDD, and review
 - Non-destructive installer that merges into your existing Codex config
 - Adaptive setup that bootstraps first and then continues inside Codex when you use the default npm entrypoint
+- Task-routing guidance that sends auth-heavy browser, tenant, MFA, and admin-portal work to Desktop/computer-use before unsafe CLI/browser instructions
 - `check` / `update` flows for drift detection and selective repair
 
 **What's still coming from upstream:**
@@ -92,10 +93,10 @@ How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.20 --model-profile maximum
+npx codex-sdlc-wizard@0.7.21 --model-profile maximum
 
 # interactive bootstrap with the efficiency-first profile if you already know you want it
-npx codex-sdlc-wizard@0.7.20 --model-profile mixed
+npx codex-sdlc-wizard@0.7.21 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
@@ -218,7 +219,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.20
+npx codex-sdlc-wizard@0.7.21
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -228,7 +229,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.20 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.21 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow
