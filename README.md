@@ -144,6 +144,25 @@ Repo-specific maintainer rule:
 - consumer repos can choose `mixed` or `maximum`
 - this repo always stays on `maximum` (`gpt-5.5` at `xhigh` throughout); do not switch `codex-sdlc-wizard` maintenance to `mixed`, mini-only, or lower-reasoning profiles because it is unusually meta and high-blast-radius
 
+## Native Codex Review
+
+Review behavior is required by the SDLC contract. The portable Codex-native review path is `codex review`:
+
+```bash
+# Review staged, unstaged, and untracked local changes before commit
+codex review --uncommitted
+
+# Review a branch or PR-sized diff against a base branch
+codex review --base main
+
+# Review one already-created commit
+codex review --commit <sha>
+```
+
+When `review_model = "gpt-5.5"` is present, native Codex review uses that model for the review pass. In `mixed`, this gives the intended cross-model shape: faster main work, `gpt-5.5` review.
+
+Do not treat `/autoreview` as a required SDLC command. `auto_review` is a Codex approval-review setting for eligible tool approval prompts; it is not the code-diff review path. In yolo/full-bypass sessions, approval review usually does not apply because approvals are already bypassed.
+
 ## Repo-Scoped Skills
 
 `install.sh` and `setup.sh` scaffold repo-local Codex skills under `.agents/skills`.

@@ -243,6 +243,36 @@ test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus() {
     fi
 }
 
+test_repo_scoped_sdlc_skill_documents_native_review() {
+    local has_review_command=true
+    local has_uncommitted=true
+    local has_base=true
+    local has_commit=true
+    local has_review_model=true
+    local explains_slash_boundary=true
+    local avoids_autoreview_requirement=true
+
+    grep -q 'codex review' "$REPO_SDLC_SKILL" || has_review_command=false
+    grep -q 'codex review --uncommitted' "$REPO_SDLC_SKILL" || has_uncommitted=false
+    grep -q 'codex review --base' "$REPO_SDLC_SKILL" || has_base=false
+    grep -q 'codex review --commit' "$REPO_SDLC_SKILL" || has_commit=false
+    grep -q 'review_model' "$REPO_SDLC_SKILL" || has_review_model=false
+    grep -Eqi 'slash-command|slash command' "$REPO_SDLC_SKILL" || explains_slash_boundary=false
+    grep -Eqi '(must|always|requires).*/autoreview|/autoreview.*(must|always)' "$REPO_SDLC_SKILL" && avoids_autoreview_requirement=false
+
+    if [ "$has_review_command" = "true" ] &&
+       [ "$has_uncommitted" = "true" ] &&
+       [ "$has_base" = "true" ] &&
+       [ "$has_commit" = "true" ] &&
+       [ "$has_review_model" = "true" ] &&
+       [ "$explains_slash_boundary" = "true" ] &&
+       [ "$avoids_autoreview_requirement" = "true" ]; then
+        pass "Repo-scoped sdlc skill documents native Codex review"
+    else
+        fail "Repo-scoped sdlc skill does not document native Codex review clearly enough"
+    fi
+}
+
 test_skill_manifest_exists
 test_agents_openai_yaml_exists
 test_readme_documents_dual_distribution
@@ -253,6 +283,7 @@ test_repo_contract_keeps_this_repo_on_maximum
 test_default_repo_scoped_skill_surface_is_sdlc_only
 test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
+test_repo_scoped_sdlc_skill_documents_native_review
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

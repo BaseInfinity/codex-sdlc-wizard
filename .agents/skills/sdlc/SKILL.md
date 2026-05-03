@@ -23,6 +23,8 @@ Use this skill for implementation, bug-fix, refactor, testing, release, publish,
 7. Self-review the exact diff. Check for regressions, scope creep, stale docs, and dead code.
 8. For release or publish work, treat version bump, docs, tests, publish, and verification as one SDLC slice.
 9. Review is mandatory. The portable contract is review behavior, not a slash-command name.
+   Use native Codex review when appropriate: `codex review --uncommitted` before commit, `codex review --base <branch>` for branch or PR-sized diffs, and `codex review --commit <sha>` for a specific commit.
+   `review_model` controls native Codex review model selection; `auto_review` is for eligible approval prompts, not code-diff review. Do not require `/autoreview` unless the current Codex host exposes it as a verified feature.
    If the work is in a product repo, keep that session focused on the product repo. File a direct GitHub issue for proven reusable wizard findings and only switch to live wizard work if the product repo is actually blocked.
 10. Present a final summary with what changed, what was verified, and any residual risk.
 
