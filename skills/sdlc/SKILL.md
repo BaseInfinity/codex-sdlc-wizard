@@ -84,6 +84,14 @@ Read back what changed and check for:
 - missing docs
 - missing verification
 
+Use native Codex review for a second pass when the slice warrants it:
+
+- `codex review --uncommitted` before commit
+- `codex review --base <branch>` for branch or PR-sized diffs
+- `codex review --commit <sha>` for a specific commit
+
+`review_model` controls native Codex review model selection. `auto_review` is for eligible approval prompts, not code-diff review. Do not require `/autoreview` unless the current Codex host exposes it as a verified feature.
+
 ### 5. CI and Merge Guard
 
 Never use auto-merge in this repo.
