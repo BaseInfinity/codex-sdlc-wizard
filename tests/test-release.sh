@@ -93,6 +93,30 @@ test_release_workflow_can_publish_npm() {
     fi
 }
 
+test_release_workflow_uses_node24_action_runtimes() {
+    local has_checkout_node24=true
+    local has_setup_node24=true
+    local has_release_node24=true
+    local avoids_node20_checkout=true
+    local avoids_node20_release=true
+
+    grep -Eq 'actions/checkout@v6(\.[0-9]+\.[0-9]+)?' "$WORKFLOW" || has_checkout_node24=false
+    grep -Eq 'actions/setup-node@v6(\.[0-9]+\.[0-9]+)?' "$WORKFLOW" || has_setup_node24=false
+    grep -Eq 'softprops/action-gh-release@v3(\.[0-9]+\.[0-9]+)?' "$WORKFLOW" || has_release_node24=false
+    grep -Eq 'actions/checkout@v4' "$WORKFLOW" && avoids_node20_checkout=false
+    grep -Eq 'softprops/action-gh-release@v2' "$WORKFLOW" && avoids_node20_release=false
+
+    if [ "$has_checkout_node24" = "true" ] &&
+       [ "$has_setup_node24" = "true" ] &&
+       [ "$has_release_node24" = "true" ] &&
+       [ "$avoids_node20_checkout" = "true" ] &&
+       [ "$avoids_node20_release" = "true" ]; then
+        pass "Release workflow pins Node 24-compatible JavaScript actions"
+    else
+        fail "Release workflow still uses Node 20-era JavaScript actions"
+    fi
+}
+
 test_readme_documents_versioned_release_path() {
     local has_section=true
     local has_releases_url=true
@@ -210,6 +234,7 @@ test_release_workflow_triggers_on_semver_tags
 test_release_workflow_supports_manual_dispatch
 test_release_workflow_can_publish_release
 test_release_workflow_can_publish_npm
+test_release_workflow_uses_node24_action_runtimes
 test_readme_documents_versioned_release_path
 test_readme_documents_maintainer_release_steps
 test_release_checklist_exists
