@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.17` and `v0.7.17` are the current release target for post-`0.7.16` docs/discovery stabilization on top of the universal Node hook baseline
+- `codex-sdlc-wizard@0.7.18` and `v0.7.18` are the current release target for module-type-safe Node hooks plus first-run handoff copy cleanup
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -29,6 +29,9 @@
 - setup/install now keep `$sdlc` repo-scoped and install only global helper skills, avoiding same-name global/repo skill collisions
 - setup now detects Playwright MCP browser tooling/profile policy and documents explicit opt-in isolation versus shared persistent auth-heavy flows without rewriting `.mcp.json`
 - setup/update now repair stale platform-specific hook wiring and install universal Node hook entrypoints so a checked-in `.codex/hooks.json` does not flip between macOS Bash and Windows PowerShell commands
+- generated Node hooks now use `.cjs` entrypoints so consumer repos with `"type": "module"` do not break on CommonJS `require`
+- update now repairs legacy `.js` hook commands and stale `.js` hook manifest entries, including old matching files
+- public install/README/skill copy now keeps unreleased future workflow labels out of handoff text
 - the repo now ships a consumer bug-report template for install/setup/runtime failures
 - the public README now leads with the real `@latest` adaptive setup path and keeps the top section consumer-focused
 - benchmark and pilot-rollout ledgers now exist so model/default-use decisions can be measured, not guessed
@@ -36,9 +39,9 @@
 
 ## Next Release Cycle
 
-### 0.7.18
+### 0.7.19
 
-Purpose: continue resolving the post-`0.7.17` README/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
+Purpose: continue resolving the post-`0.7.18` README/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
 
 Scope:
 - keep `0.7.16` as the cross-platform hook stabilization baseline for shared macOS/Windows repos
@@ -51,11 +54,11 @@ Scope:
 The stabilization tracker is currently clear after the reusable bugs found during pilot consumption. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.17` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.18` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.17`, the main backlog is:
+After `0.7.18`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
