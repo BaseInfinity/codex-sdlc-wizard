@@ -535,6 +535,26 @@ test_setup_docs_include_codex_desktop_handoff() {
     fi
 }
 
+test_setup_docs_include_m365_auth_lane_guidance() {
+    local skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local loop="$REPO_DIR/SDLC-LOOP.md"
+
+    if grep -q 'Microsoft 365 auth lane' "$loop" \
+        && grep -q 'Graph PowerShell' "$loop" \
+        && grep -q 'Get-MgContext' "$loop" \
+        && grep -q 'tenant id plus expected work account' "$loop" \
+        && grep -q 'personal Microsoft account' "$loop" \
+        && grep -q 'read-only' "$loop" \
+        && grep -q '.reviews/' "$loop" \
+        && grep -q 'Microsoft 365 auth lane' "$skill" \
+        && grep -q 'Graph PowerShell' "$skill" \
+        && grep -q 'tenant-bound' "$skill"; then
+        pass "setup docs include Microsoft 365 auth-lane guidance"
+    else
+        fail "setup docs are missing Microsoft 365 auth-lane guidance"
+    fi
+}
+
 test_sdlc_skill_has_docsync_learning_and_merge_guard() {
     local skill="$REPO_DIR/skills/sdlc/SKILL.md"
 
@@ -861,6 +881,7 @@ test_update_skill_has_idempotent_update_contract
 test_setup_and_update_skills_stop_before_product_remediation
 test_feedback_skill_has_privacy_prompt_and_dedupe
 test_setup_docs_include_codex_desktop_handoff
+test_setup_docs_include_m365_auth_lane_guidance
 test_sdlc_skill_has_docsync_learning_and_merge_guard
 test_repo_defaults_to_xhigh_reasoning
 test_package_has_npm_release_surface
