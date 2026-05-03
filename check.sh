@@ -53,11 +53,19 @@ function hasPlatformHookDrift(relativePath, absolutePath) {
 
   const content = fs.readFileSync(absolutePath, "utf8");
 
+  if (content.includes(".codex/hooks/git-guard.js") || content.includes(".codex/hooks/session-start.js")) {
+    return true;
+  }
+
   if (process.platform === "win32") {
     return content.includes("bash-guard.sh") || content.includes("session-start.sh");
   }
 
   return content.includes("powershell.exe");
+}
+
+function isRetiredManagedPath(relativePath) {
+  return relativePath === ".codex/hooks/git-guard.js" || relativePath === ".codex/hooks/session-start.js";
 }
 
 const managedFiles = {};
@@ -81,7 +89,7 @@ for (const [relativePath, expectedHash] of Object.entries(manifest.managed_files
     status = "missing";
   } else {
     actualHash = sha256File(absolutePath);
-    if (hasPlatformHookDrift(relativePath, absolutePath)) {
+    if (isRetiredManagedPath(relativePath) || hasPlatformHookDrift(relativePath, absolutePath)) {
       status = "drift / broken";
     } else if (actualHash === expectedHash) {
       status = "match";

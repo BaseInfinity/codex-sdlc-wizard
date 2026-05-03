@@ -1216,8 +1216,8 @@ HOOKS_JSON_HASH="$(compute_hash .codex/hooks.json)" \
 MODEL_PROFILE_HASH="$(compute_hash .codex-sdlc/model-profile.json)" \
 BASH_GUARD_HASH="$(compute_hash .codex/hooks/bash-guard.sh)" \
 SESSION_START_HASH="$(compute_hash .codex/hooks/session-start.sh)" \
-GIT_GUARD_JS_HASH="$(compute_hash .codex/hooks/git-guard.js)" \
-SESSION_START_JS_HASH="$(compute_hash .codex/hooks/session-start.js)" \
+GIT_GUARD_CJS_HASH="$(compute_hash .codex/hooks/git-guard.cjs)" \
+SESSION_START_CJS_HASH="$(compute_hash .codex/hooks/session-start.cjs)" \
 GIT_GUARD_PS1_HASH="$(compute_hash .codex/hooks/git-guard.ps1)" \
 SESSION_START_PS1_HASH="$(compute_hash .codex/hooks/session-start.ps1)" \
 node -e '
@@ -1308,8 +1308,8 @@ const manifest = {
     ".codex-sdlc/model-profile.json": process.env.MODEL_PROFILE_HASH || "",
     ".codex/hooks/bash-guard.sh": process.env.BASH_GUARD_HASH || "",
     ".codex/hooks/session-start.sh": process.env.SESSION_START_HASH || "",
-    ".codex/hooks/git-guard.js": process.env.GIT_GUARD_JS_HASH || "",
-    ".codex/hooks/session-start.js": process.env.SESSION_START_JS_HASH || "",
+    ".codex/hooks/git-guard.cjs": process.env.GIT_GUARD_CJS_HASH || "",
+    ".codex/hooks/session-start.cjs": process.env.SESSION_START_CJS_HASH || "",
     ".codex/hooks/git-guard.ps1": process.env.GIT_GUARD_PS1_HASH || "",
     ".codex/hooks/session-start.ps1": process.env.SESSION_START_PS1_HASH || ""
   }

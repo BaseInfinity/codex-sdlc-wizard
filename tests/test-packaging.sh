@@ -35,14 +35,15 @@ echo ""
 test_installer_smoke_test_clean_project() {
     local adapter_clone
     local target_repo
+    local output
     adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
     target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
 
     cp -R "$REPO_DIR/." "$adapter_clone/"
 
-    (
+    output=$(
         cd "$target_repo"
-        bash "$adapter_clone/install.sh" >/dev/null 2>&1
+        bash "$adapter_clone/install.sh" 2>&1
     )
 
     local has_agents=true
@@ -50,13 +51,15 @@ test_installer_smoke_test_clean_project() {
     local has_hooks_json=true
     local has_bash_guard=true
     local has_node_guard=true
+    local avoids_unreleased_skill_labels=true
 
     [ -f "$target_repo/AGENTS.md" ] || has_agents=false
     [ -f "$target_repo/.codex/config.toml" ] || has_config=false
     [ -f "$target_repo/.codex/hooks.json" ] || has_hooks_json=false
     [ -x "$target_repo/.codex/hooks/bash-guard.sh" ] || has_bash_guard=false
-    [ -f "$target_repo/.codex/hooks/git-guard.js" ] || has_node_guard=false
-    grep -q 'node \.codex/hooks/git-guard\.js' "$target_repo/.codex/hooks.json" 2>/dev/null || has_node_guard=false
+    [ -f "$target_repo/.codex/hooks/git-guard.cjs" ] || has_node_guard=false
+    grep -q 'node \.codex/hooks/git-guard\.cjs' "$target_repo/.codex/hooks.json" 2>/dev/null || has_node_guard=false
+    echo "$output" | grep -Eq '(^|[^A-Za-z])(gdlc|rdlc)([^A-Za-z]|$)' && avoids_unreleased_skill_labels=false
 
     rm -rf "$adapter_clone" "$target_repo"
 
@@ -64,7 +67,8 @@ test_installer_smoke_test_clean_project() {
        [ "$has_config" = "true" ] &&
        [ "$has_hooks_json" = "true" ] &&
        [ "$has_bash_guard" = "true" ] &&
-       [ "$has_node_guard" = "true" ]; then
+       [ "$has_node_guard" = "true" ] &&
+       [ "$avoids_unreleased_skill_labels" = "true" ]; then
         pass "Installer smoke test succeeds in a clean temp project"
     else
         fail "Installer smoke test did not produce the expected project files"
@@ -382,26 +386,23 @@ test_readme_documents_repo_scope_skills() {
     local has_agents_path=true
     local has_sdlc=true
     local has_wip_language=true
-    local has_gdlc=true
-    local has_rdlc=true
+    local avoids_unreleased_skill_labels=true
     local has_fresh_session=true
 
     grep -q '^## Repo-Scoped Skills$' "$README" || has_heading=false
     grep -q '\.agents/skills' "$README" || has_agents_path=false
     grep -q '\$sdlc' "$README" || has_sdlc=false
     grep -Eqi 'work in progress|still in progress|not all available yet' "$README" || has_wip_language=false
-    grep -q 'gdlc' "$README" || has_gdlc=false
-    grep -q 'rdlc' "$README" || has_rdlc=false
+    grep -Eq '(^|[^A-Za-z])(gdlc|rdlc)([^A-Za-z]|$)' "$README" && avoids_unreleased_skill_labels=false
     grep -Eqi 'fresh Codex session|start a fresh codex session|restart Codex' "$README" || has_fresh_session=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$has_agents_path" = "true" ] &&
        [ "$has_sdlc" = "true" ] &&
        [ "$has_wip_language" = "true" ] &&
-       [ "$has_gdlc" = "true" ] &&
-       [ "$has_rdlc" = "true" ] &&
+       [ "$avoids_unreleased_skill_labels" = "true" ] &&
        [ "$has_fresh_session" = "true" ]; then
-        pass "README documents the current repo-scope skill rollout and future skill roadmap"
+        pass "README documents current repo-scope skills without unreleased labels"
     else
         fail "README does not document the repo-scope skill rollout clearly enough"
     fi

@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 HOOKS_DIR="$REPO_DIR/.codex/hooks"
 ACTIVE_HOOKS_FILE="$REPO_DIR/.codex/hooks.json"
-UNIVERSAL_PRETOOL_SCRIPT="$HOOKS_DIR/git-guard.js"
-UNIVERSAL_SESSION_SCRIPT="$HOOKS_DIR/session-start.js"
+UNIVERSAL_PRETOOL_SCRIPT="$HOOKS_DIR/git-guard.cjs"
+UNIVERSAL_SESSION_SCRIPT="$HOOKS_DIR/session-start.cjs"
 PASSED=0
 FAILED=0
 
@@ -176,6 +176,43 @@ test_universal_session_warns_missing() {
     fi
 }
 
+test_universal_node_hooks_work_in_type_module_repos() {
+    local tmpdir
+    local session_command
+    local pretool_command
+    local session_output
+    local pretool_output
+    local all_passed=true
+
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.codex/hooks"
+    cp "$ACTIVE_HOOKS_FILE" "$tmpdir/.codex/hooks.json"
+    cp "$HOOKS_DIR"/git-guard.* "$tmpdir/.codex/hooks/" 2>/dev/null || true
+    cp "$HOOKS_DIR"/session-start.* "$tmpdir/.codex/hooks/" 2>/dev/null || true
+    printf '%s\n' '{"type":"module"}' > "$tmpdir/package.json"
+
+    session_command=$(node -e 'const config = require(process.argv[1]); process.stdout.write(config.hooks.SessionStart[0].hooks[0].command);' "$tmpdir/.codex/hooks.json")
+    pretool_command=$(node -e 'const config = require(process.argv[1]); process.stdout.write(config.hooks.PreToolUse[0].hooks[0].command);' "$tmpdir/.codex/hooks.json")
+
+    echo "$session_command" | grep -q '\.cjs' || all_passed=false
+    echo "$pretool_command" | grep -q '\.cjs' || all_passed=false
+
+    session_output=$(cd "$tmpdir" && sh -c "$session_command" 2>&1) || all_passed=false
+    pretool_output=$(cd "$tmpdir" && printf '%s' '{"tool_input":{"command":"git commit -m test"}}' | sh -c "$pretool_command" 2>&1) || all_passed=false
+
+    echo "$session_output" | grep -q '"additionalContext"' || all_passed=false
+    echo "$pretool_output" | grep -q '"decision":"block"' || all_passed=false
+    echo "$session_output$pretool_output" | grep -q 'require is not defined' && all_passed=false
+
+    rm -rf "$tmpdir"
+
+    if [ "$all_passed" = "true" ]; then
+        pass "universal Node hooks work in type=module repos"
+    else
+        fail "universal Node hooks fail in type=module repos"
+    fi
+}
+
 test_hooks_json_matcher() {
     local matcher
     matcher=$(grep -o '"matcher":[[:space:]]*"[^"]*"' "$HOOKS_FILE" | head -1 | sed 's/.*"matcher":[[:space:]]*"\([^"]*\)"/\1/')
@@ -197,8 +234,8 @@ test_hooks_json_valid() {
 }
 
 test_live_hooks_file_uses_universal_node_hooks() {
-    if grep -q 'node \.codex/hooks/git-guard\.js' "$ACTIVE_HOOKS_FILE" \
-        && grep -q 'node \.codex/hooks/session-start\.js' "$ACTIVE_HOOKS_FILE" \
+    if grep -q 'node \.codex/hooks/git-guard\.cjs' "$ACTIVE_HOOKS_FILE" \
+        && grep -q 'node \.codex/hooks/session-start\.cjs' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q 'powershell\.exe' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q 'bash-guard\.sh' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q 'session-start\.sh' "$ACTIVE_HOOKS_FILE"; then
@@ -213,8 +250,8 @@ test_live_hooks_file_is_windows_safe() {
         return
     fi
 
-    if grep -q 'node \.codex/hooks/git-guard\.js' "$ACTIVE_HOOKS_FILE" \
-        && grep -q 'node \.codex/hooks/session-start\.js' "$ACTIVE_HOOKS_FILE" \
+    if grep -q 'node \.codex/hooks/git-guard\.cjs' "$ACTIVE_HOOKS_FILE" \
+        && grep -q 'node \.codex/hooks/session-start\.cjs' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q 'powershell\.exe' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q '\.sh' "$ACTIVE_HOOKS_FILE"; then
         pass "live hooks.json uses universal Node hooks on Windows"
@@ -718,7 +755,8 @@ test_package_cli_is_honest_about_supported_flags() {
 
     if echo "$output" | grep -q -- '--model-profile' &&
        echo "$output" | grep -q 'mixed' &&
-       echo "$output" | grep -q 'maximum'; then
+       echo "$output" | grep -q 'maximum' &&
+       echo "$output" | grep -Fq 'Type "full-auto"'; then
         pass "npm CLI help advertises the supported model-profile flag"
     else
         fail "npm CLI help is missing the supported model-profile flag"
@@ -884,6 +922,7 @@ test_session_warns_missing
 test_session_silent_when_present
 test_universal_pretool_blocks_commit
 test_universal_session_warns_missing
+test_universal_node_hooks_work_in_type_module_repos
 test_hooks_json_matcher
 test_hooks_json_valid
 test_live_hooks_file_uses_universal_node_hooks

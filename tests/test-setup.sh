@@ -584,7 +584,7 @@ test_manifest_created() {
         if ! echo "$hash" | grep -q '^sha256:'; then
             valid=false
         fi
-        if ! json_eval_stdin 'data.managed_files[".codex/hooks/git-guard.js"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+        if ! json_eval_stdin 'data.managed_files[".codex/hooks/git-guard.cjs"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
             valid=false
         fi
     fi
@@ -638,7 +638,7 @@ EOF
     run_setup "$ws"
 
     local repaired=false
-    if grep -q 'node \.codex/hooks/git-guard\.js' "$ws/.codex/hooks.json" 2>/dev/null \
+    if grep -q 'node \.codex/hooks/git-guard\.cjs' "$ws/.codex/hooks.json" 2>/dev/null \
         && ! grep -q 'bash-guard\.sh' "$ws/.codex/hooks.json" 2>/dev/null \
         && ! grep -q 'powershell\.exe' "$ws/.codex/hooks.json" 2>/dev/null; then
         repaired=true
@@ -682,7 +682,7 @@ test_check_reports_matches() {
     output=$(run_check "$ws")
     rm -rf "$ws"
 
-    local hook_expr='data.managed_files[".codex/hooks/git-guard.js"].status'
+    local hook_expr='data.managed_files[".codex/hooks/git-guard.cjs"].status'
 
     if json_text_equals "$output" 'data.repo_state' "initialized" \
         && json_text_equals "$output" 'data.managed_files["AGENTS.md"].status' "match" \

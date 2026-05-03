@@ -25,7 +25,7 @@ Commands:
   install        Advanced escape hatch: run install.sh without adaptive setup
 
 Default behavior: bootstrap the current repo, then hand off into a live plain Codex setup session.
-Type 'full-auto' at the handoff prompt if you want codex --full-auto for first-run setup.
+Type "full-auto" at the handoff prompt if you want codex --full-auto for first-run setup.
 Automation/non-interactive behavior: use setup --yes to stay on the shell path.
 Bootstrap/setup recommendation: maximum.
 Routine work after bootstrap: mixed.
