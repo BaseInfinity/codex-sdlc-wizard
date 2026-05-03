@@ -435,6 +435,548 @@ EOF
     fi
 }
 
+test_codex_handoff_watchdog_timeout_is_opt_in() {
+    local body
+    body="$(awk '/function handoffTimeoutMs\(\)/,/^}/' "$REPO_DIR/bin/codex-sdlc-wizard.js")"
+
+    if echo "$body" | grep -Fq 'return 0;' \
+        && ! echo "$body" | grep -Fq '60 * 60 * 1000'; then
+        pass "Codex handoff watchdog timeout is opt-in"
+    else
+        fail "Codex handoff watchdog timeout must not enforce a default wall-clock limit"
+    fi
+}
+
+test_codex_handoff_watchdog_times_out_and_terminates_child() {
+    local ws fakebin fakebin_win codex_bin codex_path_entry codex_home input_file output started_file killed_file completed_file status
+    local started_file_env killed_file_env completed_file_env ws_win
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+    started_file="$ws/codex-started.txt"
+    killed_file="$ws/codex-killed.txt"
+    completed_file="$ws/codex-completed.txt"
+
+    printf '%s' '{"name":"handoff-watchdog","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
+    printf '\n' > "$input_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  exit 0
+fi
+printf started > "$FAKE_CODEX_STARTED_FILE"
+trap 'printf terminated > "$FAKE_CODEX_KILLED_FILE"; exit 143' TERM INT
+sleep 2
+printf completed > "$FAKE_CODEX_COMPLETED_FILE"
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
+    cat > "$fakebin/codex.cmd" <<'EOF'
+@echo off
+if "%~1"=="--version" exit /b 0
+>"%FAKE_CODEX_STARTED_FILE%" echo started
+ping -n 3 127.0.0.1 >nul
+>"%FAKE_CODEX_COMPLETED_FILE%" echo completed
+exit /b 0
+EOF
+
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null) && ws_win=$(cd "$ws" && pwd -W 2>/dev/null); then
+        codex_bin="$fakebin_win\\codex.cmd"
+        codex_path_entry="$fakebin_win"
+        started_file_env="$ws_win\\codex-started.txt"
+        killed_file_env="$ws_win\\codex-killed.txt"
+        completed_file_env="$ws_win\\codex-completed.txt"
+    else
+        codex_bin="$fakebin/codex"
+        codex_path_entry="$fakebin"
+        started_file_env="$started_file"
+        killed_file_env="$killed_file"
+        completed_file_env="$completed_file"
+    fi
+
+    set +e
+    output=$(
+        cd "$ws" && \
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS=150 \
+        FAKE_CODEX_STARTED_FILE="$started_file_env" \
+        FAKE_CODEX_KILLED_FILE="$killed_file_env" \
+        FAKE_CODEX_COMPLETED_FILE="$completed_file_env" \
+        PATH="$codex_path_entry:$PATH" \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" 2>&1
+    )
+    status=$?
+    set -e
+
+    local valid=true
+    [ "$status" -ne 0 ] || valid=false
+    [ -f "$started_file" ] || valid=false
+    if [ "$IS_WINDOWS" = "false" ]; then
+        [ -f "$killed_file" ] || valid=false
+    fi
+    [ ! -f "$completed_file" ] || valid=false
+    echo "$output" | grep -Eqi 'timeout|timed out|watchdog' || valid=false
+    echo "$output" | grep -Eqi 'terminat|kill' || valid=false
+    echo "$output" | grep -Fq 'codex resume --full-auto' || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "Codex handoff watchdog times out and terminates the spawned Codex child"
+    else
+        fail "Codex handoff watchdog did not time out and terminate the spawned Codex child cleanly"
+    fi
+}
+
+test_codex_handoff_timeout_force_kills_signal_ignoring_descendant() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "Codex handoff descendant force-kill cleanup is POSIX-only"
+        return
+    fi
+
+    local ws fakebin codex_home input_file output_file started_file completed_file grandchild_pid_file status grandchild_pid
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+    output_file="$ws/handoff-output.txt"
+    started_file="$ws/codex-started.txt"
+    completed_file="$ws/codex-completed.txt"
+    grandchild_pid_file="$ws/codex-grandchild.pid"
+
+    printf '%s' '{"name":"handoff-watchdog","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
+    printf '\n' > "$input_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/bash
+if [ "${1:-}" = "--version" ]; then
+  exit 0
+fi
+printf started > "$FAKE_CODEX_STARTED_FILE"
+bash -c 'trap "" TERM INT HUP; printf "%s" "$$" > "$FAKE_CODEX_GRANDCHILD_PID_FILE"; sleep 30' &
+trap 'exit 143' TERM INT HUP
+sleep 30
+printf completed > "$FAKE_CODEX_COMPLETED_FILE"
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
+    set +e
+    (
+        cd "$ws" || exit 1
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS=150 \
+        FAKE_CODEX_STARTED_FILE="$started_file" \
+        FAKE_CODEX_COMPLETED_FILE="$completed_file" \
+        FAKE_CODEX_GRANDCHILD_PID_FILE="$grandchild_pid_file" \
+        PATH="$fakebin:$PATH" \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" > "$output_file" 2>&1
+    )
+    status=$?
+    set -e
+
+    grandchild_pid="$(cat "$grandchild_pid_file" 2>/dev/null || true)"
+
+    local grandchild_alive=false
+    if [ -n "$grandchild_pid" ] && kill -0 "$grandchild_pid" 2>/dev/null; then
+        grandchild_alive=true
+        kill -KILL "$grandchild_pid" 2>/dev/null || true
+    fi
+
+    local output=""
+    output="$(cat "$output_file" 2>/dev/null || true)"
+    local valid=true
+    [ "$status" -eq 124 ] || valid=false
+    [ -f "$started_file" ] || valid=false
+    [ -n "$grandchild_pid" ] || valid=false
+    [ "$grandchild_alive" = "false" ] || valid=false
+    [ ! -f "$completed_file" ] || valid=false
+    echo "$output" | grep -Eqi 'timed out|watchdog' || valid=false
+    echo "$output" | grep -Fq 'Terminating spawned Codex process tree' || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "Codex handoff timeout force-kills signal-ignoring descendants"
+    else
+        fail "Codex handoff timeout left a signal-ignoring descendant alive"
+    fi
+}
+
+test_codex_handoff_sighup_terminates_detached_child() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "Codex handoff SIGHUP cleanup is POSIX-only"
+        return
+    fi
+
+    local ws fakebin codex_home input_file output_file pid_file killed_file completed_file wrapper_pid child_pid status
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+    output_file="$ws/handoff-output.txt"
+    pid_file="$ws/codex.pid"
+    killed_file="$ws/codex-killed.txt"
+    completed_file="$ws/codex-completed.txt"
+
+    printf '%s' '{"name":"handoff-sighup","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
+    printf '\n' > "$input_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  exit 0
+fi
+printf '%s' "$$" > "$FAKE_CODEX_PID_FILE"
+trap 'printf terminated > "$FAKE_CODEX_KILLED_FILE"; exit 143' HUP TERM INT
+sleep 5
+printf completed > "$FAKE_CODEX_COMPLETED_FILE"
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
+    (
+        cd "$ws" || exit 1
+        exec env \
+            CODEX_HOME="$codex_home" \
+            CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+            CODEX_SDLC_DISABLE_REASONING=1 \
+            CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS=0 \
+            FAKE_CODEX_PID_FILE="$pid_file" \
+            FAKE_CODEX_KILLED_FILE="$killed_file" \
+            FAKE_CODEX_COMPLETED_FILE="$completed_file" \
+            PATH="$fakebin:$PATH" \
+            node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" > "$output_file" 2>&1
+    ) &
+    wrapper_pid=$!
+
+    for _ in $(seq 1 50); do
+        [ -s "$pid_file" ] && break
+        sleep 0.1
+    done
+
+    child_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -n "$child_pid" ]; then
+        kill -HUP "$wrapper_pid" 2>/dev/null || true
+    fi
+
+    set +e
+    wait "$wrapper_pid"
+    status=$?
+    set -e
+
+    local child_alive=false
+    if [ -n "$child_pid" ] && kill -0 "$child_pid" 2>/dev/null; then
+        child_alive=true
+        kill -TERM "-$child_pid" 2>/dev/null || kill "$child_pid" 2>/dev/null || true
+    fi
+
+    local output=""
+    output="$(cat "$output_file" 2>/dev/null || true)"
+    local valid=true
+    [ -n "$child_pid" ] || valid=false
+    [ "$status" -ne 0 ] || valid=false
+    [ "$child_alive" = "false" ] || valid=false
+    [ -f "$killed_file" ] || valid=false
+    [ ! -f "$completed_file" ] || valid=false
+    echo "$output" | grep -q 'SIGHUP' || valid=false
+    echo "$output" | grep -Fq 'Terminating spawned Codex process tree' || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "Codex handoff handles SIGHUP without orphaning the detached child"
+    else
+        fail "Codex handoff SIGHUP handling left the detached child alive or missed recovery output"
+    fi
+}
+
+test_codex_handoff_sigint_forwards_interrupt_to_child() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "Codex handoff SIGINT forwarding is POSIX-only"
+        return
+    fi
+
+    local ws fakebin codex_home input_file output_file pid_file int_file term_file completed_file wrapper_pid child_pid status
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+    output_file="$ws/handoff-output.txt"
+    pid_file="$ws/codex.pid"
+    int_file="$ws/codex-int.txt"
+    term_file="$ws/codex-term.txt"
+    completed_file="$ws/codex-completed.txt"
+
+    printf '%s' '{"name":"handoff-sigint","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
+    printf '\n' > "$input_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  exit 0
+fi
+printf '%s' "$$" > "$FAKE_CODEX_PID_FILE"
+trap 'printf interrupted > "$FAKE_CODEX_INT_FILE"; exit 130' INT
+trap 'printf terminated > "$FAKE_CODEX_TERM_FILE"; exit 143' TERM
+sleep 5
+printf completed > "$FAKE_CODEX_COMPLETED_FILE"
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
+    (
+        cd "$ws" || exit 1
+        exec env \
+            CODEX_HOME="$codex_home" \
+            CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+            CODEX_SDLC_DISABLE_REASONING=1 \
+            CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS=0 \
+            FAKE_CODEX_PID_FILE="$pid_file" \
+            FAKE_CODEX_INT_FILE="$int_file" \
+            FAKE_CODEX_TERM_FILE="$term_file" \
+            FAKE_CODEX_COMPLETED_FILE="$completed_file" \
+            PATH="$fakebin:$PATH" \
+            node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" > "$output_file" 2>&1
+    ) &
+    wrapper_pid=$!
+
+    for _ in $(seq 1 50); do
+        [ -s "$pid_file" ] && break
+        sleep 0.1
+    done
+
+    child_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -n "$child_pid" ]; then
+        kill -INT "$wrapper_pid" 2>/dev/null || true
+    fi
+
+    set +e
+    wait "$wrapper_pid"
+    status=$?
+    set -e
+
+    local child_alive=false
+    if [ -n "$child_pid" ] && kill -0 "$child_pid" 2>/dev/null; then
+        child_alive=true
+        kill -TERM "-$child_pid" 2>/dev/null || kill "$child_pid" 2>/dev/null || true
+    fi
+
+    local output=""
+    output="$(cat "$output_file" 2>/dev/null || true)"
+    local valid=true
+    [ -n "$child_pid" ] || valid=false
+    [ "$status" -ne 0 ] || valid=false
+    [ "$child_alive" = "false" ] || valid=false
+    [ -f "$int_file" ] || valid=false
+    [ ! -f "$term_file" ] || valid=false
+    [ ! -f "$completed_file" ] || valid=false
+    echo "$output" | grep -q 'SIGINT' || valid=false
+    echo "$output" | grep -Fq 'Terminating spawned Codex process tree' || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "Codex handoff forwards SIGINT to the spawned Codex child"
+    else
+        fail "Codex handoff SIGINT handling did not preserve child interrupt semantics"
+    fi
+}
+
+test_codex_handoff_repeated_sigint_does_not_orphan_child() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "Codex handoff repeated SIGINT cleanup is POSIX-only"
+        return
+    fi
+
+    local ws fakebin codex_home input_file output_file pid_file wrapper_pid child_pid status
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+    output_file="$ws/handoff-output.txt"
+    pid_file="$ws/codex.pid"
+
+    printf '%s' '{"name":"handoff-sigint-repeat","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
+    printf '\n' > "$input_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  exit 0
+fi
+printf '%s' "$$" > "$FAKE_CODEX_PID_FILE"
+trap '' INT TERM HUP QUIT
+sleep 30
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
+    (
+        cd "$ws" || exit 1
+        exec env \
+            CODEX_HOME="$codex_home" \
+            CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+            CODEX_SDLC_DISABLE_REASONING=1 \
+            CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS=0 \
+            FAKE_CODEX_PID_FILE="$pid_file" \
+            PATH="$fakebin:$PATH" \
+            node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" > "$output_file" 2>&1
+    ) &
+    wrapper_pid=$!
+
+    for _ in $(seq 1 50); do
+        [ -s "$pid_file" ] && break
+        sleep 0.1
+    done
+
+    child_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -n "$child_pid" ]; then
+        kill -INT "$wrapper_pid" 2>/dev/null || true
+        sleep 0.1
+        kill -INT "$wrapper_pid" 2>/dev/null || true
+    fi
+
+    set +e
+    wait "$wrapper_pid"
+    status=$?
+    set -e
+
+    local child_alive=false
+    if [ -n "$child_pid" ] && kill -0 "$child_pid" 2>/dev/null; then
+        child_alive=true
+        kill -KILL "-$child_pid" 2>/dev/null || kill -KILL "$child_pid" 2>/dev/null || true
+    fi
+
+    local output=""
+    output="$(cat "$output_file" 2>/dev/null || true)"
+    local valid=true
+    [ -n "$child_pid" ] || valid=false
+    [ "$status" -ne 0 ] || valid=false
+    [ "$child_alive" = "false" ] || valid=false
+    echo "$output" | grep -q 'SIGINT' || valid=false
+    echo "$output" | grep -Fq 'Terminating spawned Codex process tree' || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "Codex handoff repeated SIGINT does not orphan the spawned child"
+    else
+        fail "Codex handoff repeated SIGINT orphaned the spawned child"
+    fi
+}
+
+test_codex_handoff_sigquit_terminates_detached_child() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "Codex handoff SIGQUIT cleanup is POSIX-only"
+        return
+    fi
+
+    local ws fakebin codex_home input_file output_file pid_file quit_file term_file completed_file wrapper_pid child_pid status
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+    output_file="$ws/handoff-output.txt"
+    pid_file="$ws/codex.pid"
+    quit_file="$ws/codex-quit.txt"
+    term_file="$ws/codex-term.txt"
+    completed_file="$ws/codex-completed.txt"
+
+    printf '%s' '{"name":"handoff-sigquit","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+    touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
+    printf '\n' > "$input_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  exit 0
+fi
+printf '%s' "$$" > "$FAKE_CODEX_PID_FILE"
+trap 'printf quit > "$FAKE_CODEX_QUIT_FILE"; exit 131' QUIT
+trap 'printf term > "$FAKE_CODEX_TERM_FILE"; exit 143' TERM HUP INT
+sleep 5
+printf completed > "$FAKE_CODEX_COMPLETED_FILE"
+exit 0
+EOF
+    chmod +x "$fakebin/codex"
+
+    (
+        cd "$ws" || exit 1
+        exec env \
+            CODEX_HOME="$codex_home" \
+            CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+            CODEX_SDLC_DISABLE_REASONING=1 \
+            CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS=0 \
+            FAKE_CODEX_PID_FILE="$pid_file" \
+            FAKE_CODEX_QUIT_FILE="$quit_file" \
+            FAKE_CODEX_TERM_FILE="$term_file" \
+            FAKE_CODEX_COMPLETED_FILE="$completed_file" \
+            PATH="$fakebin:$PATH" \
+            node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" > "$output_file" 2>&1
+    ) &
+    wrapper_pid=$!
+
+    for _ in $(seq 1 50); do
+        [ -s "$pid_file" ] && break
+        sleep 0.1
+    done
+
+    child_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -n "$child_pid" ]; then
+        kill -QUIT "$wrapper_pid" 2>/dev/null || true
+    fi
+
+    set +e
+    wait "$wrapper_pid"
+    status=$?
+    set -e
+
+    local child_alive=false
+    if [ -n "$child_pid" ] && kill -0 "$child_pid" 2>/dev/null; then
+        child_alive=true
+        kill -KILL "-$child_pid" 2>/dev/null || kill -KILL "$child_pid" 2>/dev/null || true
+    fi
+
+    local output=""
+    output="$(cat "$output_file" 2>/dev/null || true)"
+    local valid=true
+    [ -n "$child_pid" ] || valid=false
+    [ "$status" -ne 0 ] || valid=false
+    [ "$child_alive" = "false" ] || valid=false
+    [ -f "$quit_file" ] || valid=false
+    [ ! -f "$term_file" ] || valid=false
+    [ ! -f "$completed_file" ] || valid=false
+    echo "$output" | grep -q 'SIGQUIT' || valid=false
+    echo "$output" | grep -Fq 'Terminating spawned Codex process tree' || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "Codex handoff SIGQUIT terminates the detached child"
+    else
+        fail "Codex handoff SIGQUIT left the detached child alive"
+    fi
+}
+
 test_ci_mode_keeps_shell_setup_path() {
     local ws fakebin fakebin_win codex_home args_file prompts_file output
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
@@ -539,6 +1081,13 @@ test_local_npx_setup_honors_model_profile_flag
 test_packed_tarball_scratch_smoke
 test_default_interactive_hands_off_to_codex
 test_full_auto_handoff_choice_is_explicit
+test_codex_handoff_watchdog_timeout_is_opt_in
+test_codex_handoff_watchdog_times_out_and_terminates_child
+test_codex_handoff_timeout_force_kills_signal_ignoring_descendant
+test_codex_handoff_sighup_terminates_detached_child
+test_codex_handoff_sigint_forwards_interrupt_to_child
+test_codex_handoff_repeated_sigint_does_not_orphan_child
+test_codex_handoff_sigquit_terminates_detached_child
 test_ci_mode_keeps_shell_setup_path
 test_cli_help_documents_bootstrap_profile_policy
 test_cli_help_explains_update_version_boundary
