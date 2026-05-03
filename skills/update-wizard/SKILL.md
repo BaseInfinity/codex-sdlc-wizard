@@ -13,6 +13,28 @@ Do not blindly overwrite files.
 
 Version boundary: `$update-wizard` updates repo artifacts using the wizard version already installed in the active Codex skill/session. It does not self-update the npm package. To consume the newest published package first, tell the user to run `npx codex-sdlc-wizard@latest update` from the repo, then restart or resume Codex so refreshed skills/hooks/config load.
 
+## Package upgrade preflight
+
+Before scanning repo drift, correct the package boundary in plain language:
+
+- Package upgrade means consuming the newest published `codex-sdlc-wizard` package.
+- Repo repair/sync means inspecting and repairing local SDLC artifacts with the wizard already loaded in this Codex session.
+- `$update-wizard` performs repo repair/sync. It does not self-update the active Codex session or npm package.
+
+When network is available, compare the current installed skill/package version against npm latest:
+
+```bash
+npm view codex-sdlc-wizard version
+```
+
+If the local package may be stale, the user asked for latest, or the installed version trails npm, give this package-upgrade command before repo repair:
+
+```bash
+npx codex-sdlc-wizard@latest update
+```
+
+If network is unavailable, say the latest package status could not be verified and still provide the `@latest` command as the safe upgrade path. After any package upgrade or repo artifact repair, tell the user to restart/reopen Codex so refreshed skills/hooks/config load.
+
 ## Reasoning policy
 
 Default to `xhigh` in this repo. Update work is maintenance architecture, and customized drift makes lower-effort passes too risky by default.
