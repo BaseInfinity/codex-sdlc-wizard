@@ -154,6 +154,7 @@ Do not force fake percentage precision if the repo risk sits at external boundar
 
 Recommend Codex-specific follow-ups where appropriate:
 
+- Task routing gate: before giving CLI or browser instructions, identify the execution lane as CLI, Desktop/computer-use, browser automation, or human-only setup. If Microsoft browser sign-in, developer program qualification, account pickers, MFA, tenant consent, Office UI, admin portal state, or other auth-heavy screens are involved, say `Desktop/computer-use` first, then give the handoff prompt and guardrails.
 - skills to invoke
 - MCP servers worth installing
 - hooks already present or missing

@@ -22,6 +22,14 @@ Codex does not have a native `/sdlc` command. This file is the honest replacemen
 8. Escalate honestly
    If blocked, name the blocker, show the evidence, and propose the next move.
 
+## Task routing gate
+
+Identify the execution lane before giving instructions: CLI, Desktop/computer-use, browser automation, or human-only setup.
+
+Use `Desktop/computer-use` first when a task crosses Microsoft browser sign-in, developer program qualification, account pickers, MFA, tenant consent, Office UI, admin portal state, or other auth-heavy screens that the CLI cannot safely prove.
+
+After naming the lane, provide the handoff prompt and guardrails before any CLI or browser steps. Keep credentials, MFA, tenant consent, subscription creation, license/admin changes, sends, deletes, and policy publishing behind explicit human action.
+
 ## Testing Shape
 
 - Most checks should be unit tests.
