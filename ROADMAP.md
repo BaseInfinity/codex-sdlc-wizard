@@ -8,7 +8,7 @@
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
 - setup now layers deterministic scan plus live Codex `gpt-5.5` / `xhigh` refinement when available
 - setup now keeps detected values automatically, asks inferred values conversationally, and asks only missing core repo facts directly
-- the repo-scoped Codex discovery bridge for `$sdlc` / `$adlc` is now part of the shipping path
+- the repo-scoped Codex discovery bridge for `$sdlc` is now part of the shipping path
 - consumer-path hardening for auth-heavy boundaries, capability detectors, and docs-strong scaffold repos is shipped
 - honest Codex architecture guidance, confidence/reporting guidance, direct-issue capture, and repo-focus rules are now part of the shipped path
 - the model-profile toggle is now shipped as a user choice:
@@ -26,7 +26,7 @@
 - setup guidance now includes Microsoft 365 auth-lane proof rules for tenant-bound Graph PowerShell and fallback OAuth evidence
 - sponsor metadata is now shipped for GitHub Sponsors and npm funding surfaces
 - the package now treats `$sdlc` as the single canonical public workflow entrypoint, keeps the Codex display name lowercase, and blocks legacy `$codex-sdlc` or imperative `/sdlc` wording from returning
-- setup/install now keep `$sdlc` repo-scoped and install only global helper skills, avoiding same-name global/repo skill collisions
+- setup/install now keep `$sdlc` repo-scoped, install no extra repo-scoped lifecycle skills by default, and install only global helper skills, avoiding same-name global/repo skill collisions
 - setup now detects Playwright MCP browser tooling/profile policy and documents explicit opt-in isolation versus shared persistent auth-heavy flows without rewriting `.mcp.json`
 - setup/update now repair stale platform-specific hook wiring and install universal Node hook entrypoints so a checked-in `.codex/hooks.json` does not flip between macOS Bash and Windows PowerShell commands
 - generated Node hooks now use `.cjs` entrypoints so consumer repos with `"type": "module"` do not break on CommonJS `require`

@@ -90,7 +90,7 @@ test_npm_pack_includes_runtime_files() {
     local has_legacy_sdlc_skill=false
     local has_openai_yaml=true
     local has_repo_sdlc_skill=true
-    local has_repo_adlc_skill=true
+    local has_repo_adlc_skill=false
 
     if [ -z "$tarball_name" ] || [ ! -f "$pack_dir/$tarball_name" ]; then
         has_tarball=false
@@ -101,7 +101,7 @@ test_npm_pack_includes_runtime_files() {
         has_skill=false
         has_openai_yaml=false
         has_repo_sdlc_skill=false
-        has_repo_adlc_skill=false
+        has_repo_adlc_skill=true
     else
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "install.sh") ? "yes" : ""')" = "yes" ] || has_install=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "setup.sh") ? "yes" : ""')" = "yes" ] || has_setup=false
@@ -114,7 +114,7 @@ test_npm_pack_includes_runtime_files() {
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path.startsWith("skills/codex-sdlc/")) ? "yes" : ""')" = "yes" ] && has_legacy_sdlc_skill=true
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_openai_yaml=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_sdlc_skill=false
-        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/adlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_adlc_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/adlc/SKILL.md") ? "yes" : ""')" = "yes" ] && has_repo_adlc_skill=true
     fi
 
     rm -rf "$pack_dir" "$npm_cache"
@@ -129,7 +129,7 @@ test_npm_pack_includes_runtime_files() {
        [ "$has_legacy_sdlc_skill" = "false" ] &&
        [ "$has_openai_yaml" = "true" ] &&
        [ "$has_repo_sdlc_skill" = "true" ] &&
-       [ "$has_repo_adlc_skill" = "true" ]; then
+       [ "$has_repo_adlc_skill" = "false" ]; then
         pass "npm pack includes the CLI, installer, and skill runtime files"
     else
         fail "npm pack is missing required runtime files"
@@ -168,7 +168,7 @@ test_local_npx_installs_into_clean_repo() {
     [ -f "$target_repo/.codex/hooks/git-guard.cjs" ] || installed=false
     [ -f "$target_repo/.codex/hooks/session-start.cjs" ] || installed=false
     [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || installed=false
-    [ -f "$target_repo/.agents/skills/adlc/SKILL.md" ] || installed=false
+    [ ! -e "$target_repo/.agents/skills/adlc/SKILL.md" ] || installed=false
     [ -f "$target_repo/.codex-sdlc/manifest.json" ] || installed=false
     grep -q 'node \.codex/hooks/git-guard\.cjs' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
     grep -q 'node \.codex/hooks/session-start\.cjs' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
