@@ -51,6 +51,7 @@ Check:
 - blast radius
 - whether a new pattern is actually needed
 - whether the test approach matches `TESTING.md`
+- Task routing gate: before giving execution steps, identify the execution lane as CLI, Desktop/computer-use, browser automation, or human-only setup. If Microsoft browser sign-in, developer program qualification, account pickers, MFA, tenant consent, Office UI, admin portal state, or other auth-heavy screens are involved, say `Desktop/computer-use` first, then provide handoff guardrails before CLI/browser steps.
 
 Before implementation, do a docs update for the relevant feature area when the code change affects behavior, assumptions, or operator workflow.
 

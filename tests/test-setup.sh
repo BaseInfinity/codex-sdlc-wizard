@@ -403,6 +403,13 @@ test_setup_generates_sdlc_md() {
         grep -q 'npm test' "$ws/SDLC.md" 2>/dev/null || valid=false
         grep -q 'strict-tdd' "$ws/SDLC.md" 2>/dev/null || valid=false
         grep -q 'minimal' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'Task Routing Gate' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'Identify the execution lane before giving instructions' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'CLI, Desktop/computer-use, browser automation, or human-only setup' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'Microsoft browser sign-in' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'developer program qualification' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'Desktop/computer-use' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -q 'credentials, MFA, tenant consent' "$ws/SDLC.md" 2>/dev/null || valid=false
     fi
     rm -rf "$ws"
 
