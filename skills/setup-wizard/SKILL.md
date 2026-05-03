@@ -160,6 +160,7 @@ Recommend Codex-specific follow-ups where appropriate:
 - config.toml adjustments
 - repo-local docs that should be added
 - Codex Desktop handoff for browser, desktop-app, admin-portal, screenshot, or auth-heavy setup that CLI cannot see. Recommend `codex app .` from the repo root, note that Codex Desktop is available on macOS and Windows, and define the computer-use auth boundary: the user handles credentials, MFA, tenant consent, sends, deletes, license/admin changes, and policy publishing.
+- Microsoft 365 auth lane guidance when Graph PowerShell, WAM, browser, or Desktop auth is involved. Prefer Graph PowerShell first when `Get-MgContext` works. Distinguish browser sign-in success from script-context success. For fallback proofs, require tenant-bound OAuth evidence with tenant id plus expected work account, reject personal Microsoft account success as work-tenant proof, keep fallback proofs read-only by default, and record the proven lane plus next CLI action under `.reviews/`.
 
 When a model profile is selected, ensure the repo-local `.codex/config.toml` matches it. Preserve existing custom config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].codex_hooks` settings. Explain that `mixed` is wizard policy, not a native Codex mode, and that project config only loads after the repo is trusted.
 

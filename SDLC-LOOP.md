@@ -55,3 +55,14 @@ Human-in-the-loop boundary:
 - Codex may navigate, read screens, click non-destructive controls, and explain state.
 - The user handles credentials, MFA, tenant consent, sends, deletes, license/admin changes, and policy publishing.
 - Return to CLI for code changes, tests, commits, and push.
+
+## Microsoft 365 auth lane
+
+For Microsoft 365 setup, prefer Graph PowerShell first when `Get-MgContext` works. Browser or Desktop sign-in success is not enough by itself; verify the resulting script context before treating the lane as proven.
+
+Fallback proof rules:
+
+- Require tenant id plus expected work account before accepting a raw OAuth REST or device-code proof.
+- Treat personal Microsoft account success as invalid for work-tenant validation.
+- Keep fallback proofs read-only unless the user approves a draft, send, delete, license/admin, or policy action for that exact run.
+- Record the proven lane, current status, artifacts, and next CLI action in `.reviews/` so the next agent does not repeat auth discovery from chat memory.
