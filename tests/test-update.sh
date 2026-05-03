@@ -257,7 +257,7 @@ EOF
     output=$(run_update "$ws")
     check_output=$(run_check "$ws")
 
-    grep -q 'node \.codex/hooks/git-guard\.js' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    grep -q 'node \.codex/hooks/git-guard\.cjs' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
     grep -q 'powershell\.exe' "$ws/.codex/hooks.json" 2>/dev/null && valid=false
     if grep -q 'bash-guard\.sh' "$ws/.codex/hooks.json" 2>/dev/null; then
         valid=false
@@ -273,7 +273,187 @@ EOF
     fi
 }
 
-# ---- Test 7: update merges managed hook config into existing config.toml ----
+# ---- Test 7: update repairs legacy .js Node hook commands ----
+test_update_repairs_legacy_js_node_hooks() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    cat > "$ws/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/git-guard.js"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/session-start.js"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+    touch "$ws/.codex/hooks/git-guard.js" "$ws/.codex/hooks/session-start.js"
+
+    local output check_output valid=true
+    output=$(run_update "$ws")
+    check_output=$(run_check "$ws")
+
+    grep -q 'node \.codex/hooks/git-guard\.cjs' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    grep -q 'node \.codex/hooks/session-start\.cjs' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    [ ! -e "$ws/.codex/hooks/git-guard.js" ] || valid=false
+    [ ! -e "$ws/.codex/hooks/session-start.js" ] || valid=false
+    echo "$output" | grep -q '.codex/hooks.json' 2>/dev/null || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update repairs legacy .js Node hook commands"
+    else
+        fail "update did not repair legacy .js Node hook commands"
+    fi
+}
+
+# ---- Test 8: update repairs legacy .js hook manifest entries ----
+test_update_repairs_legacy_js_hook_manifest_entries() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    cat > "$ws/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/git-guard.js"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/session-start.js"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node <<'NODE'
+const fs = require("fs");
+
+const manifestPath = process.env.MANIFEST_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+delete manifest.managed_files[".codex/hooks/git-guard.cjs"];
+delete manifest.managed_files[".codex/hooks/session-start.cjs"];
+manifest.managed_files[".codex/hooks/git-guard.js"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+manifest.managed_files[".codex/hooks/session-start.js"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    rm -f "$ws/.codex/hooks/git-guard.js" "$ws/.codex/hooks/session-start.js"
+
+    local output check_output valid=true
+    output=$(run_update "$ws" 2>&1) || valid=false
+    check_output=$(run_check "$ws")
+
+    grep -q 'node \.codex/hooks/git-guard\.cjs' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    grep -q 'node \.codex/hooks/session-start\.cjs' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    [ -f "$ws/.codex/hooks/git-guard.cjs" ] || valid=false
+    [ -f "$ws/.codex/hooks/session-start.cjs" ] || valid=false
+    [ ! -e "$ws/.codex/hooks/git-guard.js" ] || valid=false
+    [ ! -e "$ws/.codex/hooks/session-start.js" ] || valid=false
+    grep -q 'git-guard\.js' "$ws/.codex-sdlc/manifest.json" 2>/dev/null && valid=false
+    grep -q 'session-start\.js' "$ws/.codex-sdlc/manifest.json" 2>/dev/null && valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update repairs legacy .js hook manifest entries"
+    else
+        echo "$output" >&2
+        fail "update did not repair legacy .js hook manifest entries"
+    fi
+}
+
+# ---- Test 9: update repairs legacy .js hook manifest entries even when stale files match ----
+test_update_repairs_matching_legacy_js_hook_manifest_entries() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    printf '%s\n' 'legacy git guard' > "$ws/.codex/hooks/git-guard.js"
+    printf '%s\n' 'legacy session start' > "$ws/.codex/hooks/session-start.js"
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" \
+    GIT_GUARD_PATH="$ws/.codex/hooks/git-guard.js" \
+    SESSION_START_PATH="$ws/.codex/hooks/session-start.js" \
+    node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+function hash(filePath) {
+  return `sha256:${crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex")}`;
+}
+
+const manifestPath = process.env.MANIFEST_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+delete manifest.managed_files[".codex/hooks/git-guard.cjs"];
+delete manifest.managed_files[".codex/hooks/session-start.cjs"];
+manifest.managed_files[".codex/hooks/git-guard.js"] = hash(process.env.GIT_GUARD_PATH);
+manifest.managed_files[".codex/hooks/session-start.js"] = hash(process.env.SESSION_START_PATH);
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    local output check_output valid=true
+    output=$(run_update "$ws" 2>&1) || valid=false
+    check_output=$(run_check "$ws")
+
+    grep -q 'node \.codex/hooks/git-guard\.cjs' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    grep -q 'node \.codex/hooks/session-start\.cjs' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    [ -f "$ws/.codex/hooks/git-guard.cjs" ] || valid=false
+    [ -f "$ws/.codex/hooks/session-start.cjs" ] || valid=false
+    [ ! -e "$ws/.codex/hooks/git-guard.js" ] || valid=false
+    [ ! -e "$ws/.codex/hooks/session-start.js" ] || valid=false
+    grep -q 'git-guard\.js' "$ws/.codex-sdlc/manifest.json" 2>/dev/null && valid=false
+    grep -q 'session-start\.js' "$ws/.codex-sdlc/manifest.json" 2>/dev/null && valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update repairs matching legacy .js hook manifest entries"
+    else
+        echo "$output" >&2
+        fail "update did not repair matching legacy .js hook manifest entries"
+    fi
+}
+
+# ---- Test 10: update merges managed hook config into existing config.toml ----
 test_update_merges_config_without_dropping_other_settings() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -566,6 +746,9 @@ test_update_repairs_missing_generated_docs
 test_update_skips_customized_docs_by_default
 test_update_force_all_replaces_customized_docs
 test_update_repairs_windows_hook_drift
+test_update_repairs_legacy_js_node_hooks
+test_update_repairs_legacy_js_hook_manifest_entries
+test_update_repairs_matching_legacy_js_hook_manifest_entries
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills
 test_update_removes_legacy_codex_sdlc_skill

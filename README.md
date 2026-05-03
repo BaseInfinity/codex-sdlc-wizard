@@ -151,7 +151,7 @@ Repo-specific maintainer rule:
 Repo-scoped skill coverage is still a work in progress:
 
 - `$sdlc` is the supported public workflow skill today
-- `gdlc` (gaming) and `rdlc` (research) are the next planned repo-scoped skills
+- additional repo-scoped workflows stay unnamed until their public contracts are ready
 
 Canonical entrypoint: `$sdlc`. `/sdlc` is historical shorthand for the missing slash-command idea, not an invocation command. Adapter-specific SDLC aliases are legacy migration debris and should not appear as second user-facing workflows.
 

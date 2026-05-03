@@ -79,8 +79,8 @@ for required in \
   ".codex/hooks/bash-guard.sh" \
   ".codex/hooks/session-start.sh" \
   ".codex/hooks/sdlc-prompt-check.sh" \
-  ".codex/hooks/git-guard.js" \
-  ".codex/hooks/session-start.js" \
+  ".codex/hooks/git-guard.cjs" \
+  ".codex/hooks/session-start.cjs" \
   ".codex/hooks/git-guard.ps1" \
   ".codex/hooks/session-start.ps1" \
   ".agents/skills/sdlc/SKILL.md" \
@@ -233,7 +233,8 @@ fi
 
 cp "$SCRIPT_DIR/.codex/hooks/"*.sh .codex/hooks/
 chmod +x .codex/hooks/*.sh
-cp "$SCRIPT_DIR/.codex/hooks/"*.js .codex/hooks/
+cp "$SCRIPT_DIR/.codex/hooks/"*.cjs .codex/hooks/
+rm -f .codex/hooks/git-guard.js .codex/hooks/session-start.js
 
 if [ "$IS_WINDOWS" = "true" ]; then
   cp "$SCRIPT_DIR/.codex/windows-hooks.json" .codex/hooks.json
@@ -273,7 +274,7 @@ echo "Codex loads project config only after the repo is trusted, and trusted pro
 echo "If confidence drops below 95%, research more first. If it still stays below 95%, escalate review to xhigh."
 echo "Repo-scoped skills are still a work in progress. Today the supported public workflow skill is '\$sdlc'."
 echo "Codex treats same-name skills from different scopes as distinct choices; normal setup installs global helper skills only and keeps repo-scoped '\$sdlc' canonical."
-echo "Future repo-scoped skills like 'gdlc' and 'rdlc' are planned next."
+echo "Additional repo-scoped workflows stay unnamed until their public contracts are ready."
 echo "Auth-heavy note: for Windows / WAM / MFA or other live sign-in flows, the prompt itself stays user-owned."
 echo "This wizard still owns command shape, checks, and the verify/resume steps after you complete sign-in."
 echo "If auth, license, tenant, or permission state decides what work is possible, add a repo-local doctor / check-capability / Test-*Access helper."
