@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { spawnSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline/promises");
@@ -102,6 +102,234 @@ function spawnCodex(args, stdio) {
     cwd: process.cwd(),
     stdio,
     shell: false
+  });
+}
+
+function spawnCodexChild(args, stdio) {
+  if (process.platform === "win32") {
+    const commandLine = [
+      quoteWindowsCmdCommand(codexCommand),
+      ...args.map(quoteWindowsCmdArg)
+    ].join(" ");
+
+    return spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", commandLine], {
+      cwd: process.cwd(),
+      stdio,
+      shell: false,
+      windowsVerbatimArguments: true
+    });
+  }
+
+  return spawn(codexCommand, args, {
+    cwd: process.cwd(),
+    stdio,
+    shell: false,
+    detached: true
+  });
+}
+
+function handoffTimeoutMs() {
+  const raw = process.env.CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS;
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return 0;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+
+  return Math.floor(parsed);
+}
+
+function formatDuration(ms) {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+
+  const minutes = Math.round(seconds / 60);
+  return `${minutes}m`;
+}
+
+function signalExitCode(signal) {
+  if (signal === "SIGHUP") {
+    return 129;
+  }
+
+  if (signal === "SIGINT") {
+    return 130;
+  }
+
+  if (signal === "SIGQUIT") {
+    return 131;
+  }
+
+  if (signal === "SIGTERM") {
+    return 143;
+  }
+
+  return 1;
+}
+
+function terminateChildTree(child, signal) {
+  if (!child || !child.pid) {
+    return;
+  }
+
+  try {
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" });
+      return;
+    }
+
+    process.kill(-child.pid, signal);
+  } catch (_error) {
+    try {
+      child.kill(signal);
+    } catch (_fallbackError) {
+      // The process may already have exited.
+    }
+  }
+}
+
+function printHandoffRecovery(reason) {
+  process.stderr.write([
+    "",
+    reason,
+    "Terminating spawned Codex process tree.",
+    "Retry from this repo with: npx codex-sdlc-wizard@latest",
+    "If Codex printed a session id before stopping, resume with: codex resume --full-auto -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' <session-id>",
+    ""
+  ].join("\n"));
+}
+
+function runCodexHandoff(args) {
+  const timeoutMs = handoffTimeoutMs();
+  const signals = process.platform === "win32"
+    ? ["SIGINT", "SIGTERM"]
+    : ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"];
+
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawnCodexChild(args, "inherit");
+    } catch (error) {
+      resolve({ error, status: 1 });
+      return;
+    }
+
+    let finished = false;
+    let timedOut = false;
+    let interruptedSignal = null;
+    let timeoutTimer = null;
+    let forceKillTimer = null;
+    let pendingTerminationResult = null;
+
+    const cleanup = () => {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
+      for (const signal of signals) {
+        process.removeListener(signal, onSignal);
+      }
+    };
+
+    const finish = (result) => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      cleanup();
+      resolve(result);
+    };
+
+    const finishAfterForceKill = (result) => {
+      if (forceKillTimer) {
+        pendingTerminationResult = result;
+        return;
+      }
+
+      finish(result);
+    };
+
+    const runForceKill = () => {
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
+      forceKillTimer = null;
+      terminateChildTree(child, "SIGKILL");
+
+      if (pendingTerminationResult) {
+        const result = pendingTerminationResult;
+        pendingTerminationResult = null;
+        finish(result);
+      }
+    };
+
+    const terminate = (signal) => {
+      terminateChildTree(child, signal);
+      if (!forceKillTimer && signal !== "SIGKILL") {
+        forceKillTimer = setTimeout(runForceKill, 2000);
+      }
+    };
+
+    const onSignal = (signal) => {
+      if (finished) {
+        return;
+      }
+
+      if (interruptedSignal || timedOut) {
+        runForceKill();
+        return;
+      }
+
+      interruptedSignal = signal;
+      printHandoffRecovery(`Codex setup handoff interrupted by ${signal}.`);
+      terminate(signal);
+    };
+
+    for (const signal of signals) {
+      process.on(signal, onSignal);
+    }
+
+    if (timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        if (finished) {
+          return;
+        }
+
+        timedOut = true;
+        printHandoffRecovery(`Codex setup handoff watchdog timed out after ${formatDuration(timeoutMs)}.`);
+        terminate("SIGTERM");
+      }, timeoutMs);
+    }
+
+    child.on("error", (error) => {
+      finish({ error, status: 1 });
+    });
+
+    child.on("exit", (code, signal) => {
+      if (timedOut) {
+        finishAfterForceKill({ status: 124, signal, timedOut: true });
+        return;
+      }
+
+      if (interruptedSignal) {
+        finishAfterForceKill({ status: signalExitCode(interruptedSignal), signal, interruptedSignal });
+        return;
+      }
+
+      finish({ status: code === null ? signalExitCode(signal) : code, signal });
+    });
   });
 }
 
@@ -240,7 +468,7 @@ async function handoffToCodex(modelProfile) {
     codexArgs.unshift("--full-auto");
   }
 
-  const codexResult = spawnCodex(codexArgs, "inherit");
+  const codexResult = await runCodexHandoff(codexArgs);
 
   if (codexResult.error) {
     process.stderr.write(`${codexResult.error.message}\n`);

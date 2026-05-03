@@ -262,19 +262,19 @@ test_detect_domain_cli() {
 # Helper: run setup.sh in a project dir
 run_setup() {
     local project_dir="$1"
-    (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 bash "$SETUP_SH" --yes 2>/dev/null) || true
+    (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 CODEX_HOME="$project_dir/.codex-home" bash "$SETUP_SH" --yes 2>/dev/null) || true
 }
 
 run_setup_interactive() {
     local project_dir="$1"
     local input_text="$2"
-    (cd "$project_dir" && printf '%s' "$input_text" | CODEX_SDLC_DISABLE_REASONING=1 bash "$SETUP_SH" 2>&1) || true
+    (cd "$project_dir" && printf '%s' "$input_text" | CODEX_SDLC_DISABLE_REASONING=1 CODEX_HOME="$project_dir/.codex-home" bash "$SETUP_SH" 2>&1) || true
 }
 
 run_setup_args() {
     local project_dir="$1"
     shift
-    (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 bash "$SETUP_SH" "$@" 2>&1)
+    (cd "$project_dir" && CODEX_SDLC_DISABLE_REASONING=1 CODEX_HOME="$project_dir/.codex-home" bash "$SETUP_SH" "$@" 2>&1)
 }
 
 # Helper: run check.sh in a project dir
@@ -1127,7 +1127,7 @@ test_setup_hashes_manifest_without_shell_hash_tools() {
 
     local output status hash valid=true
     set +e
-    output=$(cd "$ws" && CODEX_SDLC_DISABLE_REASONING=1 PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
+    output=$(cd "$ws" && CODEX_SDLC_DISABLE_REASONING=1 CODEX_HOME="$ws/.codex-home" PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
     status=$?
     set -e
 
@@ -1226,7 +1226,7 @@ EOF
     chmod +x "$fakebin/codex"
 
     local output valid=true
-    output=$(cd "$ws" && printf '\n\n\n\n\n' | FAKE_CODEX_ARGS_FILE="$args_file" PATH="$fakebin:$PATH" bash "$SETUP_SH" 2>&1)
+    output=$(cd "$ws" && printf '\n\n\n\n\n' | CODEX_HOME="$ws/.codex-home" FAKE_CODEX_ARGS_FILE="$args_file" PATH="$fakebin:$PATH" bash "$SETUP_SH" 2>&1)
 
     grep -qx 'exec' "$args_file" 2>/dev/null || valid=false
     grep -qx -- '-s' "$args_file" 2>/dev/null || valid=false
@@ -1295,7 +1295,7 @@ EOF
 
     local output status valid=true
     set +e
-    output=$(cd "$ws" && PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
+    output=$(cd "$ws" && CODEX_HOME="$ws/.codex-home" PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
     status=$?
     set -e
 
