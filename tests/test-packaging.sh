@@ -75,7 +75,7 @@ test_installer_smoke_test_clean_project() {
     fi
 }
 
-test_installer_scaffolds_repo_scope_skills() {
+test_installer_scaffolds_only_default_repo_scope_sdlc_skill() {
     local adapter_clone
     local target_repo
     adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
@@ -89,17 +89,17 @@ test_installer_scaffolds_repo_scope_skills() {
     )
 
     local has_sdlc_skill=true
-    local has_adlc_skill=true
+    local avoids_adlc_skill=true
 
     [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || has_sdlc_skill=false
-    [ -f "$target_repo/.agents/skills/adlc/SKILL.md" ] || has_adlc_skill=false
+    [ -e "$target_repo/.agents/skills/adlc/SKILL.md" ] && avoids_adlc_skill=false
 
     rm -rf "$adapter_clone" "$target_repo"
 
-    if [ "$has_sdlc_skill" = "true" ] && [ "$has_adlc_skill" = "true" ]; then
-        pass "Installer scaffolds repo-scope Codex sdlc and adlc skills"
+    if [ "$has_sdlc_skill" = "true" ] && [ "$avoids_adlc_skill" = "true" ]; then
+        pass "Installer scaffolds only the default repo-scope Codex sdlc skill"
     else
-        fail "Installer did not scaffold repo-scope Codex sdlc/adlc skills"
+        fail "Installer should scaffold sdlc only by default, not adlc"
     fi
 }
 
@@ -325,16 +325,22 @@ test_readme_explains_install_side_effects() {
     local mentions_config=true
     local mentions_hooks=true
     local mentions_agents=true
+    local mentions_sdlc_skill=true
+    local avoids_default_adlc_skill=true
 
     grep -q '^### What `install.sh` Changes$' "$README" || has_heading=false
     grep -q '\.codex/config\.toml' "$README" || mentions_config=false
     grep -q '\.codex/hooks\.json' "$README" || mentions_hooks=false
     grep -q 'AGENTS\.md' "$README" || mentions_agents=false
+    grep -q '\.agents/skills/sdlc/SKILL.md' "$README" || mentions_sdlc_skill=false
+    grep -q '\.agents/skills/adlc/SKILL.md' "$README" && avoids_default_adlc_skill=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$mentions_config" = "true" ] &&
        [ "$mentions_hooks" = "true" ] &&
-       [ "$mentions_agents" = "true" ]; then
+       [ "$mentions_agents" = "true" ] &&
+       [ "$mentions_sdlc_skill" = "true" ] &&
+       [ "$avoids_default_adlc_skill" = "true" ]; then
         pass "README explains what install.sh changes in a target repo"
     else
         fail "README does not describe install.sh side effects clearly enough"
@@ -626,7 +632,7 @@ test_consumer_bug_report_template_exists() {
 }
 
 test_installer_smoke_test_clean_project
-test_installer_scaffolds_repo_scope_skills
+test_installer_scaffolds_only_default_repo_scope_sdlc_skill
 test_installer_uses_canonical_sdlc_skill_name
 test_installer_writes_default_model_profile
 test_installer_recommends_full_auto_and_restart_resume

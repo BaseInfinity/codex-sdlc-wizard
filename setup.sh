@@ -189,7 +189,7 @@ verify_installation() {
 
     echo ""
     echo "Verifying installation..."
-    for f in AGENTS.md SDLC.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .codex-sdlc/model-profile.json .agents/skills/sdlc/SKILL.md .agents/skills/adlc/SKILL.md; do
+    for f in AGENTS.md SDLC.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .codex-sdlc/model-profile.json .agents/skills/sdlc/SKILL.md; do
         if [ ! -f "$f" ]; then
             echo "  MISSING: $f"
             errors=$((errors + 1))
