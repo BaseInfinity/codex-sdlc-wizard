@@ -245,10 +245,10 @@ The workflow uses GitHub OIDC trusted publishing, validates that the tag matches
 3. Creates or merges `.codex/config.toml` with `codex_hooks = true`
 4. Installs `.codex/hooks.json` (backs up existing)
 5. Copies universal Node hook entrypoints plus legacy shell/PowerShell helpers to `.codex/hooks/`
-6. Installs repo-scoped skills at `.agents/skills/sdlc/SKILL.md` and `.agents/skills/adlc/SKILL.md`
+6. Installs the repo-scoped SDLC skill at `.agents/skills/sdlc/SKILL.md`
 7. Installs global helper skills under `~/.codex/skills` without installing a global `sdlc` duplicate
 
-In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/*`, and the repo-scoped skills. It also writes `.codex-sdlc/model-profile.json` so the chosen profile is explicit. Existing `.codex/config.toml` files are merged: model keys and `[features].codex_hooks` are patched, while MCP, sandbox, approval, and other custom settings are preserved. If an older wizard-managed global `sdlc` skill is detected, update/setup backs it up and removes it; user-owned global `sdlc` skills are preserved.
+In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/*`, and the repo-scoped SDLC skill. It also writes `.codex-sdlc/model-profile.json` so the chosen profile is explicit. Existing `.codex/config.toml` files are merged: model keys and `[features].codex_hooks` are patched, while MCP, sandbox, approval, and other custom settings are preserved. If an older wizard-managed global `sdlc` skill is detected, update/setup backs it up and removes it; user-owned global `sdlc` skills are preserved.
 
 ### Requirements
 

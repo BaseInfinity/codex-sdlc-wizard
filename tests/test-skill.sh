@@ -176,17 +176,17 @@ test_repo_contract_keeps_this_repo_on_maximum() {
     fi
 }
 
-test_repo_scoped_skills_exist() {
+test_default_repo_scoped_skill_surface_is_sdlc_only() {
     local has_sdlc=true
-    local has_adlc=true
+    local avoids_adlc=true
 
     [ -f "$REPO_SDLC_SKILL" ] || has_sdlc=false
-    [ -f "$REPO_ADLC_SKILL" ] || has_adlc=false
+    [ -e "$REPO_ADLC_SKILL" ] && avoids_adlc=false
 
-    if [ "$has_sdlc" = "true" ] && [ "$has_adlc" = "true" ]; then
-        pass "Repo-scoped Codex sdlc/adlc skills exist under .agents/skills"
+    if [ "$has_sdlc" = "true" ] && [ "$avoids_adlc" = "true" ]; then
+        pass "Default repo-scoped Codex skill surface is sdlc only"
     else
-        fail "Repo-scoped Codex sdlc/adlc skills are missing"
+        fail "Default repo-scoped Codex skill surface should not include adlc"
     fi
 }
 
@@ -250,7 +250,7 @@ test_readme_recommends_full_auto
 test_skill_recommends_full_auto_after_install
 test_skill_documents_model_profiles
 test_repo_contract_keeps_this_repo_on_maximum
-test_repo_scoped_skills_exist
+test_default_repo_scoped_skill_surface_is_sdlc_only
 test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 

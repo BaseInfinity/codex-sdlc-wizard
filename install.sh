@@ -83,8 +83,7 @@ for required in \
   ".codex/hooks/session-start.cjs" \
   ".codex/hooks/git-guard.ps1" \
   ".codex/hooks/session-start.ps1" \
-  ".agents/skills/sdlc/SKILL.md" \
-  ".agents/skills/adlc/SKILL.md"; do
+  ".agents/skills/sdlc/SKILL.md"; do
   require_bundle_file "$SCRIPT_DIR/$required" "$required"
 done
 
@@ -253,7 +252,6 @@ fi
 echo "Installed shell hook scripts"
 
 install_repo_skill sdlc
-install_repo_skill adlc
 write_model_profile
 
 echo ""

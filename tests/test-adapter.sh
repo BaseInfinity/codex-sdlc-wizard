@@ -322,6 +322,9 @@ test_install_creates_skill() {
     if [ ! -f "$tmpdir/.agents/skills/sdlc/SKILL.md" ]; then
         all_present=false
     fi
+    if [ -e "$tmpdir/.agents/skills/adlc/SKILL.md" ]; then
+        all_present=false
+    fi
     if [ -d "$tmpdir/.codex-home/skills/codex-sdlc" ]; then
         all_present=false
     fi

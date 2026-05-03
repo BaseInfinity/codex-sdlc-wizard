@@ -588,6 +588,8 @@ test_manifest_created() {
             valid=false
         fi
     fi
+    [ -f "$ws/.agents/skills/sdlc/SKILL.md" ] || valid=false
+    [ ! -e "$ws/.agents/skills/adlc/SKILL.md" ] || valid=false
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
