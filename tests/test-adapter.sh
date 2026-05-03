@@ -615,6 +615,28 @@ test_setup_docs_include_m365_auth_lane_guidance() {
     fi
 }
 
+test_setup_docs_include_task_routing_gate() {
+    local skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local loop="$REPO_DIR/SDLC-LOOP.md"
+    local sdlc_skill="$REPO_DIR/skills/sdlc/SKILL.md"
+
+    if grep -q 'Task routing gate' "$loop" \
+        && grep -q 'Identify the execution lane before giving instructions' "$loop" \
+        && grep -q 'Microsoft browser sign-in' "$loop" \
+        && grep -q 'developer program qualification' "$loop" \
+        && grep -q 'Desktop/computer-use' "$loop" \
+        && grep -q 'credentials, MFA, tenant consent' "$loop" \
+        && grep -q 'Task routing gate' "$skill" \
+        && grep -q 'before giving CLI or browser instructions' "$skill" \
+        && grep -q 'Microsoft browser sign-in' "$skill" \
+        && grep -q 'Task routing gate' "$sdlc_skill" \
+        && grep -q 'before giving execution steps' "$sdlc_skill"; then
+        pass "setup docs include task-routing gate for Desktop/computer-use boundaries"
+    else
+        fail "setup docs are missing the task-routing gate for Desktop/computer-use boundaries"
+    fi
+}
+
 test_sdlc_skill_has_docsync_learning_and_merge_guard() {
     local skill="$REPO_DIR/skills/sdlc/SKILL.md"
 
@@ -945,6 +967,7 @@ test_setup_and_update_skills_stop_before_product_remediation
 test_feedback_skill_has_privacy_prompt_and_dedupe
 test_setup_docs_include_codex_desktop_handoff
 test_setup_docs_include_m365_auth_lane_guidance
+test_setup_docs_include_task_routing_gate
 test_sdlc_skill_has_docsync_learning_and_merge_guard
 test_repo_defaults_to_xhigh_reasoning
 test_package_has_npm_release_surface
