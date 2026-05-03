@@ -20,6 +20,13 @@ Generic npm entrypoint examples: `npx codex-sdlc-wizard`, `npx codex-sdlc-wizard
 
 `update` repairs repo artifacts using the package version you invoked; it does not self-update the npm package. To consume the newest release and apply its repo-side updates in one command, run `npx codex-sdlc-wizard@latest update`.
 
+Package upgrade vs repo repair:
+
+- Package upgrade: run `npx codex-sdlc-wizard@latest update` to consume the newest published package.
+- Repo repair/sync inside Codex: run `$update-wizard` to inspect and repair local SDLC artifacts using the skill/package already loaded in the active Codex session.
+
+After either path changes skills, hooks, hook config, or helper scripts, restart/reopen Codex so the active session reloads them.
+
 Useful follow-ups after install:
 
 ```bash

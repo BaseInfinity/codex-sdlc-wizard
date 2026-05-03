@@ -460,6 +460,26 @@ test_update_skill_has_idempotent_update_contract() {
     fi
 }
 
+test_update_skill_frontloads_package_upgrade_boundary() {
+    local skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local readme="$REPO_DIR/README.md"
+
+    if grep -Fq 'Package upgrade preflight' "$skill" \
+        && grep -Fq 'Before scanning repo drift' "$skill" \
+        && grep -Fq 'Package upgrade means consuming the newest published' "$skill" \
+        && grep -Fq 'Repo repair/sync means inspecting and repairing local SDLC artifacts' "$skill" \
+        && grep -Fq 'does not self-update the active Codex session' "$skill" \
+        && grep -Fq 'npm view codex-sdlc-wizard version' "$skill" \
+        && grep -Fq 'npx codex-sdlc-wizard@latest update' "$skill" \
+        && grep -Fq 'restart/reopen Codex' "$skill" \
+        && grep -Fq 'Package upgrade vs repo repair' "$readme" \
+        && grep -Fq 'Repo repair/sync inside Codex' "$readme"; then
+        pass "update-wizard frontloads package upgrade vs repo repair guidance"
+    else
+        fail "update-wizard does not frontload package upgrade vs repo repair guidance"
+    fi
+}
+
 test_setup_and_update_skills_stop_before_product_remediation() {
     local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
     local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
@@ -878,6 +898,7 @@ test_install_backs_up_hooks_json
 test_agents_md_size
 test_setup_skill_has_confidence_setup_contract
 test_update_skill_has_idempotent_update_contract
+test_update_skill_frontloads_package_upgrade_boundary
 test_setup_and_update_skills_stop_before_product_remediation
 test_feedback_skill_has_privacy_prompt_and_dedupe
 test_setup_docs_include_codex_desktop_handoff
