@@ -82,6 +82,31 @@ This adapter tracks the upstream [SDLC Wizard](https://github.com/BaseInfinity/a
 | SDLC baseline | repo docs + installed skills | **Hard/Soft mix** |
 | Session init | SessionStart hook | Warns if AGENTS.md is missing |
 
+### Proof-Aware Git Gate
+
+The git gate is proof-aware: `git commit` and `git push` are still hard manual
+checkpoints, but they can proceed when a fresh SDLC proof stamp exists.
+
+After running the required checks and self-review, stamp proof:
+
+```bash
+node .codex/hooks/git-guard.cjs prove --reviewed
+```
+
+If the repo has no detected commands in `.codex-sdlc/manifest.json`, provide the
+proof command explicitly:
+
+```bash
+node .codex/hooks/git-guard.cjs prove --reviewed --check "npm test"
+```
+
+The stamp lives under `.git/codex-sdlc/proof.json`, expires after four hours,
+and is tied to the current repo content, so stale proof blocks again instead of
+dirtying the worktree.
+For safety, guarded `git commit` / `git push` commands that change repo context
+with `cd`, `git -C`, `--git-dir`, `--work-tree`, `GIT_DIR`, or `GIT_WORK_TREE`
+must be run from the target repo root and stamped there.
+
 ## Model Profiles
 
 The wizard supports two wizard-owned model profiles:

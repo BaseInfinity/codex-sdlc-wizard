@@ -95,6 +95,10 @@ payload_for_command() {
     COMMAND_TEXT="$1" node -e 'process.stdout.write(JSON.stringify({ tool_input: { command: process.env.COMMAND_TEXT } }));'
 }
 
+payload_for_command_with_workdir() {
+    COMMAND_TEXT="$1" WORKDIR_TEXT="$2" node -e 'process.stdout.write(JSON.stringify({ tool_input: { command: process.env.COMMAND_TEXT, workdir: process.env.WORKDIR_TEXT } }));'
+}
+
 deep_nested_eval_command() {
     COMMAND_TEXT="git push origin main" node -e '
         let command = process.env.COMMAND_TEXT;
@@ -141,6 +145,309 @@ test_pretool_blocks_push() {
         pass "pre-tool hook blocks git push"
     else
         fail "pre-tool hook did not block git push (output: $output)"
+    fi
+}
+
+test_universal_pretool_allows_commit_with_fresh_proof() {
+    local ws
+    local output
+
+    ws=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$ws" || exit 1
+        git init -q
+        printf '%s\n' "proof-target" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$ws"
+
+    if [ -z "$output" ]; then
+        pass "universal pre-tool hook allows git commit with fresh SDLC proof"
+    else
+        fail "universal pre-tool hook blocked git commit despite fresh proof (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_stale_proof() {
+    local ws
+    local output
+
+    ws=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$ws" || exit 1
+        git init -q
+        printf '%s\n' "proof-target" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+        printf '%s\n' "changed-after-proof" >> app.txt
+    )
+
+    output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'proof is stale'; then
+        pass "universal pre-tool hook blocks git commit when SDLC proof is stale"
+    else
+        fail "universal pre-tool hook did not report stale proof (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_cross_repo_proof_reuse() {
+    local trusted_ws
+    local target_ws
+    local output
+
+    trusted_ws=$(mktemp -d)
+    target_ws=$(mktemp -d)
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        printf '%s\n' "trusted-proof" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$target_ws" || exit 1
+        git init -q
+        printf '%s\n' "target-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C $target_ws commit -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$trusted_ws" "$target_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks cross-repo SDLC proof reuse"
+    else
+        fail "universal pre-tool hook allowed cross-repo proof reuse (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_cd_proof_reuse() {
+    local trusted_ws
+    local target_ws
+    local output
+
+    trusted_ws=$(mktemp -d)
+    target_ws=$(mktemp -d)
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        printf '%s\n' "trusted-proof" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$target_ws" || exit 1
+        git init -q
+        printf '%s\n' "target-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "cd $target_ws && git commit -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$trusted_ws" "$target_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks cd-based SDLC proof reuse"
+    else
+        fail "universal pre-tool hook allowed cd-based proof reuse (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_git_env_proof_reuse() {
+    local trusted_ws
+    local target_ws
+    local output
+
+    trusted_ws=$(mktemp -d)
+    target_ws=$(mktemp -d)
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        printf '%s\n' "trusted-proof" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$target_ws" || exit 1
+        git init -q
+        printf '%s\n' "target-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "GIT_DIR=$target_ws/.git GIT_WORK_TREE=$target_ws git commit -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$trusted_ws" "$target_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks GIT_DIR/GIT_WORK_TREE SDLC proof reuse"
+    else
+        fail "universal pre-tool hook allowed GIT_DIR/GIT_WORK_TREE proof reuse (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_exported_git_env_proof_reuse() {
+    local trusted_ws
+    local target_ws
+    local output
+
+    trusted_ws=$(mktemp -d)
+    target_ws=$(mktemp -d)
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        printf '%s\n' "trusted-proof" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$target_ws" || exit 1
+        git init -q
+        printf '%s\n' "target-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "export GIT_DIR=$target_ws/.git GIT_WORK_TREE=$target_ws; git commit -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$trusted_ws" "$target_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks exported GIT_DIR/GIT_WORK_TREE SDLC proof reuse"
+    else
+        fail "universal pre-tool hook allowed exported GIT_DIR/GIT_WORK_TREE proof reuse (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_auto_exported_git_env_proof_reuse() {
+    local trusted_ws
+    local target_ws
+    local output
+
+    trusted_ws=$(mktemp -d)
+    target_ws=$(mktemp -d)
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        printf '%s\n' "trusted-proof" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$target_ws" || exit 1
+        git init -q
+        printf '%s\n' "target-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "set -a; GIT_DIR=$target_ws/.git GIT_WORK_TREE=$target_ws; git commit -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$trusted_ws" "$target_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks auto-exported GIT_DIR/GIT_WORK_TREE SDLC proof reuse"
+    else
+        fail "universal pre-tool hook allowed auto-exported GIT_DIR/GIT_WORK_TREE proof reuse (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_workdir_proof_reuse() {
+    local trusted_ws
+    local target_ws
+    local output
+
+    trusted_ws=$(mktemp -d)
+    target_ws=$(mktemp -d)
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        printf '%s\n' "trusted-proof" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$target_ws" || exit 1
+        git init -q
+        printf '%s\n' "target-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command_with_workdir "git commit -m test" "$target_ws")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$trusted_ws" "$target_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'proof is missing'; then
+        pass "universal pre-tool hook checks proof against Bash workdir"
+    else
+        fail "universal pre-tool hook reused process-cwd proof for Bash workdir (output: $output)"
+    fi
+}
+
+test_universal_pretool_allows_workdir_with_fresh_proof() {
+    local trusted_ws
+    local target_ws
+    local output
+
+    trusted_ws=$(mktemp -d)
+    target_ws=$(mktemp -d)
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+    )
+
+    (
+        cd "$target_ws" || exit 1
+        git init -q
+        printf '%s\n' "target-proof" > app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command_with_workdir "git commit -m test" "$target_ws")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$trusted_ws" "$target_ws"
+
+    if [ -z "$output" ]; then
+        pass "universal pre-tool hook allows Bash workdir with fresh SDLC proof"
+    else
+        fail "universal pre-tool hook blocked Bash workdir despite fresh proof (output: $output)"
     fi
 }
 
@@ -1964,6 +2271,18 @@ test_e2e_requires_explicit_token_opt_in() {
     fi
 }
 
+test_docs_document_proof_stamp_gate() {
+    if grep -q 'git-guard.cjs prove --reviewed' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q 'git-guard.cjs prove --reviewed' "$REPO_DIR/README.md" \
+        && grep -q 'fresh SDLC proof' "$REPO_DIR/README.md" \
+        && grep -q 'target repo root' "$REPO_DIR/README.md" \
+        && grep -q 'target repo root' "$REPO_DIR/PROVE-IT.md"; then
+        pass "docs document the proof-stamp git gate"
+    else
+        fail "docs should explain the proof-stamp git gate"
+    fi
+}
+
 test_pretool_blocks_commit
 test_pretool_blocks_push
 test_pretool_blocks_git_after_shell_prefixes
@@ -1975,6 +2294,15 @@ test_pretool_blocks_deep_wrapper_recursion
 test_session_warns_missing
 test_session_silent_when_present
 test_universal_pretool_blocks_commit
+test_universal_pretool_allows_commit_with_fresh_proof
+test_universal_pretool_blocks_stale_proof
+test_universal_pretool_blocks_cross_repo_proof_reuse
+test_universal_pretool_blocks_cd_proof_reuse
+test_universal_pretool_blocks_git_env_proof_reuse
+test_universal_pretool_blocks_exported_git_env_proof_reuse
+test_universal_pretool_blocks_auto_exported_git_env_proof_reuse
+test_universal_pretool_blocks_workdir_proof_reuse
+test_universal_pretool_allows_workdir_with_fresh_proof
 test_universal_pretool_blocks_git_after_shell_prefixes
 test_universal_pretool_allows_non_git_command_mentions
 test_universal_pretool_does_not_crash_on_non_git_prototype_words
@@ -2014,6 +2342,7 @@ test_package_cli_runs_check_command
 test_package_cli_runs_update_command
 test_readme_mentions_npx_entrypoint
 test_e2e_requires_explicit_token_opt_in
+test_docs_document_proof_stamp_gate
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
