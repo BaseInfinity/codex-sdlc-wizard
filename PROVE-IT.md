@@ -47,3 +47,23 @@ Do not commit until you can answer:
 - The passing state is real
 - The proof is recent
 - The diff matches the proof
+
+After the checks and self-review are complete, stamp local proof for the git
+gate:
+
+```bash
+node .codex/hooks/git-guard.cjs prove --reviewed
+```
+
+If setup has not detected proof commands yet, pass them explicitly:
+
+```bash
+node .codex/hooks/git-guard.cjs prove --reviewed --check "npm test"
+```
+
+The stamp is stored under `.git/codex-sdlc/proof.json`, expires after four
+hours, and is tied to the current repo content so it does not dirty the
+worktree.
+Run guarded `git commit` / `git push` commands from the target repo root; repo
+context overrides such as `cd`, `git -C`, `--git-dir`, `--work-tree`, `GIT_DIR`,
+and `GIT_WORK_TREE` must be stamped in that target repo.

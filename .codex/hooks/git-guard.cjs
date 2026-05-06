@@ -1,5 +1,17 @@
 #!/usr/bin/env node
+const childProcess = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
+const path = require("node:path");
+
+const PROOF_TTL_MS = 4 * 60 * 60 * 1000;
+const PROOF_RELATIVE_PATH = "codex-sdlc/proof.json";
+const WORKTREE_PROOF_PATH = ".codex-sdlc/proof.json";
+const GIT_REPOSITORY_ENV_NAMES = new Set(["GIT_COMMON_DIR", "GIT_DIR", "GIT_WORK_TREE"]);
+
+if (process.argv[2] === "prove") {
+  process.exit(runProofCli(process.argv.slice(3)));
+}
 
 const input = fs.readFileSync(0, "utf8");
 let payload = {};
@@ -13,12 +25,347 @@ if (input.trim() !== "") {
 }
 
 const command = String(payload?.tool_input?.command ?? payload?.command ?? "");
+const commandCwd = commandWorkingDirectory(payload);
 const MAX_RECURSION_DEPTH = 20;
 const SHELL_NAMES = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"]);
 const WINDOWS_SHELL_NAMES = new Set(["cmd", "powershell", "pwsh"]);
 
 function block(reason) {
   process.stdout.write(JSON.stringify({ decision: "block", reason }));
+}
+
+function commandWorkingDirectory(inputPayload) {
+  const value = inputPayload?.tool_input?.workdir
+    ?? inputPayload?.tool_input?.cwd
+    ?? inputPayload?.tool_input?.working_dir
+    ?? inputPayload?.workdir
+    ?? inputPayload?.cwd
+    ?? inputPayload?.working_dir;
+
+  if (typeof value !== "string" || value.trim() === "") {
+    return process.cwd();
+  }
+
+  return path.resolve(process.cwd(), value);
+}
+
+function runGit(cwd, args) {
+  const result = childProcess.spawnSync("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  return {
+    ok: result.status === 0,
+    status: result.status,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+  };
+}
+
+function repositoryRoot(cwd = process.cwd()) {
+  const result = runGit(cwd, ["rev-parse", "--show-toplevel"]);
+  if (!result.ok) {
+    return "";
+  }
+
+  return result.stdout.trim();
+}
+
+function proofPath(root) {
+  const result = runGit(root, ["rev-parse", "--git-path", PROOF_RELATIVE_PATH]);
+  if (result.ok && result.stdout.trim() !== "") {
+    return path.resolve(root, result.stdout.trim());
+  }
+
+  return path.join(root, ".git", PROOF_RELATIVE_PATH);
+}
+
+function safeProofCommand(value) {
+  const command = String(value ?? "").trim();
+  const missingCommand = command === ""
+    || /^none$/i.test(command)
+    || /^n\/a$/i.test(command)
+    || /^unknown$/i.test(command)
+    || /^<none>$/i.test(command);
+
+  if (missingCommand) {
+    return "";
+  }
+
+  return command;
+}
+
+function configuredProofCommands(root) {
+  const manifestPath = path.join(root, ".codex-sdlc", "manifest.json");
+  if (!fs.existsSync(manifestPath)) {
+    return [];
+  }
+
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    const values = { ...(manifest.scan || {}), ...(manifest.resolved_values || {}) };
+    return [
+      safeProofCommand(values.test_command),
+      safeProofCommand(values.lint_command),
+      safeProofCommand(values.typecheck_command),
+      safeProofCommand(values.build_command),
+    ].filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function proofHelp() {
+  return [
+    "Usage: node .codex/hooks/git-guard.cjs prove [--reviewed] [--check <command>...]",
+    "",
+    "Runs proof checks and writes a local SDLC proof stamp for git commit/push gates.",
+    "When --check is omitted, commands are read from .codex-sdlc/manifest.json.",
+    "Use --reviewed only after self-review is complete.",
+  ].join("\n");
+}
+
+function parseProofArgs(args) {
+  const checks = [];
+  let reviewed = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--help" || arg === "-h") {
+      return { help: true, checks, reviewed };
+    }
+
+    if (arg === "--reviewed") {
+      reviewed = true;
+      continue;
+    }
+
+    if (arg === "--check") {
+      const command = safeProofCommand(args[index + 1]);
+      if (command === "") {
+        return { error: "Missing value for --check" };
+      }
+      checks.push(command);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--check=")) {
+      const command = safeProofCommand(arg.slice("--check=".length));
+      if (command === "") {
+        return { error: "Missing value for --check" };
+      }
+      checks.push(command);
+      continue;
+    }
+
+    return { error: `Unknown prove argument: ${arg}` };
+  }
+
+  return { checks, reviewed };
+}
+
+function relativeFingerprintPath(root, relativePath) {
+  const absolutePath = path.resolve(root, relativePath);
+  const rootWithSeparator = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+
+  if (absolutePath !== root && !absolutePath.startsWith(rootWithSeparator)) {
+    return "";
+  }
+
+  return absolutePath;
+}
+
+function fileFingerprintEntry(root, relativePath) {
+  if (relativePath === WORKTREE_PROOF_PATH) {
+    return "";
+  }
+
+  const absolutePath = relativeFingerprintPath(root, relativePath);
+  if (absolutePath === "") {
+    return "";
+  }
+
+  let stat;
+  try {
+    stat = fs.lstatSync(absolutePath);
+  } catch {
+    return `missing ${relativePath}\n`;
+  }
+
+  if (stat.isSymbolicLink()) {
+    return `symlink ${relativePath}\0${fs.readlinkSync(absolutePath)}\n`;
+  }
+
+  if (!stat.isFile()) {
+    return "";
+  }
+
+  const mode = stat.mode & 0o777;
+  const digest = crypto.createHash("sha256").update(fs.readFileSync(absolutePath)).digest("hex");
+  return `file ${mode.toString(8)} ${relativePath}\0${digest}\n`;
+}
+
+function workspaceFingerprint(root) {
+  const filesResult = runGit(root, ["ls-files", "-co", "--exclude-standard", "-z"]);
+  if (!filesResult.ok) {
+    return { ok: false, reason: "git file listing failed" };
+  }
+
+  const files = filesResult.stdout.split("\0").filter(Boolean).sort();
+  const hash = crypto.createHash("sha256");
+  let fileCount = 0;
+
+  for (const relativePath of files) {
+    const entry = fileFingerprintEntry(root, relativePath);
+    if (entry === "") {
+      continue;
+    }
+    fileCount += 1;
+    hash.update(entry);
+  }
+
+  return {
+    ok: true,
+    fileCount,
+    hash: `sha256:${hash.digest("hex")}`,
+  };
+}
+
+function writeProof(root, checks, reviewed) {
+  const fingerprint = workspaceFingerprint(root);
+  if (!fingerprint.ok) {
+    throw new Error(fingerprint.reason);
+  }
+
+  const now = new Date();
+  const head = runGit(root, ["rev-parse", "HEAD"]);
+  const proof = {
+    schema_version: 1,
+    status: "pass",
+    created_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + PROOF_TTL_MS).toISOString(),
+    reviewed,
+    workspace_fingerprint: fingerprint.hash,
+    file_count: fingerprint.fileCount,
+    commands: checks,
+    git: {
+      head: head.ok ? head.stdout.trim() : "",
+    },
+  };
+  const target = proofPath(root);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, `${JSON.stringify(proof, null, 2)}\n`);
+  return target;
+}
+
+function runProofCli(args) {
+  const parsed = parseProofArgs(args);
+  if (parsed.help) {
+    process.stdout.write(`${proofHelp()}\n`);
+    return 0;
+  }
+  if (parsed.error) {
+    process.stderr.write(`${parsed.error}\n${proofHelp()}\n`);
+    return 2;
+  }
+
+  const root = repositoryRoot();
+  if (root === "") {
+    process.stderr.write("Cannot write SDLC proof outside a git worktree.\n");
+    return 2;
+  }
+
+  const checks = parsed.checks.length > 0 ? parsed.checks : configuredProofCommands(root);
+  if (checks.length === 0) {
+    process.stderr.write("No proof checks configured. Pass --check <command> or run setup first.\n");
+    return 2;
+  }
+
+  for (const check of checks) {
+    process.stdout.write(`Running SDLC proof check: ${check}\n`);
+    const result = childProcess.spawnSync(check, {
+      cwd: root,
+      shell: true,
+      stdio: "inherit",
+    });
+
+    if (result.status !== 0) {
+      process.stderr.write(`SDLC proof check failed: ${check}\n`);
+      return typeof result.status === "number" ? result.status : 1;
+    }
+  }
+
+  try {
+    const target = writeProof(root, checks, parsed.reviewed);
+    process.stdout.write(`Wrote SDLC proof: ${target}\n`);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`Failed to write SDLC proof: ${error.message}\n`);
+    return 2;
+  }
+}
+
+function proofCommandHint(root) {
+  const checks = configuredProofCommands(root);
+  if (checks.length === 0) {
+    return "Run node .codex/hooks/git-guard.cjs prove --reviewed --check \"<full-suite command>\".";
+  }
+
+  return "Run node .codex/hooks/git-guard.cjs prove --reviewed.";
+}
+
+function sdlcProofStatus(cwd = process.cwd()) {
+  const root = repositoryRoot(cwd);
+  if (root === "") {
+    return {
+      ok: false,
+      reason: "no git worktree was detected",
+      hint: "Run this from the repo root.",
+    };
+  }
+
+  const target = proofPath(root);
+  if (!fs.existsSync(target)) {
+    return { ok: false, reason: "proof is missing", hint: proofCommandHint(root) };
+  }
+
+  let proof;
+  try {
+    proof = JSON.parse(fs.readFileSync(target, "utf8"));
+  } catch {
+    return { ok: false, reason: "proof is invalid", hint: proofCommandHint(root) };
+  }
+
+  if (proof.status !== "pass") {
+    return { ok: false, reason: "proof did not pass", hint: proofCommandHint(root) };
+  }
+
+  if (proof.reviewed !== true) {
+    return {
+      ok: false,
+      reason: "proof is missing self-review",
+      hint: "Re-run proof with --reviewed after self-review.",
+    };
+  }
+
+  const expiresAt = Date.parse(String(proof.expires_at || ""));
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    return { ok: false, reason: "proof is expired", hint: proofCommandHint(root) };
+  }
+
+  const fingerprint = workspaceFingerprint(root);
+  if (!fingerprint.ok) {
+    return { ok: false, reason: fingerprint.reason, hint: proofCommandHint(root) };
+  }
+
+  if (proof.workspace_fingerprint !== fingerprint.hash) {
+    return { ok: false, reason: "proof is stale", hint: proofCommandHint(root) };
+  }
+
+  return { ok: true, reason: "fresh proof is present", hint: "" };
 }
 
 function isRedirectionOperatorPrefix(value) {
@@ -3270,6 +3617,320 @@ function gitSubcommandDetails(words, startIndex) {
   return { subcommand: "", index: -1 };
 }
 
+function gitRepositoryOverrideOption(words, startIndex) {
+  const optionsWithValues = new Set(["-c", "--exec-path", "--namespace", "--config-env"]);
+
+  for (let index = startIndex; index < words.length; index += 1) {
+    const word = words[index];
+    const nextIndex = skipRedirection(words, index);
+
+    if (nextIndex !== index) {
+      index = nextIndex - 1;
+      continue;
+    }
+
+    if (word === "--") {
+      return "";
+    }
+
+    if (isGitHelpOption(word)) {
+      return "";
+    }
+
+    if (word === "-C" || (word.startsWith("-C") && word !== "-c")) {
+      return "-C";
+    }
+
+    if (word === "--git-dir" || word === "--work-tree") {
+      return word;
+    }
+
+    if (/^--(?:git-dir|work-tree)=/.test(word)) {
+      return word.split("=", 1)[0];
+    }
+
+    if (optionsWithValues.has(word)) {
+      index = indexAfterOptionOperand(words, index + 1) - 1;
+      continue;
+    }
+
+    if (/^--(?:exec-path|namespace|config-env)=/.test(word)) {
+      continue;
+    }
+
+    if (word.startsWith("-")) {
+      continue;
+    }
+
+    return "";
+  }
+
+  return "";
+}
+
+function gitEnvironmentRepositoryOverrideOption(words, limitIndex) {
+  for (let index = 0; index < Math.min(limitIndex, words.length); index += 1) {
+    const nextIndex = skipRedirection(words, index);
+
+    if (nextIndex !== index) {
+      index = nextIndex - 1;
+      continue;
+    }
+
+    const match = String(words[index]).match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
+
+    if (match && GIT_REPOSITORY_ENV_NAMES.has(match[1])) {
+      return match[1];
+    }
+  }
+
+  return "";
+}
+
+function gitRepositoryEnvName(word) {
+  const match = String(word ?? "").match(/^([A-Za-z_][A-Za-z0-9_]*)(?:=.*)?$/);
+
+  if (match && GIT_REPOSITORY_ENV_NAMES.has(match[1])) {
+    return match[1];
+  }
+
+  return "";
+}
+
+function shellExportsGitRepositoryEnv(segment) {
+  const executableIndex = firstExecutableIndex(segment);
+  const commandName = executableIndex >= 0 ? executableName(segment[executableIndex]) : "";
+
+  if (commandName !== "declare" && commandName !== "export" && commandName !== "typeset") {
+    return false;
+  }
+
+  for (let index = executableIndex + 1; index < segment.length; index += 1) {
+    const nextIndex = skipRedirection(segment, index);
+
+    if (nextIndex !== index) {
+      index = nextIndex - 1;
+      continue;
+    }
+
+    const word = segment[index];
+
+    if (word === "--") {
+      continue;
+    }
+
+    if (word.startsWith("-") || word.startsWith("+")) {
+      continue;
+    }
+
+    if (gitRepositoryEnvName(word) !== "") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function segmentSetsGitRepositoryEnv(segment) {
+  for (let index = 0; index < segment.length; index += 1) {
+    const nextIndex = skipRedirection(segment, index);
+
+    if (nextIndex !== index) {
+      index = nextIndex - 1;
+      continue;
+    }
+
+    const word = segment[index];
+
+    if (!isAssignment(word)) {
+      return false;
+    }
+
+    if (gitRepositoryEnvName(word) !== "") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function commandHasGitRepositoryOverride(commandText, depth = 0) {
+  if (depth > MAX_RECURSION_DEPTH) {
+    return false;
+  }
+
+  for (const payload of shellFunctionCallPayloads(commandText)) {
+    if (commandHasGitRepositoryOverride(payload, depth + 1)) {
+      return true;
+    }
+  }
+
+  for (const segment of commandSegments(shellTokens(commandText))) {
+    for (const payload of [evalPayload(segment), shellCommandPayload(segment), windowsShellCommandPayload(segment)]) {
+      if (payload !== null && commandHasGitRepositoryOverride(payload, depth + 1)) {
+        return true;
+      }
+    }
+  }
+
+  for (const payload of [
+    ...commandPositionSubstitutionPayloads(commandText),
+    ...shellStdinPayloads(commandText),
+    ...shellProcessSubstitutionPayloads(commandText),
+    ...outputProcessSubstitutionPayloads(commandText),
+    ...stdoutRedirectScriptPayloads(commandText),
+    ...heredocScriptPayloads(commandText),
+  ]) {
+    if (commandHasGitRepositoryOverride(payload, depth + 1)) {
+      return true;
+    }
+  }
+
+  const normalizedCommandText = stripHeredocBodies(commandText);
+  const segments = commandSegments(shellTokens(normalizedCommandText));
+
+  for (const segment of segments) {
+    if (segmentSetsGitRepositoryEnv(segment)) {
+      return true;
+    }
+
+    const envPayload = envSplitStringPayload(segment);
+
+    if (envPayload !== null) {
+      if (commandHasGitRepositoryOverride(envPayload, depth + 1)) {
+        return true;
+      }
+
+      continue;
+    }
+
+    for (const payload of [evalPayload(segment), shellCommandPayload(segment), windowsShellCommandPayload(segment)]) {
+      if (payload !== null && commandHasGitRepositoryOverride(payload, depth + 1)) {
+        return true;
+      }
+    }
+
+    for (const payload of helperCommandPayloads(segment)) {
+      if (commandHasGitRepositoryOverride(payload, depth + 1)) {
+        return true;
+      }
+    }
+
+    if (shellExportsGitRepositoryEnv(segment)) {
+      return true;
+    }
+
+    const executableIndex = firstExecutableIndex(segment);
+
+    if (executableIndex >= 0
+      && executableName(segment[executableIndex]) === "git"
+      && gitEnvironmentRepositoryOverrideOption(segment, executableIndex) !== "") {
+      return true;
+    }
+
+    if (executableIndex >= 0
+      && executableName(segment[executableIndex]) === "git"
+      && gitRepositoryOverrideOption(segment, executableIndex + 1) !== "") {
+      return true;
+    }
+  }
+
+  if (depth < 5) {
+    const substitutionScanText = stripHeredocBodies(commandText, { quotedOnly: true });
+
+    for (const substitutionText of executableSubstitutionTexts(substitutionScanText)) {
+      if (commandHasGitRepositoryOverride(substitutionText, depth + 1)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function commandChangesDirectory(commandText, depth = 0) {
+  if (depth > MAX_RECURSION_DEPTH) {
+    return false;
+  }
+
+  for (const payload of shellFunctionCallPayloads(commandText)) {
+    if (commandChangesDirectory(payload, depth + 1)) {
+      return true;
+    }
+  }
+
+  for (const segment of commandSegments(shellTokens(commandText))) {
+    for (const payload of [evalPayload(segment), shellCommandPayload(segment), windowsShellCommandPayload(segment)]) {
+      if (payload !== null && commandChangesDirectory(payload, depth + 1)) {
+        return true;
+      }
+    }
+  }
+
+  for (const payload of [
+    ...commandPositionSubstitutionPayloads(commandText),
+    ...shellStdinPayloads(commandText),
+    ...shellProcessSubstitutionPayloads(commandText),
+    ...outputProcessSubstitutionPayloads(commandText),
+    ...stdoutRedirectScriptPayloads(commandText),
+    ...heredocScriptPayloads(commandText),
+  ]) {
+    if (commandChangesDirectory(payload, depth + 1)) {
+      return true;
+    }
+  }
+
+  const normalizedCommandText = stripHeredocBodies(commandText);
+  const segments = commandSegments(shellTokens(normalizedCommandText));
+
+  for (const segment of segments) {
+    const envPayload = envSplitStringPayload(segment);
+
+    if (envPayload !== null) {
+      if (commandChangesDirectory(envPayload, depth + 1)) {
+        return true;
+      }
+
+      continue;
+    }
+
+    for (const payload of [evalPayload(segment), shellCommandPayload(segment), windowsShellCommandPayload(segment)]) {
+      if (payload !== null && commandChangesDirectory(payload, depth + 1)) {
+        return true;
+      }
+    }
+
+    for (const payload of helperCommandPayloads(segment)) {
+      if (commandChangesDirectory(payload, depth + 1)) {
+        return true;
+      }
+    }
+
+    const executableIndex = firstExecutableIndex(segment);
+    const commandName = executableIndex >= 0 ? executableName(segment[executableIndex]) : "";
+
+    if (commandName === "cd" || commandName === "pushd" || commandName === "popd") {
+      return true;
+    }
+  }
+
+  if (depth < 5) {
+    const substitutionScanText = stripHeredocBodies(commandText, { quotedOnly: true });
+
+    for (const substitutionText of executableSubstitutionTexts(substitutionScanText)) {
+      if (commandChangesDirectory(substitutionText, depth + 1)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function commandTargetsAnotherRepoContext(commandText) {
+  return commandHasGitRepositoryOverride(commandText) || commandChangesDirectory(commandText);
+}
+
 function assignmentValueBeforeIndex(words, name, limitIndex) {
   let value = process.env[String(name)] ?? "";
 
@@ -4482,10 +5143,26 @@ if (/^\s*(?:(?:\/usr\/bin|\/bin)\/)?(?:bash|zsh|sh|dash|ksh|fish)(?:\s+-[\w-]+)*
 const subcommand = guardedGitSubcommand(command);
 
 if (subcommand === "commit") {
-  block("SDLC CHECKPOINT: git commit is a hard manual checkpoint. Confirm TDD RED/GREEN, full-suite proof, and self-review are complete, then use an explicit approved commit path.");
+  if (commandTargetsAnotherRepoContext(command)) {
+    block("SDLC CHECKPOINT: git commit targets another repo context. Run from the target repo root and stamp fresh SDLC proof there.");
+    process.exit(0);
+  }
+  const proof = sdlcProofStatus(commandCwd);
+  if (proof.ok) {
+    process.exit(0);
+  }
+  block(`SDLC CHECKPOINT: git commit is a hard manual checkpoint and requires fresh SDLC proof; ${proof.reason}. ${proof.hint}`);
   process.exit(0);
 }
 
 if (subcommand === "push") {
-  block("SDLC CHECKPOINT: git push is a hard manual checkpoint. Confirm branch sync, full-suite proof, and review are complete, then use an explicit approved push path.");
+  if (commandTargetsAnotherRepoContext(command)) {
+    block("SDLC CHECKPOINT: git push targets another repo context. Run from the target repo root and stamp fresh SDLC proof there.");
+    process.exit(0);
+  }
+  const proof = sdlcProofStatus(commandCwd);
+  if (proof.ok) {
+    process.exit(0);
+  }
+  block(`SDLC CHECKPOINT: git push is a hard manual checkpoint and requires fresh SDLC proof; ${proof.reason}. ${proof.hint}`);
 }
