@@ -1,27 +1,18 @@
 $ErrorActionPreference = "Stop"
 
+# Legacy platform-specific entrypoint. Keep behavior centralized in git-guard.cjs.
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$nodeGuard = Join-Path $scriptDir "git-guard.cjs"
 $inputJson = [Console]::In.ReadToEnd()
-if ([string]::IsNullOrWhiteSpace($inputJson)) {
+
+if (-not (Test-Path -LiteralPath $nodeGuard)) {
     exit 0
 }
 
-try {
-    $payload = $inputJson | ConvertFrom-Json -ErrorAction Stop
-} catch {
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if ($null -eq $nodeCommand) {
     exit 0
 }
 
-$commandText = ""
-if ($null -ne $payload.tool_input -and $null -ne $payload.tool_input.command) {
-    $commandText = [string]$payload.tool_input.command
-}
-
-if ($commandText -match '(^|\s)git\s+commit(\s|$)') {
-    [Console]::Out.Write('{"decision":"block","reason":"TDD CHECK: Did you run tests before committing? Run your full test suite first. ALL tests must pass."}')
-    exit 0
-}
-
-if ($commandText -match '(^|\s)git\s+push(\s|$)') {
-    [Console]::Out.Write('{"decision":"block","reason":"REVIEW CHECK: Did you self-review your changes and run all tests before pushing?"}')
-    exit 0
-}
+$inputJson | & $nodeCommand.Source $nodeGuard
+exit $LASTEXITCODE
