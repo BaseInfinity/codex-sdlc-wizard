@@ -71,6 +71,40 @@ run_node_session_hook() {
     (cd "$tmpdir" && node "$script_path" 2>/dev/null)
 }
 
+run_hook_status() {
+    local payload="$1"
+    local script_path="$2"
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        local win_path
+        win_path=$(cygpath -w "$script_path")
+        printf '%s' "$payload" | powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$win_path" >/dev/null 2>&1
+    else
+        printf '%s' "$payload" | "$script_path" >/dev/null 2>&1
+    fi
+}
+
+run_node_hook_status() {
+    local payload="$1"
+    local script_path="$2"
+
+    printf '%s' "$payload" | node "$script_path" >/dev/null 2>&1
+}
+
+payload_for_command() {
+    COMMAND_TEXT="$1" node -e 'process.stdout.write(JSON.stringify({ tool_input: { command: process.env.COMMAND_TEXT } }));'
+}
+
+deep_nested_eval_command() {
+    COMMAND_TEXT="git push origin main" node -e '
+        let command = process.env.COMMAND_TEXT;
+        for (let index = 0; index < 6; index += 1) {
+            command = `eval ${JSON.stringify(command)}`;
+        }
+        process.stdout.write(command);
+    '
+}
+
 echo "=== Codex SDLC Adapter Tests ==="
 echo ""
 
@@ -106,6 +140,389 @@ test_pretool_blocks_push() {
     fi
 }
 
+test_pretool_blocks_git_after_shell_prefixes() {
+    local commands=(
+        "npm test && git commit -m test"
+        "cd repo; git push origin main"
+        "AFTERHOURS_SKIP=1 git push origin main"
+        "A[0]=x git push origin main"
+        "A[0]+=x git commit -m test"
+        "npm test & git push origin main"
+        "(git commit -m test)"
+        "sudo git commit -m test"
+        "if git push origin main; then echo ok; fi"
+        "for x in y; do git commit -m test; done"
+        $'npm test\ngit push origin main'
+        "env -u FOO git push origin main"
+        'env -iS "git push origin main"'
+        'env -iu FOO -S "git push origin main"'
+        "sudo -u root git commit -m test"
+        "sudo -HEu root git push origin main"
+        "sudo -u >out root git commit -m test"
+        "sudo -r sysadm_r git push origin main"
+        "sudo -t sysadm_t git commit -m test"
+        "sudo --role sysadm_r git push origin main"
+        "sudo --type sysadm_t git commit -m test"
+        'sudo -Eu root bash -c "git push origin main"'
+        "if false; then :; else git push origin main; fi"
+        "elif git push origin main; then echo ok; fi"
+        "{ git push origin main; }"
+        "FOO+=bar git commit -m test"
+        ">/tmp/out git push origin main"
+        "2>err git commit -m test"
+        "git push>/tmp/out origin main"
+        "git commit>/tmp/out -m test"
+        "git push origin main # --help"
+        "git commit -m test # --help"
+        "git push -- --help"
+        "git push origin -- --help"
+        "git commit -- --help"
+        "git commit -m --help"
+        "git commit -F --help"
+        "git commit --message --help"
+        "git push origin --receive-pack --help main"
+        "git push origin --repo --help main"
+        "git>/tmp/out push origin main"
+        "git</tmp/in commit -F -"
+        "git push&>/tmp/out"
+        'git --exec-path "$(git --exec-path)" push'
+        'echo "$( git push origin main)"'
+        "nice git push origin main"
+        "nice -n 10 git commit -m test"
+        "stdbuf -oL git push origin main"
+        "unbuffer git push origin main"
+        "arch -x86_64 git push origin main"
+        "script -q /dev/null git push origin main"
+        "script -c 'git push origin main' /dev/null"
+        'script --command "git commit -m test" /dev/null'
+        "ssh-agent git push origin main"
+        "ssh-agent bash -c 'git commit -m test'"
+        'su -c "git push origin main"'
+        "su --session-command 'git push origin main'"
+        "su --session-command='git commit -m test'"
+        "doas git push origin main"
+        "chrt -r 1 git push origin main"
+        "taskset -c 0 git push origin main"
+        "ionice -c2 git push origin main"
+        $'npm test && \\\n git push origin main'
+        $'git \\\n push origin main'
+        "2>&1 git push origin main"
+        ">&2 git commit -m test"
+        "git >& 2 push origin main"
+        "git 2>& 1 commit -m test"
+        "env -S git push origin main"
+        'env -S "git commit -m test"'
+        'env -S "-- git push origin main"'
+        'env -S "-i git push origin main"'
+        'env -S "--ignore-environment git push origin main"'
+        'env -S "-u FOO git push origin main"'
+        'env -S "-C /tmp git push origin main"'
+        "env -P /usr/bin git push origin main"
+        "env -a fake git push origin main"
+        "env --argv0 fake git commit -m test"
+        "env -u >out FOO git push origin main"
+        "env -P >out /usr/bin git push origin main"
+        "exec -a git git push origin main"
+        "noglob git push origin main"
+        "noglob git commit -m test"
+        'eval "git push origin main"'
+        'eval -- "git push origin main"'
+        'bash -c "git push origin main"'
+        'bash -c -- "git push origin main"'
+        "cmd /c git push origin main"
+        "CMD /C git push origin main"
+        "cmd /c call git push origin main"
+        "cmd /c CALL git commit -m test"
+        "cmd /c start git push origin main"
+        'cmd /c start "title" git push origin main'
+        'cmd /c start /b "title" git commit -m test'
+        "cmd.exe /c git commit -m test"
+        'powershell -Command "git push origin main"'
+        'PowerShell -Command "git push origin main"'
+        'powershell -Command "start git push origin main"'
+        'powershell -Command "Start-Process git -ArgumentList push,origin,main"'
+        "powershell -EncodedCommand ZwBpAHQAIABwAHUAcwBoACAAbwByAGkAZwBpAG4AIABtAGEAaQBuAA=="
+        "pwsh -e ZwBpAHQAIABjAG8AbQBtAGkAdAAgAC0AbQAgAHQAZQBzAHQA"
+        'powershell.exe -NoProfile -Command "git commit -m test"'
+        'pwsh -c "git push origin main"'
+        'PwSh -c "git commit -m test"'
+        'zsh --emulate sh -c "git push origin main"'
+        'fish --command="git push origin main"'
+        'fish --init-command="git push origin main"'
+        'fish -C "git push origin main"'
+        'sh -c -- "git commit -m test"'
+        "sh -c 'git \"\$@\"' sh push origin main"
+        "bash -c 'exec git \"\${@}\"' bash push origin main"
+        "bash -c 'sh -c \"\$*\"' bash git push origin main"
+        "bash -c 'exec git \"\$@\"' bash push origin main"
+        "bash -c 'git \"\$1\" origin main' bash push"
+        "bash -c 'git \"\${@:1:1}\" origin main' bash push"
+        "bash -c 'git \"\${*:1:1}\" origin main' bash push"
+        "trap 'git push origin main' EXIT"
+        "bash -c 'trap \"git push origin main\" EXIT'"
+        'bash -c '\''eval -- "git push origin main"'\'''
+        'bash -c >out "git push origin main"'
+        'bash -O >out extglob -c "git push origin main"'
+        "case main in main) git push origin main;; esac"
+        "case main in main) git commit -m test;; esac"
+        "git >/tmp/out push origin main"
+        "git 2>err commit -m test"
+        "git -C >out repo push origin main"
+        "git --git-dir >out .git push origin main"
+        'git -c >out alias.p=push p'
+        $'# <<EOF\ngit push origin main'
+        $'# <<\'EOF\'\ngit push origin main\nEOF'
+        $'# cat <<EOF\ngit commit -m test\nEOF'
+        $'cat <<EOF # <<NEVER\nsafe\nEOF\ngit push origin main'
+        $'bash <<EOF\ngit push origin main\nEOF'
+        $'sh <<EOF\ngit commit -m test\nEOF'
+        $'bash <<\'EOF\'\ngit push origin main\nEOF'
+        $'cat <<\\EOF\nsafe\nEOF\ngit push origin main'
+        $'cat <<EOF > /tmp/run.sh\ngit push origin main\nEOF\nbash /tmp/run.sh'
+        $'cat <<\'EOF\' >/tmp/run.sh\ngit commit -m test\nEOF\nsh /tmp/run.sh'
+        $'cat <<EOF > /tmp/run.sh\ngit push origin main\nEOF\n. /tmp/run.sh'
+        $'cat <<EOF > /tmp/run.sh\ngit commit -m test\nEOF\nsource /tmp/run.sh'
+        $'cat <<EOF &> /tmp/run.sh\ngit push origin main\nEOF\nbash /tmp/run.sh'
+        $'cat <<EOF &>> /tmp/run.sh\ngit commit -m test\nEOF\nsh /tmp/run.sh'
+        $'cat <<EOF > run.sh\ngit push origin main\nEOF\nbash ./run.sh'
+        $'cat <<\'E\\OF\' > run.sh\ngit push origin main\nE\\OF\nbash ./run.sh'
+        $'cat <<EOF > run.sh && chmod +x run.sh\ngit push origin main\nEOF\nbash ./run.sh'
+        $'cat > run.sh <<EOF\ngit commit -m test\nEOF\nchmod +x run.sh && ./run.sh'
+        $'cat > run.sh <<EOF && chmod +x run.sh && ./run.sh\ngit push origin main\nEOF'
+        $'cat > run.sh <<\'EOF\'\ngit "$@"\nEOF\nbash run.sh push origin main'
+        $'cat > run.sh <<\'EOF\'\ngit "$1" origin main\nEOF\nbash run.sh push'
+        $'cat > run.sh <<EOF\ngit push origin main\nEOF\nbash < run.sh'
+        $'cat > run.sh <<EOF\ngit commit -m test\nEOF\nsh 0< run.sh'
+        "echo git push origin main > run.sh && bash run.sh"
+        "printf 'git commit -m test\n' > run.sh && sh run.sh"
+        "printf 'git push origin main\n' | tee run.sh >/dev/null && bash run.sh"
+        $'cat <<EOF | tee run.sh >/dev/null\ngit push origin main\nEOF\nbash run.sh'
+        $'tee >/dev/null run.sh <<\'EOF\'\ngit commit -m test\nEOF\nsh run.sh'
+        $'tee >/tmp/run.sh <<EOF\ngit push origin main\nEOF\nbash /tmp/run.sh'
+        $'tee > /tmp/run.sh <<EOF\ngit commit -m test\nEOF\nsh /tmp/run.sh'
+        $'cat <<END-OF >/dev/null\nsafe\nEND-OF\ngit push origin main'
+        "timeout 30 git push origin main"
+        "timeout 30 git commit -m test"
+        "flock /tmp/codex-sdlc-test.lock git push origin main"
+        "flock -n /tmp/codex-sdlc-test.lock git commit -m test"
+        "/usr/bin/env git push origin main"
+        "/bin/env git commit -m test"
+        "/usr/bin/sudo git push origin main"
+        "runuser -u root -- git push origin main"
+        "runuser --user root -- git commit -m test"
+        "/usr/bin/nohup git push origin main"
+        "/usr/bin/time git push origin main"
+        "/usr/bin/timeout 30 git commit -m test"
+        "/usr/bin/nice git push origin main"
+        "/usr/bin/git push origin main"
+        "Git.exe push origin main"
+        "git.exe push origin main"
+        "git.exe commit -m test"
+        "/mingw64/bin/git.exe commit -m test"
+        '"C:/Program Files/Git/cmd/git.exe" push origin main'
+        "find . -exec git push origin main \\;"
+        "find . -exec /usr/bin/git commit -m test \\;"
+        "find . -exec sh -c 'git push origin main' \\;"
+        "xargs git push origin main"
+        "xargs -i git push {}"
+        "xargs --replace git commit -m test"
+        "xargs -e git push origin main"
+        "xargs --eof git push origin main"
+        "xargs git <<< push"
+        "xargs -I{} git {} <<< push"
+        "watch git push origin main"
+        "watch -x git push origin main"
+        "watch --exec git push origin main"
+        "watch --no-title git commit -m test"
+        "parallel git push ::: origin main"
+        "parallel -k git push ::: origin main"
+        "parallel --keep-order git push ::: origin main"
+        "parallel --results out git push ::: origin main"
+        "parallel --tagstring tag git push ::: origin main"
+        "parallel -C , git push ::: origin main"
+        "parallel --colsep , git commit -m test ::: x"
+        "parallel -u git commit -m test ::: x"
+        "parallel git ::: push"
+        "parallel git {} ::: push"
+        "git submodule foreach git push origin main"
+        "git submodule foreach git commit -m test"
+        "git -C repo submodule foreach git push origin main"
+        "git submodule foreach 'git push origin main'"
+        "git lfs push origin main"
+        "git lfs push origin main # --help"
+        "git lfs -c lfs.dialtimeout=1 push origin main"
+        "git subtree push --prefix dist origin gh-pages"
+        "git subtree push --prefix dist origin gh-pages # --help"
+        "git subtree --prefix dist push origin gh-pages"
+        'git -c alias.p="!git push origin main" p'
+        "git -c alias.p='!git \"\$1\" origin main' p push"
+        'git -c alias.c="!git commit -m test" c'
+        "git -c alias.p='!\$@' p git push origin main"
+        "git -c alias.p='!sh -c \"\$@\"' p git push origin main"
+        "git -c alias.p='!eval \"\$@\"' p 'git push origin main'"
+        "git -c alias.p='!git \"\${@}\"' p push origin main"
+        "git -c alias.p='!trap \"git push origin main\" EXIT' p"
+        "ALIAS=push git --config-env=alias.p=ALIAS p origin main"
+        "ALIAS=commit git --config-env=alias.c=ALIAS c -m test"
+        "git -c alias.p='!f() { git \"\$@\"; }; f' p push origin main"
+        "git -c alias.p='!f() { exec git \"\$@\"; }; f' p push origin main"
+        'git -c alias.p=push p'
+        'git -c alias.c=commit c'
+        'git -c alias.p="push origin main" p'
+        'git -c alias.p=push -c alias.q=p q origin main'
+        'git -c alias.c=commit -c alias.q=c q -m test'
+        'git -c alias.p="!git push origin main" p -h'
+        'git -c alias.c="!git commit -m test" c -h'
+        '/usr/bin/env -S "git push origin main"'
+        'sudo /usr/bin/env -S "git push origin main"'
+        'sudo bash -c "git push origin main"'
+        'sudo eval "git push origin main"'
+        'eval "$(echo git push origin main)"'
+        $'eval "$(cat <<\'EOF\'\ngit push origin main\nEOF\n)"'
+        'bash -c "$(echo git push origin main)"'
+        '$(echo -e git\\x20push) origin main'
+        '$(echo git; echo push) origin main'
+        'eval "$(echo -e git\\x20push origin main)"'
+        'bash -c "$(echo -e git\\x20push origin main)"'
+        "zsh -c 'nocorrect git push origin main'"
+        '$(echo git push origin main)'
+        '$(printf "git\x20push") origin main'
+        $'$(cat <<EOF\ngit push origin main\nEOF\n)'
+        '$(echo git) push origin main'
+        '$(printf %s git) commit -m test'
+        'g$(printf it) push origin main'
+        'g$(echo it) com$(printf mit) -m test'
+        'git p$(printf ush) origin main'
+        'git pu$(echo sh) origin main'
+        'git com$(printf mit) -m test'
+        'git "$(printf push)" origin main'
+        'git p`printf ush` origin main'
+        'g`printf it` push origin main'
+        'bash -c "$(echo git) push origin main"'
+        'eval "$(echo git) commit -m test"'
+        'eval "$(printf '\''%q '\'' git push origin main)"'
+        "bash -c \"\$(printf git; printf ' push origin main')\""
+        "eval \"\$(echo -n git; echo ' commit -m test')\""
+        "bash -c \"\$(printf 'git push origin main' | cat)\""
+        "eval \"\$(printf 'git commit -m test' | tee /dev/null)\""
+        "printf -- 'git push origin main\n' | bash"
+        "printf -- 'push\n' | xargs git"
+        "printf 'push\\0' | xargs -0 git"
+        "printf 'push,' | xargs -d, git"
+        '`echo git commit -m test`'
+        'echo "$(case x in x) echo ok;; esac; git push origin main)"'
+        'echo "$( (echo ok); git push origin main )"'
+        'bash -c "$( (echo echo ok); echo git push origin main )"'
+        $'bash -c "$(cat <<EOF\ngit push origin main\nEOF\n)"'
+        $'sh -c "$(cat <<EOF\ngit commit -m test\nEOF\n)"'
+        "function f { git push origin main; }; f"
+        'function f() { git "$@"; }; f push origin main'
+        'f() { git "$@"; }; f push origin main'
+        'f() { command git "$@"; }; f push origin main'
+        'f() { git "$1" origin main; }; f push'
+        "coproc git push origin main"
+        "setsid git push origin main"
+        'bash >out -c "git push origin main"'
+        'bash -O extglob -c "git push origin main"'
+        "eval \$'git push origin main'"
+        "eval \$'git\\x20push origin main'"
+        "bash -c \$'git push origin main'"
+        "bash -c \$'git\\040commit -m test'"
+        "printf 'git push origin main\n' | bash"
+        "printf 'git push origin main\n' |& bash"
+        "echo git push origin main |& sh"
+        "echo -e \"git\\x20push origin main\" | bash"
+        "printf \"git\\x20push origin main\n\" | bash"
+        "printf 'git push origin main\n' | cat | bash"
+        "printf 'git push origin main\n' | tee /dev/null | bash"
+        "printf 'git push origin main\n' | env -S \"bash -s\""
+        $'cat <<EOF | xargs -I{} sh -c \'{}\'\ngit push origin main\nEOF'
+        "printf 'git push origin main\n' | xargs -I{} sh -c '{}'"
+        "printf 'git push origin main\n' | xargs -I{} bash -c '{}'"
+        "echo git push origin main | xargs -I{} sh -c '{}'"
+        $'echo ok\nxargs git <<EOF\npush\nEOF'
+        $'echo ok\ncat <<EOF | xargs git\npush\nEOF'
+        "parallel ::: 'git push origin main'"
+        "parallel --jobs 1 ::: 'git commit -m test'"
+        "flock -n -c 'git push origin main' /tmp/lock"
+        "flock --command='git commit -m test' /tmp/lock"
+        "su -c'git push origin main'"
+        "script -c'git commit -m test' /dev/null"
+        "echo git push origin main | tee >(bash)"
+        "printf 'git push origin main\n' | tee >(bash)"
+        "printf 'git push origin main\n' | cat > >(bash)"
+        "cat > >(bash) <<< 'git push origin main'"
+        "tee >(bash) <<< 'git push origin main'"
+        "printf 'git push origin main\n' 2>&1 > >(bash)"
+        "printf 'git push origin main\n' >| >(bash)"
+        "printf 'git push origin main\n' | bash -c 'bash'"
+        "bash -c 'source /dev/stdin' <<< 'git commit -m test'"
+        "printf '%s ' git push origin main | bash"
+        "printf 'git commit -m test\n' | sh"
+        "printf '%s\n' 'git push origin main' | bash"
+        "printf '%s %s %s %s\n' git commit -m test | sh"
+        "echo git push origin main | bash"
+        "echo git push origin main | sh -s -- arg"
+        "printf '%s\n' 'git commit -m test' | bash -s arg"
+        "bash <<< 'git push origin main'"
+        'bash <<<$(echo git push origin main)'
+        "env -S \"bash -s\" <<< 'git commit -m test'"
+        "sh <<< \$'git commit -m test'"
+        "<<< 'git push origin main' cat | bash"
+        "bash -s arg <<< 'git push origin main'"
+        "sh -s -- arg <<< \$'git commit -m test'"
+        "bash /dev/fd/3 3<<< 'git push origin main'"
+        "source /dev/fd/7 7<<< 'git commit -m test'"
+        "bash <(echo git push origin main)"
+        "bash <> <(echo git push origin main)"
+        "bash 0<> <(echo git push origin main)"
+        "sh <(printf 'git commit -m test\n')"
+        "bash <(printf 'git push origin main\n' | cat)"
+        "source <(printf 'git commit -m test\n' | tee /dev/null)"
+        "bash < <(echo git push origin main)"
+        "source <(echo git push origin main)"
+        ". <(echo git commit -m test)"
+        "/opt/homebrew/bin/bash <(echo git push origin main)"
+        "env /usr/local/bin/bash <(echo git push origin main)"
+        "sudo -u root bash <(echo git push origin main)"
+        "env -u FOO bash <(echo git push origin main)"
+        "env -P /usr/bin bash <(echo git push origin main)"
+        "time -f %e bash <(echo git push origin main)"
+        "cat <(git push origin main)"
+        "cat <( git push origin main )"
+        "cat >(git commit -m test)"
+        "diff <(echo ok) <(git push origin main)"
+        "echo \`git push origin main\`"
+        "echo \` git push origin main\`"
+        $'cat <<EOF | bash\ngit push origin main\nEOF'
+        $'cat <<EOF | sh\ngit commit -m test\nEOF'
+        $'cat <<EOF | /usr/bin/sudo /bin/bash\ngit push origin main\nEOF'
+        $'cat <<EOF | env bash\ngit push origin main\nEOF'
+        $'cat <<EOF | env -S "bash"\ngit push origin main\nEOF'
+        $'tee /tmp/run.sh >/dev/null <<\'EOF\'\ngit push origin main\nEOF\nbash /tmp/run.sh'
+        $'cat <<EOF > >(bash)\ngit push origin main\nEOF'
+        "echo git push origin main > >(bash)"
+        $'cat <<EOF 1> >(sh)\ngit commit -m test\nEOF'
+        $'cat <<EOF\n$(git push origin main)\nEOF'
+    )
+    local failures=""
+    local command
+    local output
+
+    for command in "${commands[@]}"; do
+        output=$(run_json_hook "$(payload_for_command "$command")" "$PRETOOL_SCRIPT")
+        if ! echo "$output" | grep -q '"decision":"block"'; then
+            failures="${failures} [$command => $output]"
+        fi
+    done
+
+    if [ -z "$failures" ]; then
+        pass "pre-tool hook blocks git commit/push after shell prefixes"
+    else
+        fail "pre-tool hook allowed shell-prefix git commands:$failures"
+    fi
+}
+
 test_pretool_allows_safe_command() {
     local output
     output=$(run_json_hook '{"tool_input":{"command":"git diff"}}' "$PRETOOL_SCRIPT")
@@ -123,6 +540,113 @@ test_pretool_reads_command_field() {
         pass "pre-tool hook reads tool_input.command"
     else
         fail "pre-tool hook incorrectly read file_path"
+    fi
+}
+
+test_pretool_allows_non_git_command_mentions() {
+    local issue_command
+    local helper_echo_command
+    local print_command
+    local quoted_heredoc_command
+    local git_global_help_command
+    local git_help_command
+    local git_push_help_command
+    local git_alias_push_help_command
+    local git_alias_commit_help_command
+    local git_help_command_substitution
+    local git_push_help_command_substitution
+    local git_push_late_help_command
+    local git_commit_late_help_command
+    local git_lfs_push_help_command
+    local git_subtree_push_help_command
+    local quoted_python_heredoc_command
+    local safe_process_substitution_after_shell_command
+    local safe_process_substitution_inside_shell_payload
+    local output1
+    local output2
+    local output3
+    local output4
+    local output5
+    local output6
+    local output7
+    local output8
+    local output9
+    local output10
+    local output11
+    local output12
+    local output13
+    local output14
+    local output15
+    local output16
+    local output17
+    local output18
+    local output19
+
+    issue_command=$'gh issue create --title bug --body "$(cat <<EOF\ngit commit -m test should not block here\nEOF\n)"'
+    helper_echo_command="find . -exec echo git push origin main \\;"
+    print_command="printf %s git push origin main"
+    quoted_heredoc_command=$'cat <<\'EOF\'\n$(git push origin main)\nEOF'
+    git_global_help_command="git --help push"
+    git_help_command="git help push"
+    git_push_help_command="git push --help"
+    git_alias_push_help_command="git -c alias.p=push p --help"
+    git_alias_commit_help_command="git -c alias.c=commit c -h"
+    git_help_command_substitution='bash -c "$(git help push)"'
+    git_push_help_command_substitution='eval "$(git push --help)"'
+    git_push_late_help_command="git push origin --help"
+    git_commit_late_help_command="git commit -m test --help"
+    git_lfs_push_help_command="git lfs push --help"
+    git_lfs_global_help_command="git lfs --help push"
+    git_subtree_push_help_command="git subtree push --help"
+    quoted_python_heredoc_command=$'python <<\'EOF\'\n$(git push origin main)\nEOF'
+    safe_process_substitution_after_shell_command='bash -c "true"; cat <(echo git push origin main)'
+    safe_process_substitution_inside_shell_payload='bash -c "cat <(echo git push origin main)"'
+    output1=$(run_json_hook "$(payload_for_command "$issue_command")" "$PRETOOL_SCRIPT")
+    output2=$(run_json_hook "$(payload_for_command "$print_command")" "$PRETOOL_SCRIPT")
+    output3=$(run_json_hook "$(payload_for_command "$helper_echo_command")" "$PRETOOL_SCRIPT")
+    output4=$(run_json_hook "$(payload_for_command "$quoted_heredoc_command")" "$PRETOOL_SCRIPT")
+    output5=$(run_json_hook "$(payload_for_command "$git_global_help_command")" "$PRETOOL_SCRIPT")
+    output6=$(run_json_hook "$(payload_for_command "$git_help_command")" "$PRETOOL_SCRIPT")
+    output7=$(run_json_hook "$(payload_for_command "$git_push_help_command")" "$PRETOOL_SCRIPT")
+    output8=$(run_json_hook "$(payload_for_command "$quoted_python_heredoc_command")" "$PRETOOL_SCRIPT")
+    output9=$(run_json_hook "$(payload_for_command "$git_alias_push_help_command")" "$PRETOOL_SCRIPT")
+    output10=$(run_json_hook "$(payload_for_command "$git_alias_commit_help_command")" "$PRETOOL_SCRIPT")
+    output11=$(run_json_hook "$(payload_for_command "$git_help_command_substitution")" "$PRETOOL_SCRIPT")
+    output12=$(run_json_hook "$(payload_for_command "$git_push_help_command_substitution")" "$PRETOOL_SCRIPT")
+    output13=$(run_json_hook "$(payload_for_command "$git_push_late_help_command")" "$PRETOOL_SCRIPT")
+    output14=$(run_json_hook "$(payload_for_command "$git_commit_late_help_command")" "$PRETOOL_SCRIPT")
+    output15=$(run_json_hook "$(payload_for_command "$git_lfs_push_help_command")" "$PRETOOL_SCRIPT")
+    output16=$(run_json_hook "$(payload_for_command "$git_subtree_push_help_command")" "$PRETOOL_SCRIPT")
+    output17=$(run_json_hook "$(payload_for_command "$git_lfs_global_help_command")" "$PRETOOL_SCRIPT")
+    output18=$(run_json_hook "$(payload_for_command "$safe_process_substitution_after_shell_command")" "$PRETOOL_SCRIPT")
+    output19=$(run_json_hook "$(payload_for_command "$safe_process_substitution_inside_shell_payload")" "$PRETOOL_SCRIPT")
+
+    if [ -z "$output1$output2$output3$output4$output5$output6$output7$output8$output9$output10$output11$output12$output13$output14$output15$output16$output17$output18$output19" ]; then
+        pass "pre-tool hook allows non-git commands that mention git commit/push"
+    else
+        fail "pre-tool hook blocked non-git command text (output1: $output1 output2: $output2 output3: $output3 output4: $output4 output5: $output5 output6: $output6 output7: $output7 output8: $output8 output9: $output9 output10: $output10 output11: $output11 output12: $output12 output13: $output13 output14: $output14 output15: $output15 output16: $output16 output17: $output17 output18: $output18 output19: $output19)"
+    fi
+}
+
+test_pretool_does_not_crash_on_non_git_prototype_words() {
+    if run_hook_status "$(payload_for_command "toString -x git push origin main")" "$PRETOOL_SCRIPT" \
+        && run_hook_status "$(payload_for_command "echo \$'\\UFFFFFFFF'")" "$PRETOOL_SCRIPT"; then
+        pass "pre-tool hook does not crash on non-git prototype words"
+    else
+        fail "pre-tool hook crashed on non-git prototype words"
+    fi
+}
+
+test_pretool_blocks_deep_wrapper_recursion() {
+    local command
+    local output
+    command=$(deep_nested_eval_command)
+    output=$(run_json_hook "$(payload_for_command "$command")" "$PRETOOL_SCRIPT")
+
+    if echo "$output" | grep -q '"decision":"block"'; then
+        pass "pre-tool hook blocks deep wrapper recursion"
+    else
+        fail "pre-tool hook allowed deep wrapper recursion (output: $output)"
     fi
 }
 
@@ -160,6 +684,496 @@ test_universal_pretool_blocks_commit() {
         pass "universal pre-tool hook blocks git commit"
     else
         fail "universal pre-tool hook did not block git commit (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_git_after_shell_prefixes() {
+    local commands=(
+        "npm test && git commit -m test"
+        "cd repo; git push origin main"
+        "AFTERHOURS_SKIP=1 git push origin main"
+        "A[0]=x git push origin main"
+        "A[0]+=x git commit -m test"
+        "npm test & git push origin main"
+        "(git commit -m test)"
+        "sudo git commit -m test"
+        "if git push origin main; then echo ok; fi"
+        "for x in y; do git commit -m test; done"
+        $'npm test\ngit push origin main'
+        "env -u FOO git push origin main"
+        'env -iS "git push origin main"'
+        'env -iu FOO -S "git push origin main"'
+        "sudo -u root git commit -m test"
+        "sudo -HEu root git push origin main"
+        "sudo -u >out root git commit -m test"
+        "sudo -r sysadm_r git push origin main"
+        "sudo -t sysadm_t git commit -m test"
+        "sudo --role sysadm_r git push origin main"
+        "sudo --type sysadm_t git commit -m test"
+        'sudo -Eu root bash -c "git push origin main"'
+        "if false; then :; else git push origin main; fi"
+        "elif git push origin main; then echo ok; fi"
+        "{ git push origin main; }"
+        "FOO+=bar git commit -m test"
+        ">/tmp/out git push origin main"
+        "2>err git commit -m test"
+        "git push>/tmp/out origin main"
+        "git commit>/tmp/out -m test"
+        "git push origin main # --help"
+        "git commit -m test # --help"
+        "git push -- --help"
+        "git push origin -- --help"
+        "git commit -- --help"
+        "git commit -m --help"
+        "git commit -F --help"
+        "git commit --message --help"
+        "git push origin --receive-pack --help main"
+        "git push origin --repo --help main"
+        "git>/tmp/out push origin main"
+        "git</tmp/in commit -F -"
+        "git push&>/tmp/out"
+        'git --exec-path "$(git --exec-path)" push'
+        'echo "$( git push origin main)"'
+        "nice git push origin main"
+        "nice -n 10 git commit -m test"
+        "stdbuf -oL git push origin main"
+        "unbuffer git push origin main"
+        "arch -x86_64 git push origin main"
+        "script -q /dev/null git push origin main"
+        "script -c 'git push origin main' /dev/null"
+        'script --command "git commit -m test" /dev/null'
+        "ssh-agent git push origin main"
+        "ssh-agent bash -c 'git commit -m test'"
+        'su -c "git push origin main"'
+        "su --session-command 'git push origin main'"
+        "su --session-command='git commit -m test'"
+        "doas git push origin main"
+        "chrt -r 1 git push origin main"
+        "taskset -c 0 git push origin main"
+        "ionice -c2 git push origin main"
+        $'npm test && \\\n git push origin main'
+        $'git \\\n push origin main'
+        "2>&1 git push origin main"
+        ">&2 git commit -m test"
+        "git >& 2 push origin main"
+        "git 2>& 1 commit -m test"
+        "env -S git push origin main"
+        'env -S "git commit -m test"'
+        'env -S "-- git push origin main"'
+        'env -S "-i git push origin main"'
+        'env -S "--ignore-environment git push origin main"'
+        'env -S "-u FOO git push origin main"'
+        'env -S "-C /tmp git push origin main"'
+        "env -P /usr/bin git push origin main"
+        "env -a fake git push origin main"
+        "env --argv0 fake git commit -m test"
+        "env -u >out FOO git push origin main"
+        "env -P >out /usr/bin git push origin main"
+        "exec -a git git push origin main"
+        "noglob git push origin main"
+        "noglob git commit -m test"
+        'eval "git push origin main"'
+        'eval -- "git push origin main"'
+        'bash -c "git push origin main"'
+        'bash -c -- "git push origin main"'
+        "cmd /c git push origin main"
+        "CMD /C git push origin main"
+        "cmd /c call git push origin main"
+        "cmd /c CALL git commit -m test"
+        "cmd /c start git push origin main"
+        'cmd /c start "title" git push origin main'
+        'cmd /c start /b "title" git commit -m test'
+        "cmd.exe /c git commit -m test"
+        'powershell -Command "git push origin main"'
+        'PowerShell -Command "git push origin main"'
+        'powershell -Command "start git push origin main"'
+        'powershell -Command "Start-Process git -ArgumentList push,origin,main"'
+        "powershell -EncodedCommand ZwBpAHQAIABwAHUAcwBoACAAbwByAGkAZwBpAG4AIABtAGEAaQBuAA=="
+        "pwsh -e ZwBpAHQAIABjAG8AbQBtAGkAdAAgAC0AbQAgAHQAZQBzAHQA"
+        'powershell.exe -NoProfile -Command "git commit -m test"'
+        'pwsh -c "git push origin main"'
+        'PwSh -c "git commit -m test"'
+        'zsh --emulate sh -c "git push origin main"'
+        'fish --command="git push origin main"'
+        'fish --init-command="git push origin main"'
+        'fish -C "git push origin main"'
+        'sh -c -- "git commit -m test"'
+        "sh -c 'git \"\$@\"' sh push origin main"
+        "bash -c 'exec git \"\${@}\"' bash push origin main"
+        "bash -c 'sh -c \"\$*\"' bash git push origin main"
+        "bash -c 'exec git \"\$@\"' bash push origin main"
+        "bash -c 'git \"\$1\" origin main' bash push"
+        "bash -c 'git \"\${@:1:1}\" origin main' bash push"
+        "bash -c 'git \"\${*:1:1}\" origin main' bash push"
+        "trap 'git push origin main' EXIT"
+        "bash -c 'trap \"git push origin main\" EXIT'"
+        'bash -c '\''eval -- "git push origin main"'\'''
+        'bash -c >out "git push origin main"'
+        'bash -O >out extglob -c "git push origin main"'
+        "case main in main) git push origin main;; esac"
+        "case main in main) git commit -m test;; esac"
+        "git >/tmp/out push origin main"
+        "git 2>err commit -m test"
+        "git -C >out repo push origin main"
+        "git --git-dir >out .git push origin main"
+        'git -c >out alias.p=push p'
+        $'# <<EOF\ngit push origin main'
+        $'# <<\'EOF\'\ngit push origin main\nEOF'
+        $'# cat <<EOF\ngit commit -m test\nEOF'
+        $'cat <<EOF # <<NEVER\nsafe\nEOF\ngit push origin main'
+        $'bash <<EOF\ngit push origin main\nEOF'
+        $'sh <<EOF\ngit commit -m test\nEOF'
+        $'bash <<\'EOF\'\ngit push origin main\nEOF'
+        $'cat <<\\EOF\nsafe\nEOF\ngit push origin main'
+        $'cat <<EOF > /tmp/run.sh\ngit push origin main\nEOF\nbash /tmp/run.sh'
+        $'cat <<\'EOF\' >/tmp/run.sh\ngit commit -m test\nEOF\nsh /tmp/run.sh'
+        $'cat <<EOF > /tmp/run.sh\ngit push origin main\nEOF\n. /tmp/run.sh'
+        $'cat <<EOF > /tmp/run.sh\ngit commit -m test\nEOF\nsource /tmp/run.sh'
+        $'cat <<EOF &> /tmp/run.sh\ngit push origin main\nEOF\nbash /tmp/run.sh'
+        $'cat <<EOF &>> /tmp/run.sh\ngit commit -m test\nEOF\nsh /tmp/run.sh'
+        $'cat <<EOF > run.sh\ngit push origin main\nEOF\nbash ./run.sh'
+        $'cat <<\'E\\OF\' > run.sh\ngit push origin main\nE\\OF\nbash ./run.sh'
+        $'cat <<EOF > run.sh && chmod +x run.sh\ngit push origin main\nEOF\nbash ./run.sh'
+        $'cat > run.sh <<EOF\ngit commit -m test\nEOF\nchmod +x run.sh && ./run.sh'
+        $'cat > run.sh <<EOF && chmod +x run.sh && ./run.sh\ngit push origin main\nEOF'
+        $'cat > run.sh <<\'EOF\'\ngit "$@"\nEOF\nbash run.sh push origin main'
+        $'cat > run.sh <<\'EOF\'\ngit "$1" origin main\nEOF\nbash run.sh push'
+        $'cat > run.sh <<EOF\ngit push origin main\nEOF\nbash < run.sh'
+        $'cat > run.sh <<EOF\ngit commit -m test\nEOF\nsh 0< run.sh'
+        "echo git push origin main > run.sh && bash run.sh"
+        "printf 'git commit -m test\n' > run.sh && sh run.sh"
+        "printf 'git push origin main\n' | tee run.sh >/dev/null && bash run.sh"
+        $'cat <<EOF | tee run.sh >/dev/null\ngit push origin main\nEOF\nbash run.sh'
+        $'tee >/dev/null run.sh <<\'EOF\'\ngit commit -m test\nEOF\nsh run.sh'
+        $'tee >/tmp/run.sh <<EOF\ngit push origin main\nEOF\nbash /tmp/run.sh'
+        $'tee > /tmp/run.sh <<EOF\ngit commit -m test\nEOF\nsh /tmp/run.sh'
+        $'cat <<END-OF >/dev/null\nsafe\nEND-OF\ngit push origin main'
+        "timeout 30 git push origin main"
+        "timeout 30 git commit -m test"
+        "flock /tmp/codex-sdlc-test.lock git push origin main"
+        "flock -n /tmp/codex-sdlc-test.lock git commit -m test"
+        "/usr/bin/env git push origin main"
+        "/bin/env git commit -m test"
+        "/usr/bin/sudo git push origin main"
+        "runuser -u root -- git push origin main"
+        "runuser --user root -- git commit -m test"
+        "/usr/bin/nohup git push origin main"
+        "/usr/bin/time git push origin main"
+        "/usr/bin/timeout 30 git commit -m test"
+        "/usr/bin/nice git push origin main"
+        "/usr/bin/git push origin main"
+        "Git.exe push origin main"
+        "git.exe push origin main"
+        "git.exe commit -m test"
+        "/mingw64/bin/git.exe commit -m test"
+        '"C:/Program Files/Git/cmd/git.exe" push origin main'
+        "find . -exec git push origin main \\;"
+        "find . -exec /usr/bin/git commit -m test \\;"
+        "find . -exec sh -c 'git push origin main' \\;"
+        "xargs git push origin main"
+        "xargs -i git push {}"
+        "xargs --replace git commit -m test"
+        "xargs -e git push origin main"
+        "xargs --eof git push origin main"
+        "xargs git <<< push"
+        "xargs -I{} git {} <<< push"
+        "watch git push origin main"
+        "watch -x git push origin main"
+        "watch --exec git push origin main"
+        "watch --no-title git commit -m test"
+        "parallel git push ::: origin main"
+        "parallel -k git push ::: origin main"
+        "parallel --keep-order git push ::: origin main"
+        "parallel --results out git push ::: origin main"
+        "parallel --tagstring tag git push ::: origin main"
+        "parallel -C , git push ::: origin main"
+        "parallel --colsep , git commit -m test ::: x"
+        "parallel -u git commit -m test ::: x"
+        "parallel git ::: push"
+        "parallel git {} ::: push"
+        "git submodule foreach git push origin main"
+        "git submodule foreach git commit -m test"
+        "git -C repo submodule foreach git push origin main"
+        "git submodule foreach 'git push origin main'"
+        "git lfs push origin main"
+        "git lfs push origin main # --help"
+        "git lfs -c lfs.dialtimeout=1 push origin main"
+        "git subtree push --prefix dist origin gh-pages"
+        "git subtree push --prefix dist origin gh-pages # --help"
+        "git subtree --prefix dist push origin gh-pages"
+        'git -c alias.p="!git push origin main" p'
+        "git -c alias.p='!git \"\$1\" origin main' p push"
+        'git -c alias.c="!git commit -m test" c'
+        "git -c alias.p='!\$@' p git push origin main"
+        "git -c alias.p='!sh -c \"\$@\"' p git push origin main"
+        "git -c alias.p='!eval \"\$@\"' p 'git push origin main'"
+        "git -c alias.p='!git \"\${@}\"' p push origin main"
+        "git -c alias.p='!trap \"git push origin main\" EXIT' p"
+        "ALIAS=push git --config-env=alias.p=ALIAS p origin main"
+        "ALIAS=commit git --config-env=alias.c=ALIAS c -m test"
+        "git -c alias.p='!f() { git \"\$@\"; }; f' p push origin main"
+        "git -c alias.p='!f() { exec git \"\$@\"; }; f' p push origin main"
+        'git -c alias.p=push p'
+        'git -c alias.c=commit c'
+        'git -c alias.p="push origin main" p'
+        'git -c alias.p=push -c alias.q=p q origin main'
+        'git -c alias.c=commit -c alias.q=c q -m test'
+        'git -c alias.p="!git push origin main" p -h'
+        'git -c alias.c="!git commit -m test" c -h'
+        '/usr/bin/env -S "git push origin main"'
+        'sudo /usr/bin/env -S "git push origin main"'
+        'sudo bash -c "git push origin main"'
+        'sudo eval "git push origin main"'
+        'eval "$(echo git push origin main)"'
+        $'eval "$(cat <<\'EOF\'\ngit push origin main\nEOF\n)"'
+        'bash -c "$(echo git push origin main)"'
+        '$(echo -e git\\x20push) origin main'
+        '$(echo git; echo push) origin main'
+        'eval "$(echo -e git\\x20push origin main)"'
+        'bash -c "$(echo -e git\\x20push origin main)"'
+        "zsh -c 'nocorrect git push origin main'"
+        '$(echo git push origin main)'
+        '$(printf "git\x20push") origin main'
+        $'$(cat <<EOF\ngit push origin main\nEOF\n)'
+        '$(echo git) push origin main'
+        '$(printf %s git) commit -m test'
+        'g$(printf it) push origin main'
+        'g$(echo it) com$(printf mit) -m test'
+        'git p$(printf ush) origin main'
+        'git pu$(echo sh) origin main'
+        'git com$(printf mit) -m test'
+        'git "$(printf push)" origin main'
+        'git p`printf ush` origin main'
+        'g`printf it` push origin main'
+        'bash -c "$(echo git) push origin main"'
+        'eval "$(echo git) commit -m test"'
+        'eval "$(printf '\''%q '\'' git push origin main)"'
+        "bash -c \"\$(printf git; printf ' push origin main')\""
+        "eval \"\$(echo -n git; echo ' commit -m test')\""
+        "bash -c \"\$(printf 'git push origin main' | cat)\""
+        "eval \"\$(printf 'git commit -m test' | tee /dev/null)\""
+        "printf -- 'git push origin main\n' | bash"
+        "printf -- 'push\n' | xargs git"
+        "printf 'push\\0' | xargs -0 git"
+        "printf 'push,' | xargs -d, git"
+        '`echo git commit -m test`'
+        'echo "$(case x in x) echo ok;; esac; git push origin main)"'
+        'echo "$( (echo ok); git push origin main )"'
+        'bash -c "$( (echo echo ok); echo git push origin main )"'
+        $'bash -c "$(cat <<EOF\ngit push origin main\nEOF\n)"'
+        $'sh -c "$(cat <<EOF\ngit commit -m test\nEOF\n)"'
+        "function f { git push origin main; }; f"
+        'function f() { git "$@"; }; f push origin main'
+        'f() { git "$@"; }; f push origin main'
+        'f() { command git "$@"; }; f push origin main'
+        'f() { git "$1" origin main; }; f push'
+        "coproc git push origin main"
+        "setsid git push origin main"
+        'bash >out -c "git push origin main"'
+        'bash -O extglob -c "git push origin main"'
+        "eval \$'git push origin main'"
+        "eval \$'git\\x20push origin main'"
+        "bash -c \$'git push origin main'"
+        "bash -c \$'git\\040commit -m test'"
+        "printf 'git push origin main\n' | bash"
+        "printf 'git push origin main\n' |& bash"
+        "echo git push origin main |& sh"
+        "echo -e \"git\\x20push origin main\" | bash"
+        "printf \"git\\x20push origin main\n\" | bash"
+        "printf 'git push origin main\n' | cat | bash"
+        "printf 'git push origin main\n' | tee /dev/null | bash"
+        "printf 'git push origin main\n' | env -S \"bash -s\""
+        $'cat <<EOF | xargs -I{} sh -c \'{}\'\ngit push origin main\nEOF'
+        "printf 'git push origin main\n' | xargs -I{} sh -c '{}'"
+        "printf 'git push origin main\n' | xargs -I{} bash -c '{}'"
+        "echo git push origin main | xargs -I{} sh -c '{}'"
+        $'echo ok\nxargs git <<EOF\npush\nEOF'
+        $'echo ok\ncat <<EOF | xargs git\npush\nEOF'
+        "parallel ::: 'git push origin main'"
+        "parallel --jobs 1 ::: 'git commit -m test'"
+        "flock -n -c 'git push origin main' /tmp/lock"
+        "flock --command='git commit -m test' /tmp/lock"
+        "su -c'git push origin main'"
+        "script -c'git commit -m test' /dev/null"
+        "echo git push origin main | tee >(bash)"
+        "printf 'git push origin main\n' | tee >(bash)"
+        "printf 'git push origin main\n' | cat > >(bash)"
+        "cat > >(bash) <<< 'git push origin main'"
+        "tee >(bash) <<< 'git push origin main'"
+        "printf 'git push origin main\n' 2>&1 > >(bash)"
+        "printf 'git push origin main\n' >| >(bash)"
+        "printf 'git push origin main\n' | bash -c 'bash'"
+        "bash -c 'source /dev/stdin' <<< 'git commit -m test'"
+        "printf '%s ' git push origin main | bash"
+        "printf 'git commit -m test\n' | sh"
+        "printf '%s\n' 'git push origin main' | bash"
+        "printf '%s %s %s %s\n' git commit -m test | sh"
+        "echo git push origin main | bash"
+        "echo git push origin main | sh -s -- arg"
+        "printf '%s\n' 'git commit -m test' | bash -s arg"
+        "bash <<< 'git push origin main'"
+        'bash <<<$(echo git push origin main)'
+        "env -S \"bash -s\" <<< 'git commit -m test'"
+        "sh <<< \$'git commit -m test'"
+        "<<< 'git push origin main' cat | bash"
+        "bash -s arg <<< 'git push origin main'"
+        "sh -s -- arg <<< \$'git commit -m test'"
+        "bash /dev/fd/3 3<<< 'git push origin main'"
+        "source /dev/fd/7 7<<< 'git commit -m test'"
+        "bash <(echo git push origin main)"
+        "bash <> <(echo git push origin main)"
+        "bash 0<> <(echo git push origin main)"
+        "sh <(printf 'git commit -m test\n')"
+        "bash <(printf 'git push origin main\n' | cat)"
+        "source <(printf 'git commit -m test\n' | tee /dev/null)"
+        "bash < <(echo git push origin main)"
+        "source <(echo git push origin main)"
+        ". <(echo git commit -m test)"
+        "/opt/homebrew/bin/bash <(echo git push origin main)"
+        "env /usr/local/bin/bash <(echo git push origin main)"
+        "sudo -u root bash <(echo git push origin main)"
+        "env -u FOO bash <(echo git push origin main)"
+        "env -P /usr/bin bash <(echo git push origin main)"
+        "time -f %e bash <(echo git push origin main)"
+        "cat <(git push origin main)"
+        "cat <( git push origin main )"
+        "cat >(git commit -m test)"
+        "diff <(echo ok) <(git push origin main)"
+        "echo \`git push origin main\`"
+        "echo \` git push origin main\`"
+        $'cat <<EOF | bash\ngit push origin main\nEOF'
+        $'cat <<EOF | sh\ngit commit -m test\nEOF'
+        $'cat <<EOF | /usr/bin/sudo /bin/bash\ngit push origin main\nEOF'
+        $'cat <<EOF | env bash\ngit push origin main\nEOF'
+        $'cat <<EOF | env -S "bash"\ngit push origin main\nEOF'
+        $'tee /tmp/run.sh >/dev/null <<\'EOF\'\ngit push origin main\nEOF\nbash /tmp/run.sh'
+        $'cat <<EOF > >(bash)\ngit push origin main\nEOF'
+        "echo git push origin main > >(bash)"
+        $'cat <<EOF 1> >(sh)\ngit commit -m test\nEOF'
+        $'cat <<EOF\n$(git push origin main)\nEOF'
+    )
+    local failures=""
+    local command
+    local output
+
+    for command in "${commands[@]}"; do
+        output=$(run_node_json_hook "$(payload_for_command "$command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+        if ! echo "$output" | grep -q '"decision":"block"'; then
+            failures="${failures} [$command => $output]"
+        fi
+    done
+
+    if [ -z "$failures" ]; then
+        pass "universal pre-tool hook blocks git commit/push after shell prefixes"
+    else
+        fail "universal pre-tool hook allowed shell-prefix git commands:$failures"
+    fi
+}
+
+test_universal_pretool_allows_non_git_command_mentions() {
+    local issue_command
+    local helper_echo_command
+    local print_command
+    local quoted_heredoc_command
+    local git_global_help_command
+    local git_help_command
+    local git_push_help_command
+    local git_alias_push_help_command
+    local git_alias_commit_help_command
+    local git_help_command_substitution
+    local git_push_help_command_substitution
+    local git_push_late_help_command
+    local git_commit_late_help_command
+    local git_lfs_push_help_command
+    local git_subtree_push_help_command
+    local quoted_python_heredoc_command
+    local safe_process_substitution_after_shell_command
+    local safe_process_substitution_inside_shell_payload
+    local output1
+    local output2
+    local output3
+    local output4
+    local output5
+    local output6
+    local output7
+    local output8
+    local output9
+    local output10
+    local output11
+    local output12
+    local output13
+    local output14
+    local output15
+    local output16
+    local output17
+    local output18
+    local output19
+
+    issue_command=$'gh issue create --title bug --body "$(cat <<EOF\ngit commit -m test should not block here\nEOF\n)"'
+    helper_echo_command="find . -exec echo git push origin main \\;"
+    print_command="printf %s git push origin main"
+    quoted_heredoc_command=$'cat <<\'EOF\'\n$(git push origin main)\nEOF'
+    git_global_help_command="git --help push"
+    git_help_command="git help push"
+    git_push_help_command="git push --help"
+    git_alias_push_help_command="git -c alias.p=push p --help"
+    git_alias_commit_help_command="git -c alias.c=commit c -h"
+    git_help_command_substitution='bash -c "$(git help push)"'
+    git_push_help_command_substitution='eval "$(git push --help)"'
+    git_push_late_help_command="git push origin --help"
+    git_commit_late_help_command="git commit -m test --help"
+    git_lfs_push_help_command="git lfs push --help"
+    git_lfs_global_help_command="git lfs --help push"
+    git_subtree_push_help_command="git subtree push --help"
+    quoted_python_heredoc_command=$'python <<\'EOF\'\n$(git push origin main)\nEOF'
+    safe_process_substitution_after_shell_command='bash -c "true"; cat <(echo git push origin main)'
+    safe_process_substitution_inside_shell_payload='bash -c "cat <(echo git push origin main)"'
+    output1=$(run_node_json_hook "$(payload_for_command "$issue_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output2=$(run_node_json_hook "$(payload_for_command "$print_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output3=$(run_node_json_hook "$(payload_for_command "$helper_echo_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output4=$(run_node_json_hook "$(payload_for_command "$quoted_heredoc_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output5=$(run_node_json_hook "$(payload_for_command "$git_global_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output6=$(run_node_json_hook "$(payload_for_command "$git_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output7=$(run_node_json_hook "$(payload_for_command "$git_push_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output8=$(run_node_json_hook "$(payload_for_command "$quoted_python_heredoc_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output9=$(run_node_json_hook "$(payload_for_command "$git_alias_push_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output10=$(run_node_json_hook "$(payload_for_command "$git_alias_commit_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output11=$(run_node_json_hook "$(payload_for_command "$git_help_command_substitution")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output12=$(run_node_json_hook "$(payload_for_command "$git_push_help_command_substitution")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output13=$(run_node_json_hook "$(payload_for_command "$git_push_late_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output14=$(run_node_json_hook "$(payload_for_command "$git_commit_late_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output15=$(run_node_json_hook "$(payload_for_command "$git_lfs_push_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output16=$(run_node_json_hook "$(payload_for_command "$git_subtree_push_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output17=$(run_node_json_hook "$(payload_for_command "$git_lfs_global_help_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output18=$(run_node_json_hook "$(payload_for_command "$safe_process_substitution_after_shell_command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+    output19=$(run_node_json_hook "$(payload_for_command "$safe_process_substitution_inside_shell_payload")" "$UNIVERSAL_PRETOOL_SCRIPT")
+
+    if [ -z "$output1$output2$output3$output4$output5$output6$output7$output8$output9$output10$output11$output12$output13$output14$output15$output16$output17$output18$output19" ]; then
+        pass "universal pre-tool hook allows non-git commands that mention git commit/push"
+    else
+        fail "universal pre-tool hook blocked non-git command text (output1: $output1 output2: $output2 output3: $output3 output4: $output4 output5: $output5 output6: $output6 output7: $output7 output8: $output8 output9: $output9 output10: $output10 output11: $output11 output12: $output12 output13: $output13 output14: $output14 output15: $output15 output16: $output16 output17: $output17 output18: $output18 output19: $output19)"
+    fi
+}
+
+test_universal_pretool_does_not_crash_on_non_git_prototype_words() {
+    if run_node_hook_status "$(payload_for_command "toString -x git push origin main")" "$UNIVERSAL_PRETOOL_SCRIPT" \
+        && run_node_hook_status "$(payload_for_command "echo \$'\\UFFFFFFFF'")" "$UNIVERSAL_PRETOOL_SCRIPT"; then
+        pass "universal pre-tool hook does not crash on non-git prototype words"
+    else
+        fail "universal pre-tool hook crashed on non-git prototype words"
+    fi
+}
+
+test_universal_pretool_blocks_deep_wrapper_recursion() {
+    local command
+    local output
+    command=$(deep_nested_eval_command)
+    output=$(run_node_json_hook "$(payload_for_command "$command")" "$UNIVERSAL_PRETOOL_SCRIPT")
+
+    if echo "$output" | grep -q '"decision":"block"'; then
+        pass "universal pre-tool hook blocks deep wrapper recursion"
+    else
+        fail "universal pre-tool hook allowed deep wrapper recursion (output: $output)"
     fi
 }
 
@@ -693,6 +1707,13 @@ test_repo_defaults_to_xhigh_reasoning() {
         all_passed=false
     fi
 
+    if ! grep -Fq '.codex\hooks\git-guard.cjs' "$REPO_DIR/install.ps1" ||
+       ! grep -Fq '.codex\hooks\session-start.cjs' "$REPO_DIR/install.ps1" ||
+       grep -Eq 'Copy-Item.*(git-guard|session-start)\.js' "$REPO_DIR/install.ps1"; then
+        fail "PowerShell installer does not install the universal .cjs hook runtime"
+        all_passed=false
+    fi
+
     if [ "$all_passed" = "true" ]; then
         pass "repo contract defaults to xhigh reasoning"
     fi
@@ -941,11 +1962,19 @@ test_e2e_requires_explicit_token_opt_in() {
 
 test_pretool_blocks_commit
 test_pretool_blocks_push
+test_pretool_blocks_git_after_shell_prefixes
 test_pretool_allows_safe_command
 test_pretool_reads_command_field
+test_pretool_allows_non_git_command_mentions
+test_pretool_does_not_crash_on_non_git_prototype_words
+test_pretool_blocks_deep_wrapper_recursion
 test_session_warns_missing
 test_session_silent_when_present
 test_universal_pretool_blocks_commit
+test_universal_pretool_blocks_git_after_shell_prefixes
+test_universal_pretool_allows_non_git_command_mentions
+test_universal_pretool_does_not_crash_on_non_git_prototype_words
+test_universal_pretool_blocks_deep_wrapper_recursion
 test_universal_session_warns_missing
 test_universal_node_hooks_work_in_type_module_repos
 test_hooks_json_matcher
