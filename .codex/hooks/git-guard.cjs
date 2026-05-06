@@ -4482,10 +4482,10 @@ if (/^\s*(?:(?:\/usr\/bin|\/bin)\/)?(?:bash|zsh|sh|dash|ksh|fish)(?:\s+-[\w-]+)*
 const subcommand = guardedGitSubcommand(command);
 
 if (subcommand === "commit") {
-  block("TDD CHECK: Did you run tests before committing? Run your full test suite first. ALL tests must pass.");
+  block("SDLC CHECKPOINT: git commit is a hard manual checkpoint. Confirm TDD RED/GREEN, full-suite proof, and self-review are complete, then use an explicit approved commit path.");
   process.exit(0);
 }
 
 if (subcommand === "push") {
-  block("REVIEW CHECK: Did you self-review your changes and run all tests before pushing?");
+  block("SDLC CHECKPOINT: git push is a hard manual checkpoint. Confirm branch sync, full-suite proof, and review are complete, then use an explicit approved push path.");
 }

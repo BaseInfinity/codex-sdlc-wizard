@@ -123,7 +123,9 @@ fi
 test_pretool_blocks_commit() {
     local output
     output=$(run_json_hook '{"tool_input":{"command":"git commit -m '\''test'\''"}}' "$PRETOOL_SCRIPT")
-    if echo "$output" | grep -q '"decision":"block"'; then
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'hard manual checkpoint' \
+        && ! echo "$output" | grep -qi 'Did you run tests'; then
         pass "pre-tool hook blocks git commit"
     else
         fail "pre-tool hook did not block git commit (output: $output)"
@@ -133,7 +135,9 @@ test_pretool_blocks_commit() {
 test_pretool_blocks_push() {
     local output
     output=$(run_json_hook '{"tool_input":{"command":"git push origin main"}}' "$PRETOOL_SCRIPT")
-    if echo "$output" | grep -q '"decision":"block"'; then
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'hard manual checkpoint' \
+        && ! echo "$output" | grep -qi 'Did you self-review'; then
         pass "pre-tool hook blocks git push"
     else
         fail "pre-tool hook did not block git push (output: $output)"
