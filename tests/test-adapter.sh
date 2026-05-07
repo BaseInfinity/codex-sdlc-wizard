@@ -1845,6 +1845,34 @@ test_update_skill_frontloads_package_upgrade_boundary() {
     fi
 }
 
+test_helper_skill_metadata_uses_codex_sdlc_not_xdlc() {
+    local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local setup_openai="$REPO_DIR/skills/setup-wizard/agents/openai.yaml"
+    local update_openai="$REPO_DIR/skills/update-wizard/agents/openai.yaml"
+    local all_passed=true
+
+    if grep -REiq 'Codex[[:space:]]+XDLC|XDLC[[:space:]]+adapter|host adapter core|core metadata' \
+        "$setup_skill" "$update_skill" "$setup_openai" "$update_openai" "$REPO_DIR/SKILL.md" "$REPO_DIR/agents/openai.yaml" 2>/dev/null; then
+        all_passed=false
+    fi
+
+    grep -Fq 'Codex SDLC' "$setup_skill" || all_passed=false
+    grep -Fq 'Codex SDLC' "$update_skill" || all_passed=false
+    grep -Fq 'Codex SDLC' "$setup_openai" || all_passed=false
+    grep -Fq 'Codex SDLC' "$update_openai" || all_passed=false
+
+    if grep -Eq 'invoke `?\$setup-wizard|invoke `?\$update-wizard|use /skills and invoke' "$REPO_DIR/install.ps1"; then
+        all_passed=false
+    fi
+
+    if [ "$all_passed" = "true" ]; then
+        pass "helper skill metadata says Codex SDLC and avoids XDLC/palette leakage"
+    else
+        fail "helper skill metadata should say Codex SDLC and avoid XDLC/palette leakage"
+    fi
+}
+
 test_setup_and_update_skills_stop_before_product_remediation() {
     local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
     local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
@@ -2324,6 +2352,7 @@ test_agents_md_size
 test_setup_skill_has_confidence_setup_contract
 test_update_skill_has_idempotent_update_contract
 test_update_skill_frontloads_package_upgrade_boundary
+test_helper_skill_metadata_uses_codex_sdlc_not_xdlc
 test_setup_and_update_skills_stop_before_product_remediation
 test_feedback_skill_has_privacy_prompt_and_dedupe
 test_setup_docs_include_codex_desktop_handoff

@@ -1,13 +1,13 @@
 ---
 name: setup-wizard
-description: Setup wizard for Codex — scans the repo, builds confidence per data point, asks only what it cannot resolve, and generates repo-specific SDLC docs. Use for first-time setup or re-running setup.
+description: Setup wizard for Codex SDLC repos — scans the repo, builds confidence per data point, asks only what it cannot resolve, and generates repo-specific SDLC docs. Use for first-time setup or re-running setup.
 ---
 
 # Setup Wizard
 
 ## Purpose
 
-You are a confidence-driven setup wizard for Codex. Scan the project, infer as much as possible, and ask only about unresolved preferences or missing facts.
+You are a confidence-driven setup wizard for Codex SDLC repos. Scan the project, infer as much as possible, and ask only about unresolved preferences or missing facts.
 
 Do not ask a fixed checklist. Do not ask what you already know.
 
