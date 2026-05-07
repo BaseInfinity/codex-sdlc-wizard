@@ -626,6 +626,42 @@ test_readme_puts_quick_start_near_the_top() {
     fi
 }
 
+test_readme_has_consumer_parity_sections_without_ecosystem_reveal() {
+    local has_strong_intro=true
+    local has_why=true
+    local has_actual_shape=true
+    local has_different=true
+    local has_documentation=true
+    local has_feedback=true
+    local has_proof_gate=true
+    local has_native_review=true
+    local avoids_ecosystem_reveal=true
+
+    grep -qi 'self-evolving Software Development Life Cycle (SDLC) enforcement system for AI coding agents' "$README" || has_strong_intro=false
+    grep -q '^## Why Use This$' "$README" || has_why=false
+    grep -q '^## What This Actually Is$' "$README" || has_actual_shape=false
+    grep -q '^## What Makes This Different$' "$README" || has_different=false
+    grep -q '^## Documentation$' "$README" || has_documentation=false
+    grep -q '^## Feedback$' "$README" || has_feedback=false
+    grep -qi 'Proof-aware git gates' "$README" || has_proof_gate=false
+    grep -qi 'Codex-native review' "$README" || has_native_review=false
+    grep -Eqi '^## XDLC Ecosystem|Full ecosystem|broader .*ecosystem' "$README" && avoids_ecosystem_reveal=false
+
+    if [ "$has_strong_intro" = "true" ] &&
+       [ "$has_why" = "true" ] &&
+       [ "$has_actual_shape" = "true" ] &&
+       [ "$has_different" = "true" ] &&
+       [ "$has_documentation" = "true" ] &&
+       [ "$has_feedback" = "true" ] &&
+       [ "$has_proof_gate" = "true" ] &&
+       [ "$has_native_review" = "true" ] &&
+       [ "$avoids_ecosystem_reveal" = "true" ]; then
+        pass "README has sibling-parity consumer sections without ecosystem reveal"
+    else
+        fail "README is missing consumer parity sections or reveals ecosystem framing too early"
+    fi
+}
+
 test_sponsor_metadata_exists() {
     local funding_file="$REPO_DIR/.github/FUNDING.yml"
     local has_github_funding=true
@@ -711,6 +747,7 @@ test_readme_documents_model_profiles
 test_readme_documents_native_codex_review
 test_readme_uses_real_release_examples
 test_readme_puts_quick_start_near_the_top
+test_readme_has_consumer_parity_sections_without_ecosystem_reveal
 test_sponsor_metadata_exists
 test_consumer_bug_report_template_exists
 
