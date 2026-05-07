@@ -54,6 +54,22 @@ This repo is now a **Codex skill plus adaptive installer-style adapter** for Cod
 | Add SDLC enforcement to an existing Codex project now | `npx codex-sdlc-wizard` or `setup.sh` | The npm package bootstraps then hands off into live Codex setup; direct scripts still exist for advanced/manual shell paths |
 | Install a Codex plugin from this repo | Not supported | There is no `.codex-plugin/plugin.json` package here |
 
+## Official Codex Distribution Status
+
+Current recommended install/discovery path: `npx codex-sdlc-wizard@latest` for repo setup, plus the repo-root `SKILL.md` / `agents/openai.yaml` package for skill installation.
+
+Official Codex docs now clarify the packaging boundary:
+
+- [Agent Skills](https://developers.openai.com/codex/skills): skills are the authoring format for reusable workflows.
+- [Plugins](https://developers.openai.com/codex/plugins) and [Build plugins](https://developers.openai.com/codex/plugins/build): plugins are the installable distribution unit for reusable skills, app integrations, and MCP servers in Codex.
+
+What that means for this repo:
+
+1. Today, keep npm/npx as the supported consumer path and keep this README honest that the repo is not a plugin yet.
+2. Next packaging path, when worth doing, is a real Codex plugin with `.codex-plugin/plugin.json`, bundled `skills/`, optional `.mcp.json`, optional `.app.json`, and presentation assets.
+3. Local or team testing should use a plugin marketplace file at `.agents/plugins/marketplace.json`, then verify with `codex plugin marketplace add` and the CLI `/plugins` browser.
+4. Official public plugin listing is not self-serve yet; self-serve plugin publishing is coming soon. Until a listing actually exists, no approval or listing is implied.
+
 ## Why Use This
 
 You want Codex to follow engineering discipline automatically:
