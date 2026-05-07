@@ -662,6 +662,42 @@ test_readme_has_consumer_parity_sections_without_ecosystem_reveal() {
     fi
 }
 
+test_readme_documents_official_codex_distribution_status() {
+    local has_heading=true
+    local has_skill_docs=true
+    local has_plugin_docs=true
+    local has_authoring_format=true
+    local has_installable_unit=true
+    local has_local_marketplace=true
+    local has_publish_boundary=true
+    local keeps_npx_path=true
+    local avoids_endorsement=true
+
+    grep -q '^## Official Codex Distribution Status$' "$README" || has_heading=false
+    grep -q 'developers.openai.com/codex/skills' "$README" || has_skill_docs=false
+    grep -q 'developers.openai.com/codex/plugins' "$README" || has_plugin_docs=false
+    grep -qi 'skills are the authoring format' "$README" || has_authoring_format=false
+    grep -qi 'plugins are the installable distribution unit' "$README" || has_installable_unit=false
+    grep -q 'codex plugin marketplace add' "$README" || has_local_marketplace=false
+    grep -qi 'self-serve plugin publishing.*coming soon\|official public plugin.*coming soon' "$README" || has_publish_boundary=false
+    grep -q 'npx codex-sdlc-wizard@latest' "$README" || keeps_npx_path=false
+    grep -Eqi 'official OpenAI (partner|endorsed|certified)|OpenAI-endorsed|OpenAI certified' "$README" && avoids_endorsement=false
+
+    if [ "$has_heading" = "true" ] &&
+       [ "$has_skill_docs" = "true" ] &&
+       [ "$has_plugin_docs" = "true" ] &&
+       [ "$has_authoring_format" = "true" ] &&
+       [ "$has_installable_unit" = "true" ] &&
+       [ "$has_local_marketplace" = "true" ] &&
+       [ "$has_publish_boundary" = "true" ] &&
+       [ "$keeps_npx_path" = "true" ] &&
+       [ "$avoids_endorsement" = "true" ]; then
+        pass "README documents the current official Codex distribution status without endorsement claims"
+    else
+        fail "README does not document the current official Codex distribution status clearly enough"
+    fi
+}
+
 test_sponsor_metadata_exists() {
     local funding_file="$REPO_DIR/.github/FUNDING.yml"
     local has_github_funding=true
@@ -748,6 +784,7 @@ test_readme_documents_native_codex_review
 test_readme_uses_real_release_examples
 test_readme_puts_quick_start_near_the_top
 test_readme_has_consumer_parity_sections_without_ecosystem_reveal
+test_readme_documents_official_codex_distribution_status
 test_sponsor_metadata_exists
 test_consumer_bug_report_template_exists
 

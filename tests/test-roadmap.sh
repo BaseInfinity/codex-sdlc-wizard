@@ -139,6 +139,30 @@ test_roadmap_tracks_late_creator_investigation() {
     fi
 }
 
+test_roadmap_tracks_official_codex_plugin_distribution_plan() {
+    local has_official_distribution=true
+    local has_plugin_manifest=true
+    local has_marketplace=true
+    local has_publish_boundary=true
+    local has_no_endorsement_rule=true
+
+    grep -Eqi 'official Codex.*distribution|Codex plugin distribution' "$ROADMAP" || has_official_distribution=false
+    grep -q '.codex-plugin/plugin.json' "$ROADMAP" || has_plugin_manifest=false
+    grep -q '.agents/plugins/marketplace.json' "$ROADMAP" || has_marketplace=false
+    grep -Eqi 'self-serve plugin publishing.*coming soon|official public plugin.*coming soon|coming soon.*plugin publishing' "$ROADMAP" || has_publish_boundary=false
+    grep -Eqi 'do not imply official OpenAI endorsement|no official OpenAI endorsement|without official OpenAI endorsement' "$ROADMAP" || has_no_endorsement_rule=false
+
+    if [ "$has_official_distribution" = "true" ] &&
+       [ "$has_plugin_manifest" = "true" ] &&
+       [ "$has_marketplace" = "true" ] &&
+       [ "$has_publish_boundary" = "true" ] &&
+       [ "$has_no_endorsement_rule" = "true" ]; then
+        pass "Roadmap tracks the official Codex plugin distribution plan and publish boundary"
+    else
+        fail "Roadmap does not track the official Codex plugin distribution plan and publish boundary"
+    fi
+}
+
 test_roadmap_tracks_review_model_measurement() {
     local has_mini=true
     local has_xhigh_review=true
@@ -236,6 +260,7 @@ test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_calls_out_stale_issue_cleanup
 test_roadmap_tracks_late_creator_investigation
+test_roadmap_tracks_official_codex_plugin_distribution_plan
 test_roadmap_tracks_review_model_measurement
 test_roadmap_sets_numeric_model_profile_targets
 test_roadmap_tracks_default_use_pilot_gate

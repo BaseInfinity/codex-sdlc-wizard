@@ -66,9 +66,20 @@ After `0.7.23`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
+- official Codex plugin distribution packaging, after the current npm/skill path stays stable
 - model-profile measurement data collection for `mixed` vs `maximum`
 - top-level proof-run parallelization to reduce release-wall-clock time without weakening suite coverage
 - later creator-tool research after the active backlog stays under control
+
+## Official Codex Plugin Distribution Plan
+
+Official Codex docs now make plugins the installable distribution unit for reusable skills, apps, MCP servers, and presentation assets. The current repo remains npm/skill-first until plugin packaging is justified by consumption.
+
+- Keep the current consumer path as `npx codex-sdlc-wizard@latest` plus the existing Codex skill package.
+- When packaging as a plugin, add `.codex-plugin/plugin.json`, bundle the public `$sdlc` workflow under plugin `skills/`, keep helper skills scoped as support tooling, and include only required `.mcp.json` or `.app.json` integrations.
+- Test local/team discovery through `.agents/plugins/marketplace.json` before considering a public listing.
+- Official docs say self-serve plugin publishing is coming soon; treat public listing as blocked until that path is actually available in practice.
+- Do not imply official OpenAI endorsement unless the plugin is actually accepted into the official Plugin Directory.
 
 ## Working Order
 
