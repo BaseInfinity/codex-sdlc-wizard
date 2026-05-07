@@ -256,5 +256,5 @@ Write-Host "Full-trust warning: only use that variant in repos you fully trust; 
 Write-Host "Recommended: use full access during setup, environment repair, and auth-heavy workflows."
 Write-Host "Wrote repo-local .codex/config.toml model keys for this profile; mixed is wizard policy, not a native Codex mode."
 Write-Host "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
-Write-Host "Codex does not have a native /sdlc command. Use the installed skills plus START-SDLC.md and SDLC-LOOP.md as the honest equivalent."
-Write-Host "After restart, use /skills and invoke `$sdlc, `$setup-wizard, `$update-wizard, or `$feedback."
+Write-Host "Codex does not have a native /sdlc command. Use `$sdlc plus START-SDLC.md and SDLC-LOOP.md as the honest equivalent."
+Write-Host "After restart, use `$sdlc as the public workflow. Setup/update/feedback helpers are installed for Codex support, not as extra repo-scoped lifecycle entrypoints."
