@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.23` and `v0.7.23` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.24` and `v0.7.24` are the current release target for the SDLC-only default repo skill surface
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -38,14 +38,16 @@
 - public install/README/skill copy now keeps unreleased future workflow labels out of handoff text
 - the repo now ships a consumer bug-report template for install/setup/runtime failures
 - the public README now leads with the real `@latest` adaptive setup path and keeps the top section consumer-focused
+- the public README now has consumer-parity sections that explain why to use the wizard without exposing later ecosystem branding
+- official Codex skills/plugins docs now have a documented distribution boundary in README and ROADMAP: npm/skill remains current, plugin packaging is future work
 - benchmark and pilot-rollout ledgers now exist so model/default-use decisions can be measured, not guessed
 - release, packaging, npm, skill, setup, adapter, update, and E2E tests are green when the parity merge is complete
 
 ## Next Release Cycle
 
-### 0.7.24
+### 0.7.25
 
-Purpose: continue pilot rollout and the post-`0.7.23` README/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
+Purpose: continue pilot rollout after the `0.7.24` README/discovery cleanup while keeping any new stabilization patches tied to proven reusable wizard bugs.
 
 Scope:
 - keep `0.7.16` as the cross-platform hook stabilization baseline for shared macOS/Windows repos
@@ -58,11 +60,11 @@ Scope:
 The stabilization tracker is currently clear after the reusable bugs found during pilot consumption. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.23` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.24` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.23`, the main backlog is:
+After `0.7.24`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
