@@ -1,6 +1,8 @@
 # Codex SDLC Wizard
 
-An adapter that brings [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard) enforcement to OpenAI's Codex CLI.
+A **self-evolving Software Development Life Cycle (SDLC) enforcement system for AI coding agents**, adapted for OpenAI's Codex CLI. It makes Codex plan before coding, test before shipping, state confidence, and self-review with repo-local guardrails instead of relying on memory.
+
+This adapter brings the [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard) discipline into Codex projects with Codex-native skills, `.codex/` hooks, `AGENTS.md`, adaptive setup/update, and proof-aware git gates.
 
 ## Quick Start
 
@@ -52,6 +54,19 @@ This repo is now a **Codex skill plus adaptive installer-style adapter** for Cod
 | Add SDLC enforcement to an existing Codex project now | `npx codex-sdlc-wizard` or `setup.sh` | The npm package bootstraps then hands off into live Codex setup; direct scripts still exist for advanced/manual shell paths |
 | Install a Codex plugin from this repo | Not supported | There is no `.codex-plugin/plugin.json` package here |
 
+## Why Use This
+
+You want Codex to follow engineering discipline automatically:
+
+- **Plan before coding** instead of jumping straight to edits
+- **Write tests first** and keep TDD visible in the repo contract
+- **State confidence** so low-confidence work triggers research instead of guessing
+- **Self-review before presenting** using Codex-native review where appropriate
+- **Prove the work is shippable** with fresh test/review evidence before commit or push
+- **Preserve repo truth** in `AGENTS.md`, setup docs, hooks, and skills instead of one-off chat memory
+
+The wizard auto-detects your stack, generates repo-specific SDLC docs, installs Codex hook enforcement, and gives you `check` / `update` paths so the setup can be repaired without flattening local customizations.
+
 ## Self-Adapting SDLC Enforcement
 
 This adapter brings the SDLC Wizard discipline into Codex today with hard guardrails, repo-local guidance, and adaptive setup/update flows that work in existing projects.
@@ -72,6 +87,32 @@ This adapter brings the SDLC Wizard discipline into Codex today with hard guardr
 
 This adapter tracks the upstream [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard). A weekly sync workflow checks for upstream releases and opens follow-up issues here when translation work is needed.
 
+## What This Actually Is
+
+Five layers working together:
+
+```text
+Layer 5: SELF-IMPROVEMENT
+  Upstream sync checks, roadmap issues, release proof, and pilot feedback
+  keep the wizard improving without silently changing consumer repos.
+
+Layer 4: RELEASE VALIDATION
+  Packaging, npm, release, roadmap, benchmark, setup/update, and E2E
+  tests verify the shipped adapter surface before tags are published.
+
+Layer 3: ADAPTIVE SETUP / UPDATE
+  Deterministic scan plus live Codex refinement generates repo-specific
+  docs and repairs drift while preserving intentional customizations.
+
+Layer 2: ENFORCEMENT
+  Codex hooks block commit/push until fresh reviewed proof exists, while
+  repo-scoped skills carry the explicit workflow contract.
+
+Layer 1: LOCAL TRUTH
+  AGENTS.md, START-SDLC.md, SDLC-LOOP.md, PROVE-IT.md, TESTING.md, and
+  ARCHITECTURE.md keep the SDLC rules durable inside the target repo.
+```
+
 ## What It Does
 
 | SDLC Goal | Enforcement | Level |
@@ -81,6 +122,17 @@ This adapter tracks the upstream [SDLC Wizard](https://github.com/BaseInfinity/a
 | git push gate | PreToolUse blocks `git push` | **Hard** |
 | SDLC baseline | repo docs + installed skills | **Hard/Soft mix** |
 | Session init | SessionStart hook | Warns if AGENTS.md is missing |
+
+## What Makes This Different
+
+| Capability | Codex-specific shape |
+|------------|----------------------|
+| **Proof-aware git gates** | `git commit` and `git push` stay blocked until a fresh reviewed SDLC proof stamp is tied to the current repo content |
+| **Codex-native review** | Uses `codex review --uncommitted`, `--base`, or `--commit`; `review_model = "gpt-5.5"` provides the intended review pass |
+| **Adaptive setup/update** | Default `npx` setup bootstraps first, then hands off into Codex for unresolved questions; update repairs drift without blind overwrites |
+| **Honest skill model** | `$sdlc` is the public repo-scoped workflow; helper skills stay support tooling instead of pretending Codex has slash commands |
+| **Cross-platform hook shape** | Universal Node hook entrypoints avoid Bash/PowerShell hook-config churn across macOS, Linux, Windows, and `type: module` repos |
+| **Auth-aware routing** | Setup docs route browser sign-in, WAM, MFA, tenant, and admin-portal boundaries to Desktop/computer-use or human-owned proof instead of unsafe CLI guesses |
 
 ### Proof-Aware Git Gate
 
@@ -338,9 +390,28 @@ CODEX_E2E=1 bash tests/test-e2e.sh
 - Adapter, setup, and update tests for the Codex-specific behavior surface
 - E2E integration tests are token-consuming and opt-in; use `CODEX_E2E=1 bash tests/test-e2e.sh` when you explicitly want real Codex sessions proving hooks fire
 
+## Documentation
+
+| Document | What It Covers |
+|----------|----------------|
+| [AGENTS.md](AGENTS.md) | Repo contract for planning, confidence, TDD, review, and model profile policy |
+| [START-SDLC.md](START-SDLC.md) | Quick operator entrypoint for starting SDLC work in an installed repo |
+| [SDLC-LOOP.md](SDLC-LOOP.md) | Repeatable plan -> test -> implement -> review -> prove loop |
+| [PROVE-IT.md](PROVE-IT.md) | Proof-stamp gate for commit/push and examples for explicit check commands |
+| [RELEASE.md](RELEASE.md) | Maintainer release checklist before semver tags and npm/GitHub release publish |
+| [ROADMAP.md](ROADMAP.md) | Current shipped state, next release cycle, and backlog ordering |
+
 ## Upstream
 
 Based on [agentic-ai-sdlc-wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard). Same SDLC philosophy, translated to Codex's current tool model with Codex-native skills, repo hooks, and adaptive setup/update flows.
+
+## Feedback
+
+Three ways to report bugs, request features, or ask questions:
+
+- **In-session:** run `$feedback` when installed; it is privacy-first and redacts sensitive context before preparing a report.
+- **Consumer bug report:** use the [consumer bug report template](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/new?template=consumer-bug-report.yml) for install/setup/runtime failures.
+- **Issues:** open a normal GitHub issue for feature requests, docs gaps, or proven reusable wizard findings.
 
 ## Community
 
