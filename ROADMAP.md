@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.22` and `v0.7.22` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.23` and `v0.7.23` are the current release target for the SDLC-only default repo skill surface
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -34,6 +34,7 @@
 - setup/update now repair stale platform-specific hook wiring and install universal Node hook entrypoints so a checked-in `.codex/hooks.json` does not flip between macOS Bash and Windows PowerShell commands
 - generated Node hooks now use `.cjs` entrypoints so consumer repos with `"type": "module"` do not break on CommonJS `require`
 - update now repairs legacy `.js` hook commands and stale `.js` hook manifest entries, including old matching files
+- the git guard is now proof-aware: fresh reviewed SDLC proof allows commit/push, while missing, stale, cross-repo, or mismatched-workdir proof still blocks
 - public install/README/skill copy now keeps unreleased future workflow labels out of handoff text
 - the repo now ships a consumer bug-report template for install/setup/runtime failures
 - the public README now leads with the real `@latest` adaptive setup path and keeps the top section consumer-focused
@@ -42,9 +43,9 @@
 
 ## Next Release Cycle
 
-### 0.7.23
+### 0.7.24
 
-Purpose: continue pilot rollout and the post-`0.7.22` README/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
+Purpose: continue pilot rollout and the post-`0.7.23` README/discovery backlog while keeping any new stabilization patches tied to proven reusable wizard bugs.
 
 Scope:
 - keep `0.7.16` as the cross-platform hook stabilization baseline for shared macOS/Windows repos
@@ -57,11 +58,11 @@ Scope:
 The stabilization tracker is currently clear after the reusable bugs found during pilot consumption. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.22` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.23` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.22`, the main backlog is:
+After `0.7.23`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
