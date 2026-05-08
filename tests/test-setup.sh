@@ -420,6 +420,38 @@ test_setup_generates_sdlc_md() {
     fi
 }
 
+# ---- Test 16: generated SDLC.md blocks unproven demo-ready runtime claims ----
+test_setup_generates_demo_runtime_claim_gate() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"demo-app","scripts":{"test":"jest","build":"tsc"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/tests"
+    touch "$ws/jest.config.js"
+
+    run_setup "$ws"
+
+    local valid=true
+    if [ ! -f "$ws/SDLC.md" ]; then
+        valid=false
+    else
+        grep -q 'Demo runtime claim gate' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -qi 'human-facing surface' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -qi 'action runner' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -qi 'unit, integration, and E2E proof status' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -qi 'headed or live proof artifact' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -qi 'mutation gates and hard stops' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -qi 'not-claimed boundary' "$ws/SDLC.md" 2>/dev/null || valid=false
+        grep -qi 'Codex CLI is build and regression-test tooling only' "$ws/SDLC.md" 2>/dev/null || valid=false
+    fi
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup.sh generates a demo runtime claim gate in SDLC.md"
+    else
+        fail "setup.sh did not generate the demo runtime claim gate in SDLC.md"
+    fi
+}
+
 # ---- Test 16: interactive setup keeps detected values and offers one-shot inferred/default acceptance ----
 test_setup_interactive_only_asks_preferences() {
     local ws
@@ -1336,6 +1368,7 @@ test_template_testing_md_domain
 test_generated_no_placeholders
 test_agents_md_read_directives
 test_setup_generates_sdlc_md
+test_setup_generates_demo_runtime_claim_gate
 test_setup_interactive_only_asks_preferences
 test_setup_interactive_accepts_scan_without_prompting_optional_blanks
 test_setup_interactive_asks_missing_core_facts

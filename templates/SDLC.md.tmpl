@@ -44,6 +44,21 @@ Use `Desktop/computer-use` first when the task crosses Microsoft browser sign-in
 
 After naming the lane, provide the handoff prompt and guardrails before any CLI or browser steps. Keep credentials, MFA, tenant consent, subscription creation, license/admin changes, sends, deletes, and policy publishing behind explicit human action.
 
+## Demo runtime claim gate
+
+Do not use "demo-ready", "boss-demo-ready", or equivalent runtime claims until the repo names and proves the actual demo runtime. Codex CLI is build and regression-test tooling only unless the product being demoed is itself Codex CLI.
+
+Before claiming a demo/runtime path is ready, record:
+
+- Human-facing surface: the UI, shell, desktop app, browser path, device, or document the presenter actually uses.
+- Action runner: the process, script, app, service, browser automation, or human procedure that performs the demo actions without hidden agent-shell execution.
+- Unit, integration, and E2E proof status: current pass/fail/skip state, with commands or artifact links.
+- Headed or live proof artifact: required when claiming a headed/live demo; use a recording, screenshot sequence, transcript, logs, or equivalent repeatable evidence.
+- Mutation gates and hard stops: writes, sends, deploys, destructive operations, money movement, tenant/admin changes, or policy changes that require explicit human approval.
+- Not-claimed boundary: what the demo does not prove, including mocked services, seeded data, skipped external systems, or operator steps not covered by proof.
+
+If any required field is missing, say the demo path is prepared or partially proven, not demo-ready.
+
 ## Project Preferences
 
 - Git workflow: `{{GIT_WORKFLOW}}`
