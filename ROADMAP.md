@@ -72,6 +72,7 @@ After `0.7.24`, the main backlog is:
 - any new reusable wizard fixes discovered during the pilot set
 - official Codex plugin distribution packaging, after the current npm/skill path stays stable
 - model-profile measurement data collection for `mixed` vs `maximum`
+- later `/goal` command pilot for `$sdlc`, after active release/stabilization work is clear
 - later creator-tool research after the active backlog stays under control
 
 ## Official Codex Plugin Distribution Plan
@@ -104,6 +105,7 @@ Before calling this the default Codex SDLC path, prove it on real pilot repos in
 
 After the current backlog is under control, investigate whether Codex's built-in `Skill Creator` and `Plugin Creator` can help reduce maintenance or packaging friction for this repo.
 
+- dogfood and test Codex `/goal` with `$sdlc` before adding wizard guidance, so any shipped recommendation is based on observed behavior rather than assumptions
 - evaluate `Skill Creator` as a possible future aid for skill-structure maintenance
 - evaluate `Plugin Creator` only as later research, since plugins are not part of the current shipping path
 - measure `gpt-5.4-mini` for the main working pass while keeping `gpt-5.5` `xhigh` for review or cross-model review, and compare that against simply running the whole slice at `xhigh`
