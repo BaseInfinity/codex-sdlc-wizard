@@ -378,6 +378,10 @@ All hooks are verified in real Codex CLI sessions, not just unit tested in isola
 ## Testing
 
 ```bash
+# Top-level maintainer proof runner (parallel by default, serial for debugging)
+node scripts/run-proof-suite.cjs
+node scripts/run-proof-suite.cjs --serial
+
 # Release contract tests (workflow + docs)
 bash tests/test-release.sh
 
@@ -399,6 +403,7 @@ bash tests/test-update.sh
 CODEX_E2E=1 bash tests/test-e2e.sh
 ```
 
+- `node scripts/run-proof-suite.cjs` runs the maintainer proof suite with bounded parallel jobs and per-check logs; use `--serial` when debugging ordering-sensitive failures.
 - Release contract tests for semver tags, GitHub Releases, and README release docs
 - Packaging smoke tests for the documented installer path and README packaging contract
 - Skill packaging tests for SKILL.md, agents/openai.yaml, and dual-distribution docs

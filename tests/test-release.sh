@@ -9,6 +9,7 @@ README="$REPO_DIR/README.md"
 RELEASE_DOC="$REPO_DIR/RELEASE.md"
 WORKFLOW="$REPO_DIR/.github/workflows/release.yml"
 PACKAGE_JSON="$REPO_DIR/package.json"
+PROOF_RUNNER="$REPO_DIR/scripts/run-proof-suite.cjs"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
 source "$JSON_HELPERS"
 require_node
@@ -202,6 +203,67 @@ test_release_checklist_enforces_sync_and_proof() {
     fi
 }
 
+test_release_checklist_points_to_parallel_proof_runner() {
+    local has_runner_command=true
+    local has_parallel_language=true
+    local has_serial_escape_hatch=true
+
+    grep -Fq 'node scripts/run-proof-suite.cjs' "$RELEASE_DOC" || has_runner_command=false
+    grep -Eqi 'parallel|bounded jobs|jobs' "$RELEASE_DOC" || has_parallel_language=false
+    grep -Fq 'node scripts/run-proof-suite.cjs --serial' "$RELEASE_DOC" || has_serial_escape_hatch=false
+
+    if [ "$has_runner_command" = "true" ] &&
+       [ "$has_parallel_language" = "true" ] &&
+       [ "$has_serial_escape_hatch" = "true" ]; then
+        pass "RELEASE.md points maintainers to the parallel proof runner with a serial fallback"
+    else
+        fail "RELEASE.md does not document the parallel proof runner and serial fallback"
+    fi
+}
+
+test_parallel_proof_runner_exists_and_lists_full_suite() {
+    local has_runner=true
+    local has_parallel_word=true
+    local has_serial_option=true
+    local has_jobs_option=true
+    local list_output=""
+
+    [ -f "$PROOF_RUNNER" ] || has_runner=false
+
+    if [ "$has_runner" = "true" ]; then
+        list_output="$(node "$PROOF_RUNNER" --list 2>/dev/null || true)"
+    fi
+
+    echo "$list_output" | grep -Eqi 'parallel|jobs' || has_parallel_word=false
+    echo "$list_output" | grep -Fq -- '--serial' || has_serial_option=false
+    echo "$list_output" | grep -Fq -- '--jobs' || has_jobs_option=false
+
+    for cmd in \
+        'git diff --check' \
+        'bash tests/test-release.sh' \
+        'bash tests/test-roadmap.sh' \
+        'bash tests/test-packaging.sh' \
+        'bash tests/test-npm.sh' \
+        'bash tests/test-skill.sh' \
+        'bash tests/test-adapter.sh' \
+        'bash tests/test-setup.sh' \
+        'bash tests/test-update.sh' \
+        'bash tests/test-benchmark.sh' \
+        'bash tests/test-e2e.sh'
+    do
+        echo "$list_output" | grep -Fq "$cmd" || has_runner=false
+    done
+
+    if [ "$has_runner" = "true" ] &&
+       [ "$has_parallel_word" = "true" ] &&
+       [ "$has_serial_option" = "true" ] &&
+       [ "$has_jobs_option" = "true" ]; then
+        pass "Parallel proof runner lists the complete maintainer proof suite"
+    else
+        fail "Parallel proof runner is missing or does not list the complete proof suite"
+    fi
+}
+
 test_readme_points_to_release_checklist() {
     if grep -Eq 'RELEASE\.md|release checklist' "$README"; then
         pass "README points maintainers to the release checklist"
@@ -239,6 +301,8 @@ test_readme_documents_versioned_release_path
 test_readme_documents_maintainer_release_steps
 test_release_checklist_exists
 test_release_checklist_enforces_sync_and_proof
+test_release_checklist_points_to_parallel_proof_runner
+test_parallel_proof_runner_exists_and_lists_full_suite
 test_readme_points_to_release_checklist
 test_roadmap_tests_are_version_agnostic
 
