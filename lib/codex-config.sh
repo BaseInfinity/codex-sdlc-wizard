@@ -134,7 +134,7 @@ function ensureFeatureHooks(inputLines) {
     const tableMatch = line.match(/^\s*\[([^\]]+)\]\s*(#.*)?$/);
     if (tableMatch) {
       if (inFeatures && !insertedHooks) {
-        output.push("codex_hooks = true");
+        output.push("hooks = true");
         insertedHooks = true;
       }
 
@@ -147,13 +147,13 @@ function ensureFeatureHooks(inputLines) {
       output.push(line);
 
       if (inFeatures) {
-        output.push("codex_hooks = true");
+        output.push("hooks = true");
         insertedHooks = true;
       }
       continue;
     }
 
-    if (inFeatures && isActiveKey(line, "codex_hooks")) {
+    if (inFeatures && (isActiveKey(line, "codex_hooks") || isActiveKey(line, "hooks"))) {
       continue;
     }
 
@@ -161,7 +161,7 @@ function ensureFeatureHooks(inputLines) {
   }
 
   if (inFeatures && !insertedHooks) {
-    output.push("codex_hooks = true");
+    output.push("hooks = true");
   }
 
   if (!sawFeatures) {
@@ -169,7 +169,7 @@ function ensureFeatureHooks(inputLines) {
       output.push("");
     }
     output.push("[features]");
-    output.push("codex_hooks = true");
+    output.push("hooks = true");
   }
 
   return output;
@@ -252,7 +252,8 @@ if (desired.review_model) {
 } else if (Object.prototype.hasOwnProperty.call(top, "review_model")) {
   needsRepair = true;
 }
-if (features.codex_hooks !== "true") needsRepair = true;
+if (features.hooks !== "true") needsRepair = true;
+if (Object.prototype.hasOwnProperty.call(features, "codex_hooks")) needsRepair = true;
 
 process.exit(needsRepair ? 0 : 1);
 NODE

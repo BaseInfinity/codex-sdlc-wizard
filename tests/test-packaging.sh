@@ -135,7 +135,9 @@ test_installer_writes_default_model_profile() {
         has_profile=false
     elif ! grep -q '^review_model = "gpt-5.5"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
-    elif ! grep -q '^codex_hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
+    elif ! grep -q '^hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        has_profile=false
+    elif grep -v '^[[:space:]]*#' "$target_repo/.codex/config.toml" | grep -q '^codex_hooks\s*=' 2>/dev/null; then
         has_profile=false
     fi
 
@@ -199,6 +201,7 @@ test_installer_recommends_full_auto_and_restart_resume() {
 
     if echo "$output" | grep -q "codex --full-auto" &&
        echo "$output" | grep -Eqi 'exit and reopen Codex|restart Codex' &&
+       echo "$output" | grep -Eqi '/hooks.*review|review.*\/hooks' &&
        echo "$output" | grep -q "codex resume --full-auto -m gpt-5.5" &&
        echo "$output" | grep -Fq 'model_reasoning_effort="xhigh"'; then
         pass "Installer output recommends codex --full-auto plus restart/resume after setup"
@@ -354,6 +357,8 @@ test_readme_explains_install_side_effects() {
     local mentions_hooks=true
     local mentions_agents=true
     local mentions_sdlc_skill=true
+    local mentions_hooks_flag=true
+    local mentions_hooks_review=true
     local avoids_default_adlc_skill=true
 
     grep -q '^### What `install.sh` Changes$' "$README" || has_heading=false
@@ -361,6 +366,8 @@ test_readme_explains_install_side_effects() {
     grep -q '\.codex/hooks\.json' "$README" || mentions_hooks=false
     grep -q 'AGENTS\.md' "$README" || mentions_agents=false
     grep -q '\.agents/skills/sdlc/SKILL.md' "$README" || mentions_sdlc_skill=false
+    grep -Fq '[features].hooks' "$README" || mentions_hooks_flag=false
+    grep -Eiq '/hooks.*review|review.*\/hooks' "$README" || mentions_hooks_review=false
     grep -q '\.agents/skills/adlc/SKILL.md' "$README" && avoids_default_adlc_skill=false
 
     if [ "$has_heading" = "true" ] &&
@@ -368,6 +375,8 @@ test_readme_explains_install_side_effects() {
        [ "$mentions_hooks" = "true" ] &&
        [ "$mentions_agents" = "true" ] &&
        [ "$mentions_sdlc_skill" = "true" ] &&
+       [ "$mentions_hooks_flag" = "true" ] &&
+       [ "$mentions_hooks_review" = "true" ] &&
        [ "$avoids_default_adlc_skill" = "true" ]; then
         pass "README explains what install.sh changes in a target repo"
     else

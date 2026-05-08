@@ -33,6 +33,7 @@
 - setup/install now keep `$sdlc` repo-scoped, install no extra repo-scoped lifecycle skills by default, and install only global helper skills, avoiding same-name global/repo skill collisions
 - setup now detects Playwright MCP browser tooling/profile policy and documents explicit opt-in isolation versus shared persistent auth-heavy flows without rewriting `.mcp.json`
 - setup/update now repair stale platform-specific hook wiring and install universal Node hook entrypoints so a checked-in `.codex/hooks.json` does not flip between macOS Bash and Windows PowerShell commands
+- setup/update now write `[features].hooks = true`, migrate deprecated `[features].codex_hooks` config, and remind users to review pending repo hooks through `/hooks`
 - generated Node hooks now use `.cjs` entrypoints so consumer repos with `"type": "module"` do not break on CommonJS `require`
 - update now repairs legacy `.js` hook commands and stale `.js` hook manifest entries, including old matching files
 - the git guard is now proof-aware: fresh reviewed SDLC proof allows commit/push, while missing, stale, cross-repo, or mismatched-workdir proof still blocks
@@ -49,10 +50,10 @@
 
 ### 0.7.26
 
-Purpose: continue pilot rollout after the `0.7.25` demo-runtime/proof-runner stabilization while keeping any new patches tied to proven reusable wizard bugs.
+Purpose: continue pilot rollout after the `0.7.25` demo-runtime/proof-runner/hooks-flag stabilization while keeping any new patches tied to proven reusable wizard bugs.
 
 Scope:
-- keep `0.7.25` as the demo-runtime claim gate and parallel proof-runner baseline for pilot consumption
+- keep `0.7.25` as the demo-runtime claim gate, parallel proof-runner, and current Codex hooks feature-flag baseline for pilot consumption
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work

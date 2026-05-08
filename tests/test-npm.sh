@@ -217,7 +217,9 @@ test_local_npx_setup_honors_model_profile_flag() {
             configured=false
         elif grep -q '^review_model =' "$target_repo/.codex/config.toml" 2>/dev/null; then
             configured=false
-        elif ! grep -q '^codex_hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        elif ! grep -q '^hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
+            configured=false
+        elif grep -v '^[[:space:]]*#' "$target_repo/.codex/config.toml" | grep -q '^codex_hooks\s*=' 2>/dev/null; then
             configured=false
         fi
     fi
