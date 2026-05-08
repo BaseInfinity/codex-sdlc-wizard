@@ -52,6 +52,7 @@ Purpose: continue pilot rollout after the `0.7.24` README/discovery cleanup whil
 Scope:
 - keep `0.7.16` as the cross-platform hook stabilization baseline for shared macOS/Windows repos
 - address the README/discovery/sponsor backlog only in small, separately verified slices
+- ship the generated SDLC demo runtime claim gate so demo-ready claims prove the real human-facing runtime, not hidden agent-shell execution
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work
 
