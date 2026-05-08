@@ -22,7 +22,19 @@ If the branch cannot be cleanly rebased or merged onto `origin/main`, stop and f
 
 ## 2. Required Proof Suite
 
-Run all of these and keep them green before tagging:
+Preferred path: run the bounded parallel proof runner and keep every check green before tagging:
+
+```bash
+node scripts/run-proof-suite.cjs
+```
+
+Use the serial fallback when debugging one failure at a time:
+
+```bash
+node scripts/run-proof-suite.cjs --serial
+```
+
+The runner covers the full maintainer suite below, writes per-check logs to a temp directory, and exits non-zero if any check fails. If you need to run the suite manually, run all of these and keep them green before tagging:
 
 ```bash
 bash tests/test-release.sh
@@ -33,6 +45,8 @@ bash tests/test-skill.sh
 bash tests/test-adapter.sh
 bash tests/test-setup.sh
 bash tests/test-update.sh
+bash tests/test-benchmark.sh
+bash tests/test-e2e.sh
 ```
 
 `bash tests/test-npm.sh` is required because it includes the packed tarball scratch smoke for:
@@ -55,7 +69,7 @@ Minimum expectation for that smoke:
 
 ## 3. Optional High-Cost Proof
 
-Run this when Codex auth is available and you want live CLI coverage before release:
+`bash tests/test-e2e.sh` is included in the proof runner, but it skips unless live Codex E2E is explicitly enabled. Run this when Codex auth is available and you want live CLI coverage before release:
 
 ```bash
 bash tests/test-e2e.sh

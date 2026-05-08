@@ -53,6 +53,7 @@ Scope:
 - keep `0.7.16` as the cross-platform hook stabilization baseline for shared macOS/Windows repos
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - ship the generated SDLC demo runtime claim gate so demo-ready claims prove the real human-facing runtime, not hidden agent-shell execution
+- ship a bounded parallel maintainer proof runner so release proof is faster without dropping any checks
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work
 
@@ -71,7 +72,6 @@ After `0.7.24`, the main backlog is:
 - any new reusable wizard fixes discovered during the pilot set
 - official Codex plugin distribution packaging, after the current npm/skill path stays stable
 - model-profile measurement data collection for `mixed` vs `maximum`
-- top-level proof-run parallelization to reduce release-wall-clock time without weakening suite coverage
 - later creator-tool research after the active backlog stays under control
 
 ## Official Codex Plugin Distribution Plan
