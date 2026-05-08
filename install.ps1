@@ -166,7 +166,7 @@ function Merge-CodexModelConfig {
     foreach ($line in $withProfile) {
         if ($line -match '^\s*\[([^\]]+)\]\s*(#.*)?$') {
             if ($inFeatures -and -not $insertedHooks) {
-                $output.Add("codex_hooks = true")
+                $output.Add("hooks = true")
                 $insertedHooks = $true
             }
 
@@ -179,13 +179,13 @@ function Merge-CodexModelConfig {
             $output.Add($line)
 
             if ($inFeatures) {
-                $output.Add("codex_hooks = true")
+                $output.Add("hooks = true")
                 $insertedHooks = $true
             }
             continue
         }
 
-        if ($inFeatures -and $line -match '^\s*codex_hooks\s*=') {
+        if ($inFeatures -and $line -match '^\s*(codex_hooks|hooks)\s*=') {
             continue
         }
 
@@ -193,7 +193,7 @@ function Merge-CodexModelConfig {
     }
 
     if ($inFeatures -and -not $insertedHooks) {
-        $output.Add("codex_hooks = true")
+        $output.Add("hooks = true")
     }
 
     if (-not $sawFeatures) {
@@ -201,7 +201,7 @@ function Merge-CodexModelConfig {
             $output.Add("")
         }
         $output.Add("[features]")
-        $output.Add("codex_hooks = true")
+        $output.Add("hooks = true")
     }
 
     Set-Content -LiteralPath $ConfigPath -Value (($output -join "`r`n") + "`r`n") -NoNewline
@@ -246,6 +246,7 @@ $startReasoning = "xhigh"
 Write-Host "Recommended start: 'codex --full-auto' for low-friction SDLC inside the repo guardrails."
 Write-Host "Use plain 'codex' instead if you want more manual confirmation."
 Write-Host "Fresh-session note: if you ran this from inside an existing Codex session, exit and reopen Codex in this repo so repo-local config, hooks, and skills load."
+Write-Host "Hook review note: if Codex says hooks need review, open /hooks after restart and review pending repo hooks before relying on enforcement."
 Write-Host "Start new with selected profile: codex --full-auto -m $startModel -c 'model_reasoning_effort=`"$startReasoning`"'"
 Write-Host "Resume with selected profile: codex resume --full-auto -m $startModel -c 'model_reasoning_effort=`"$startReasoning`"'"
 Write-Host "If resume warns it came back with a different model, resume explicitly with: codex resume --full-auto -m gpt-5.5 -c 'model_reasoning_effort=`"xhigh`"'"

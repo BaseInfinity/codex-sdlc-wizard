@@ -476,7 +476,8 @@ EOF
     output=$(run_update "$ws")
     check_output=$(run_check "$ws")
 
-    grep -q 'codex_hooks = true' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^hooks = true' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -v '^[[:space:]]*#' "$ws/.codex/config.toml" | grep -q '^codex_hooks\s*=' 2>/dev/null && valid=false
     grep -q '^model = "gpt-5.5"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q '^review_model =' "$ws/.codex/config.toml" 2>/dev/null && valid=false
@@ -487,7 +488,7 @@ EOF
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "update merges model profile and codex_hooks into existing config.toml without dropping other settings"
+        pass "update migrates codex_hooks to hooks while preserving other config.toml settings"
     else
         fail "update did not merge the managed model/hook config into config.toml safely"
     fi
@@ -610,6 +611,8 @@ EOF
     grep -q '^model = "gpt-5.4-mini"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q '^review_model = "gpt-5.5"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^hooks = true' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -v '^[[:space:]]*#' "$ws/.codex/config.toml" | grep -q '^codex_hooks\s*=' 2>/dev/null && valid=false
     echo "$output" | grep -q '.codex/config.toml' 2>/dev/null || valid=false
     json_text_equals "$check_output" 'data.managed_files[".codex/config.toml"].status' "match" || valid=false
     rm -rf "$ws"

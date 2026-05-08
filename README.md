@@ -216,7 +216,7 @@ model_reasoning_effort = "xhigh"
 review_model = "gpt-5.5"
 
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 `maximum` maps to:
@@ -226,10 +226,10 @@ model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 
 [features]
-codex_hooks = true
+hooks = true
 ```
 
-Codex only loads project-local `.codex/config.toml` for trusted projects. Once trusted, project config overrides user config in `~/.codex/config.toml`; the wizard does not edit your global config.
+Codex only loads project-local `.codex/config.toml` for trusted projects. Once trusted, project config overrides user config in `~/.codex/config.toml`; the wizard does not edit your global config. Current Codex CLI builds warn that `[features].codex_hooks` is deprecated, so setup/update write `[features].hooks = true` and migrate active `codex_hooks` entries when repairing config.
 
 Bootstrap recommendation:
 - setup/update should use `maximum`; routine work after bootstrap should use `mixed`
@@ -357,13 +357,15 @@ The workflow uses GitHub OIDC trusted publishing, validates that the tag matches
 
 1. Copies `AGENTS.md` (skips if exists, so your customizations are safe)
 2. Copies `SDLC-LOOP.md`, `START-SDLC.md`, and `PROVE-IT.md` if missing
-3. Creates or merges `.codex/config.toml` with `codex_hooks = true`
+3. Creates or merges `.codex/config.toml` with `[features].hooks = true`
 4. Installs `.codex/hooks.json` (backs up existing)
 5. Copies universal Node hook entrypoints plus legacy shell/PowerShell helpers to `.codex/hooks/`
 6. Installs the repo-scoped SDLC skill at `.agents/skills/sdlc/SKILL.md`
 7. Installs global helper skills under `~/.codex/skills` without installing a global `sdlc` duplicate
 
-In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/*`, and the repo-scoped SDLC skill. It also writes `.codex-sdlc/model-profile.json` so the chosen profile is explicit. Existing `.codex/config.toml` files are merged: model keys and `[features].codex_hooks` are patched, while MCP, sandbox, approval, and other custom settings are preserved. If an older wizard-managed global `sdlc` skill is detected, update/setup backs it up and removes it; user-owned global `sdlc` skills are preserved.
+In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/*`, and the repo-scoped SDLC skill. It also writes `.codex-sdlc/model-profile.json` so the chosen profile is explicit. Existing `.codex/config.toml` files are merged: model keys and `[features].hooks` are patched, active deprecated `[features].codex_hooks` entries are migrated away, and MCP, sandbox, approval, and other custom settings are preserved. If an older wizard-managed global `sdlc` skill is detected, update/setup backs it up and removes it; user-owned global `sdlc` skills are preserved.
+
+After restart, hook install is not complete until Codex trusts the repo and any pending repo hooks are reviewed. If Codex reports hooks need review, open `/hooks` and review the pending hooks before relying on SDLC enforcement.
 
 ### Requirements
 

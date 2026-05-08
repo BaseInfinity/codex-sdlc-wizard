@@ -1586,10 +1586,11 @@ test_live_hooks_file_is_windows_safe() {
 }
 
 test_config_enables_hooks() {
-    if grep -q 'codex_hooks\s*=\s*true' "$REPO_DIR/.codex/config.toml" 2>/dev/null; then
-        pass "config.toml enables codex hooks"
+    if grep -q '^hooks = true' "$REPO_DIR/.codex/config.toml" 2>/dev/null \
+        && ! grep -v '^[[:space:]]*#' "$REPO_DIR/.codex/config.toml" | grep -q '^codex_hooks\s*='; then
+        pass "config.toml enables codex hooks with the current feature flag"
     else
-        fail "config.toml missing codex_hooks = true"
+        fail "config.toml missing hooks = true or still has active codex_hooks"
     fi
 }
 
@@ -1703,8 +1704,9 @@ test_install_merges_config() {
     mkdir -p "$tmpdir1/.codex"
     printf '[features]\ncodex_hooks = false\n' > "$tmpdir1/.codex/config.toml"
     (cd "$tmpdir1" && CODEX_HOME="$tmpdir1/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
-    if ! grep -q 'codex_hooks = true' "$tmpdir1/.codex/config.toml"; then
-        fail "install.sh case 1: did not flip false to true"
+    if ! grep -q '^hooks = true' "$tmpdir1/.codex/config.toml" \
+        || grep -v '^[[:space:]]*#' "$tmpdir1/.codex/config.toml" | grep -q '^codex_hooks\s*='; then
+        fail "install.sh case 1: did not migrate deprecated codex_hooks=false to hooks=true"
         all_passed=false
     fi
     rm -rf "$tmpdir1"
@@ -1714,8 +1716,9 @@ test_install_merges_config() {
     mkdir -p "$tmpdir2/.codex"
     printf '[features]\ncodex_hooks = true\n' > "$tmpdir2/.codex/config.toml"
     (cd "$tmpdir2" && CODEX_HOME="$tmpdir2/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
-    if ! grep -q 'codex_hooks = true' "$tmpdir2/.codex/config.toml"; then
-        fail "install.sh case 2: lost existing codex_hooks = true"
+    if ! grep -q '^hooks = true' "$tmpdir2/.codex/config.toml" \
+        || grep -v '^[[:space:]]*#' "$tmpdir2/.codex/config.toml" | grep -q '^codex_hooks\s*='; then
+        fail "install.sh case 2: did not migrate deprecated codex_hooks=true to hooks=true"
         all_passed=false
     fi
     rm -rf "$tmpdir2"
@@ -1725,11 +1728,11 @@ test_install_merges_config() {
     mkdir -p "$tmpdir3/.codex"
     printf '[features]\nsome_other = true\n' > "$tmpdir3/.codex/config.toml"
     (cd "$tmpdir3" && CODEX_HOME="$tmpdir3/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
-    if ! grep -q 'codex_hooks = true' "$tmpdir3/.codex/config.toml"; then
-        fail "install.sh case 3: did not add codex_hooks under existing [features]"
+    if ! grep -q '^hooks = true' "$tmpdir3/.codex/config.toml"; then
+        fail "install.sh case 3: did not add hooks under existing [features]"
         all_passed=false
-    elif ! grep -x 'codex_hooks = true' "$tmpdir3/.codex/config.toml" >/dev/null 2>&1; then
-        fail "install.sh case 3: codex_hooks not on its own line"
+    elif ! grep -x 'hooks = true' "$tmpdir3/.codex/config.toml" >/dev/null 2>&1; then
+        fail "install.sh case 3: hooks not on its own line"
         all_passed=false
     fi
     rm -rf "$tmpdir3"
@@ -1739,7 +1742,7 @@ test_install_merges_config() {
     mkdir -p "$tmpdir4/.codex"
     printf '[model]\nname = "o3"\n' > "$tmpdir4/.codex/config.toml"
     (cd "$tmpdir4" && CODEX_HOME="$tmpdir4/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
-    if ! grep -q 'codex_hooks = true' "$tmpdir4/.codex/config.toml"; then
+    if ! grep -q '^hooks = true' "$tmpdir4/.codex/config.toml"; then
         fail "install.sh case 4: did not add [features] section"
         all_passed=false
     fi
@@ -1750,8 +1753,8 @@ test_install_merges_config() {
     mkdir -p "$tmpdir5/.codex"
     printf '[features]\n# codex_hooks = false\n' > "$tmpdir5/.codex/config.toml"
     (cd "$tmpdir5" && CODEX_HOME="$tmpdir5/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
-    if ! grep -v '^[[:space:]]*#' "$tmpdir5/.codex/config.toml" | grep -q 'codex_hooks = true'; then
-        fail "install.sh case 5: commented codex_hooks treated as active"
+    if ! grep -v '^[[:space:]]*#' "$tmpdir5/.codex/config.toml" | grep -q '^hooks = true'; then
+        fail "install.sh case 5: commented codex_hooks prevented hooks=true insertion"
         all_passed=false
     fi
     rm -rf "$tmpdir5"
@@ -1761,14 +1764,14 @@ test_install_merges_config() {
     mkdir -p "$tmpdir6/.codex"
     printf '[features]\n# codex_hooks = true\n' > "$tmpdir6/.codex/config.toml"
     (cd "$tmpdir6" && CODEX_HOME="$tmpdir6/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
-    if ! grep -v '^[[:space:]]*#' "$tmpdir6/.codex/config.toml" | grep -q 'codex_hooks = true'; then
-        fail "install.sh case 6: commented active hook treated as real"
+    if ! grep -v '^[[:space:]]*#' "$tmpdir6/.codex/config.toml" | grep -q '^hooks = true'; then
+        fail "install.sh case 6: commented codex_hooks treated as real"
         all_passed=false
     fi
     rm -rf "$tmpdir6"
 
     if [ "$all_passed" = "true" ]; then
-        pass "install.sh merges codex_hooks into existing config.toml"
+        pass "install.sh migrates deprecated codex_hooks and writes hooks=true"
     fi
 }
 
@@ -1822,6 +1825,25 @@ test_update_skill_has_idempotent_update_contract() {
         pass "update-wizard carries the idempotent selective-update contract"
     else
         fail "update-wizard is missing the idempotent selective-update contract"
+    fi
+}
+
+test_skills_document_hooks_feature_rename() {
+    local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local all_passed=true
+
+    grep -Fq '[features].hooks' "$setup_skill" || all_passed=false
+    grep -Fq '/hooks' "$setup_skill" || all_passed=false
+    grep -Fq '[features].hooks' "$update_skill" || all_passed=false
+    grep -Fq 'codex_hooks' "$update_skill" || all_passed=false
+    grep -Eqi 'deprecated.*codex_hooks|codex_hooks.*deprecated' "$update_skill" || all_passed=false
+    grep -Eqi 'replacement.*hooks|hooks.*replacement' "$update_skill" || all_passed=false
+
+    if [ "$all_passed" = "true" ]; then
+        pass "setup/update skills document the hooks feature flag rename and /hooks review"
+    else
+        fail "setup/update skills should document [features].hooks, codex_hooks migration, and /hooks review"
     fi
 }
 
@@ -2351,6 +2373,7 @@ test_install_backs_up_hooks_json
 test_agents_md_size
 test_setup_skill_has_confidence_setup_contract
 test_update_skill_has_idempotent_update_contract
+test_skills_document_hooks_feature_rename
 test_update_skill_frontloads_package_upgrade_boundary
 test_helper_skill_metadata_uses_codex_sdlc_not_xdlc
 test_setup_and_update_skills_stop_before_product_remediation
