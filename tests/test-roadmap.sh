@@ -139,6 +139,27 @@ test_roadmap_tracks_late_creator_investigation() {
     fi
 }
 
+test_roadmap_tracks_later_goal_command_pilot() {
+    local has_goal_command=true
+    local has_sdlc_dogfood=true
+    local has_later_priority=true
+    local goal_lines
+
+    goal_lines=$(grep -F '/goal' "$ROADMAP" 2>/dev/null || true)
+    [ -n "$goal_lines" ] || has_goal_command=false
+    echo "$goal_lines" | grep -Eqi 'dogfood|pilot|test' || has_sdlc_dogfood=false
+    echo "$goal_lines" | grep -Fq '$sdlc' || has_sdlc_dogfood=false
+    echo "$goal_lines" | grep -Eqi 'later|after|behind the active backlog' || has_later_priority=false
+
+    if [ "$has_goal_command" = "true" ] &&
+       [ "$has_sdlc_dogfood" = "true" ] &&
+       [ "$has_later_priority" = "true" ]; then
+        pass "Roadmap tracks the later /goal command pilot behind active SDLC work"
+    else
+        fail "Roadmap does not track the later /goal command pilot clearly enough"
+    fi
+}
+
 test_roadmap_tracks_official_codex_plugin_distribution_plan() {
     local has_official_distribution=true
     local has_plugin_manifest=true
@@ -260,6 +281,7 @@ test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_calls_out_stale_issue_cleanup
 test_roadmap_tracks_late_creator_investigation
+test_roadmap_tracks_later_goal_command_pilot
 test_roadmap_tracks_official_codex_plugin_distribution_plan
 test_roadmap_tracks_review_model_measurement
 test_roadmap_sets_numeric_model_profile_targets
