@@ -54,6 +54,7 @@ Purpose: continue pilot rollout after the `0.7.25` demo-runtime/proof-runner/hoo
 
 Scope:
 - keep `0.7.25` as the demo-runtime claim gate, parallel proof-runner, and current Codex hooks feature-flag baseline for pilot consumption
+- make bare `npx codex-sdlc-wizard@latest` auto-run the update/check-repair path in already-initialized clones, so cross-machine checkouts sync without remembering separate `check`/`update` commands
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work

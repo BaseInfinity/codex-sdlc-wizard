@@ -7,7 +7,7 @@ This adapter brings the [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai
 ## Quick Start
 
 ```bash
-# Run adaptive interactive setup in the current repo
+# Setup a new repo or sync an already-initialized clone
 npx codex-sdlc-wizard@latest
 
 # Start coding with SDLC enforcement
@@ -18,11 +18,11 @@ codex --full-auto
 
 If you normally use yolo-style sessions, use Codex's explicit current flags instead: `--sandbox danger-full-access --ask-for-approval never`. Only use that full-trust variant in repos you fully trust.
 
-Bare `npx codex-sdlc-wizard` is the adaptive interactive path. It bootstraps the repo-local guardrails first, then hands off into a live plain Codex setup session so the unresolved setup questions happen inside Codex instead of inside a shell checklist. At that first-run handoff prompt, press Enter for plain `codex` or type `full-auto` if you explicitly want `codex --full-auto`. `setup --yes` still exists for automation, but it is not the normal human path.
+Bare `npx codex-sdlc-wizard` is the adaptive setup/sync path. In an already-initialized repo clone, it runs the update/check-repair path automatically so a fresh Mac/Windows/Linux checkout can sync hooks, config, and helper skills without remembering separate commands. In a new repo, it bootstraps the repo-local guardrails first, then hands off into a live plain Codex setup session so the unresolved setup questions happen inside Codex instead of inside a shell checklist. At that first-run handoff prompt, press Enter for plain `codex` or type `full-auto` if you explicitly want `codex --full-auto`. `setup --yes` still exists for automation, but it is not the normal human path.
 
 Generic npm entrypoint examples: `npx codex-sdlc-wizard`, `npx codex-sdlc-wizard check`, and `npx codex-sdlc-wizard update`.
 
-`update` repairs repo artifacts using the package version you invoked; it does not self-update the npm package. To consume the newest release and apply its repo-side updates in one command, run `npx codex-sdlc-wizard@latest update`.
+`update` repairs repo artifacts using the package version you invoked; it does not self-update the npm package. To consume the newest release and apply its repo-side updates in one command, run `npx codex-sdlc-wizard@latest` from an initialized repo, or use the explicit form `npx codex-sdlc-wizard@latest update`.
 
 Package upgrade vs repo repair:
 

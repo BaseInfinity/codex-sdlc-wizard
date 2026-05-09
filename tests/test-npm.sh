@@ -233,6 +233,56 @@ test_local_npx_setup_honors_model_profile_flag() {
     fi
 }
 
+test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
+    local pack_dir target_repo
+    pack_dir=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-pack.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    local npm_cache
+    npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
+
+    local json tarball_name tarball_path output
+    json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
+    tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
+    tarball_path="$pack_dir/$tarball_name"
+
+    local valid=true
+
+    if [ -z "$tarball_name" ] || [ ! -f "$tarball_path" ]; then
+        valid=false
+    else
+        printf '%s' '{"name":"initialized-clone","scripts":{"test":"jest"}}' > "$target_repo/package.json"
+        mkdir -p "$target_repo/src"
+
+        (
+            cd "$target_repo"
+            CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+                codex-sdlc-wizard setup --yes >/dev/null 2>&1
+        ) || valid=false
+
+        output=$(
+            cd "$target_repo" && \
+            CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+                codex-sdlc-wizard 2>&1
+        ) || valid=false
+    fi
+
+    echo "$output" | grep -Fq 'Codex SDLC update' || valid=false
+    echo "$output" | grep -Fq 'Applied: skills/setup-wizard' || valid=false
+    echo "$output" | grep -Fq 'Update complete.' || valid=false
+    echo "$output" | grep -Fq 'Scanning project...' && valid=false
+    [ -f "$target_repo/.codex-home-second/skills/setup-wizard/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.codex-home-second/skills/update-wizard/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.codex-home-second/skills/feedback/SKILL.md" ] || valid=false
+
+    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
+
+    if [ "$valid" = "true" ]; then
+        pass "default CLI updates initialized clones without an explicit subcommand"
+    else
+        fail "default CLI did not auto-run update for an initialized clone"
+    fi
+}
+
 test_packed_tarball_scratch_smoke() {
     local pack_dir target_repo
     pack_dir=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-pack.XXXXXX")
@@ -1080,6 +1130,7 @@ test_package_version_matches_roadmap_current_release
 test_npm_pack_includes_runtime_files
 test_local_npx_installs_into_clean_repo
 test_local_npx_setup_honors_model_profile_flag
+test_default_cli_updates_initialized_repo_without_explicit_subcommand
 test_packed_tarball_scratch_smoke
 test_default_interactive_hands_off_to_codex
 test_full_auto_handoff_choice_is_explicit
