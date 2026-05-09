@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.25` and `v0.7.25` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.26` and `v0.7.26` are the current release target for the SDLC-only default repo skill surface
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -45,30 +45,30 @@
 - maintainers can run `node scripts/run-proof-suite.cjs` for bounded parallel release proof without dropping any checks, with `--serial` available for debugging
 - benchmark and pilot-rollout ledgers now exist so model/default-use decisions can be measured, not guessed
 - release, packaging, npm, skill, setup, adapter, update, and E2E tests are green when the parity merge is complete
+- bare `npx codex-sdlc-wizard@latest` now auto-runs the update/check-repair path in already-initialized clones, so cross-machine checkouts sync without remembering separate `check`/`update` commands
 
 ## Next Release Cycle
 
-### 0.7.26
+### 0.7.27
 
-Purpose: continue pilot rollout after the `0.7.25` demo-runtime/proof-runner/hooks-flag stabilization while keeping any new patches tied to proven reusable wizard bugs.
+Purpose: continue pilot rollout after the `0.7.26` initialized-clone default-update stabilization while keeping any new patches tied to proven reusable wizard bugs.
 
 Scope:
-- keep `0.7.25` as the demo-runtime claim gate, parallel proof-runner, and current Codex hooks feature-flag baseline for pilot consumption
-- make bare `npx codex-sdlc-wizard@latest` auto-run the update/check-repair path in already-initialized clones, so cross-machine checkouts sync without remembering separate `check`/`update` commands
+- keep `0.7.26` as the initialized-clone default-update, demo-runtime claim gate, parallel proof-runner, and current Codex hooks feature-flag baseline for pilot consumption
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work
 
 ## Tracker Cleanup
 
-The stabilization tracker is currently clear after the `0.7.25` demo-runtime and proof-runner stabilization. Remaining open docs/research issues stay outside the stabilization lane.
+The stabilization tracker is currently clear after the `0.7.26` initialized-clone default-update stabilization. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.25` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.26` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.25`, the main backlog is:
+After `0.7.26`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
