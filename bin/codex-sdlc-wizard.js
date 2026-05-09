@@ -24,7 +24,7 @@ Commands:
   update         Apply selective updates for missing or drifted managed files using this package version
   install        Advanced escape hatch: run install.sh without adaptive setup
 
-Default behavior: bootstrap the current repo, then hand off into a live plain Codex setup session.
+Default behavior: initialized repos run update automatically; new repos use adaptive setup, then hand off into a live plain Codex setup session.
 Type "full-auto" at the handoff prompt if you want codex --full-auto for first-run setup.
 Automation/non-interactive behavior: use setup --yes to stay on the shell path.
 Bootstrap/setup recommendation: maximum.
@@ -49,7 +49,11 @@ Examples:
 `);
 }
 
-let command = "setup";
+function hasInitializedManifest() {
+  return fs.existsSync(path.join(process.cwd(), ".codex-sdlc", "manifest.json"));
+}
+
+let command = rawArgs.length === 0 && hasInitializedManifest() ? "update" : "setup";
 let scriptArgs = rawArgs;
 
 if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
