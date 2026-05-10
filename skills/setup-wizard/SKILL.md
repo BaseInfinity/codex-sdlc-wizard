@@ -44,6 +44,7 @@ Read these when present:
 - `SDLC-LOOP.md`
 - `START-SDLC.md`
 - `PROVE-IT.md`
+- `GOALS.md` when the user asks for long-running active-scope tracking
 - `TESTING.md`
 - `ARCHITECTURE.md`
 
@@ -53,6 +54,8 @@ If you are running inside the `codex-sdlc-wizard` repo itself, also read:
 - `CODEX_ADAPTER_PLAN.md`
 
 Treat those files as the source of truth for what already exists. Do not generate duplicates blindly.
+
+If the user asks for long-running work, continuous goals, or "keep going until I say stop," run setup with `--goals` or create/refresh `GOALS.md` from the wizard template. Keep `ROADMAP.md` as backlog/history and `GOALS.md` as the active-scope contract.
 
 ## Execution checklist
 

@@ -743,6 +743,34 @@ EOF
     fi
 }
 
+# ---- Test 14: update repairs optional GOALS.md when the manifest tracks it ----
+test_update_repairs_missing_goals_doc_when_manifest_tracks_it() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local_args "$ws" --goals
+    rm -f "$ws/GOALS.md"
+
+    local output check_output valid=true
+    output=$(run_update "$ws")
+    check_output=$(run_check "$ws")
+
+    echo "$output" | grep -q 'GOALS.md' 2>/dev/null || valid=false
+    [ -f "$ws/GOALS.md" ] || valid=false
+    grep -q 'complete everything in GOALS.md until the user says stop' "$ws/GOALS.md" 2>/dev/null || valid=false
+    json_text_equals "$check_output" 'data.managed_files["GOALS.md"].status' "match" || valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update repairs optional GOALS.md when the manifest tracks it"
+    else
+        fail "update did not repair optional GOALS.md from the manifest"
+    fi
+}
+
 test_update_reports_uninitialized_repo
 test_update_check_only_reports_missing_without_repair
 test_update_repairs_missing_generated_docs
@@ -759,6 +787,7 @@ test_update_preserves_user_owned_global_sdlc_skill
 test_update_repairs_mixed_profile_reasoning_drift
 test_update_refreshes_playwright_mcp_policy_for_old_manifest
 test_update_refreshes_changed_playwright_mcp_policy
+test_update_repairs_missing_goals_doc_when_manifest_tracks_it
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

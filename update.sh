@@ -46,7 +46,7 @@ done
 
 is_generated_doc() {
     case "$1" in
-        AGENTS.md|SDLC.md|TESTING.md|ARCHITECTURE.md) return 0 ;;
+        AGENTS.md|SDLC.md|TESTING.md|ARCHITECTURE.md|GOALS.md) return 0 ;;
         *) return 1 ;;
     esac
 }

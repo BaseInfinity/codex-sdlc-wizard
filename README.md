@@ -40,6 +40,18 @@ npx codex-sdlc-wizard@0.7.27 update
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
 
+### Optional `GOALS.md`
+
+For long-running work, add an active-scope contract with:
+
+```bash
+npx codex-sdlc-wizard@latest setup --yes --goals
+```
+
+`GOALS.md` is separate from `ROADMAP.md`: keep `ROADMAP.md` as backlog/history, and use `GOALS.md` for the current active run. Its operating phrase is: `complete everything in GOALS.md until the user says stop`.
+
+The template includes active goals, deferred work, definition of done, runtime boundary, evidence contract, and a paste-ready `$sdlc` prompt. This prevents “active goal complete” from being confused with “whole roadmap complete.”
+
 ## What This Repo Is
 
 This repo is now a **Codex skill plus adaptive installer-style adapter** for Codex projects.
@@ -421,6 +433,7 @@ CODEX_E2E=1 bash tests/test-e2e.sh
 | [START-SDLC.md](START-SDLC.md) | Quick operator entrypoint for starting SDLC work in an installed repo |
 | [SDLC-LOOP.md](SDLC-LOOP.md) | Repeatable plan -> test -> implement -> review -> prove loop |
 | [PROVE-IT.md](PROVE-IT.md) | Proof-stamp gate for commit/push and examples for explicit check commands |
+| `GOALS.md` | Optional active-scope contract for long-running work; generated with `setup --goals` |
 | [RELEASE.md](RELEASE.md) | Maintainer release checklist before semver tags and npm/GitHub release publish |
 | [ROADMAP.md](ROADMAP.md) | Current shipped state, next release cycle, and backlog ordering |
 
