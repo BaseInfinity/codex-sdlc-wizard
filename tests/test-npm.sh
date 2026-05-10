@@ -327,7 +327,7 @@ test_packed_tarball_scratch_smoke() {
     json_has_truthy_file "$target_repo/.codex-sdlc/manifest.json" 'typeof data.managed_files?.["AGENTS.md"] === "string" && /^sha256:[0-9a-f]{64}$/.test(data.managed_files["AGENTS.md"])' || valid=false
     echo "$setup_output" | grep -q 'Setup complete' || valid=false
     echo "$setup_output" | grep -Eqi 'exit and reopen Codex|restart Codex' || valid=false
-    echo "$setup_output" | grep -q 'codex resume --full-auto -m gpt-5.5' || valid=false
+    echo "$setup_output" | grep -q 'codex resume -m gpt-5.5' || valid=false
     echo "$setup_output" | grep -Fq 'model_reasoning_effort="xhigh"' || valid=false
     echo "$setup_output" | grep -q 'shasum: command not found' && valid=false
     echo "$check_output" | grep -q '"status": "match"' || valid=false
@@ -405,8 +405,9 @@ EOF
     grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
     echo "$output" | grep -Fq 'Choose first-run Codex handoff mode' || valid=false
     echo "$output" | grep -Fq 'Press Enter: plain codex (recommended)' || valid=false
-    echo "$output" | grep -Fq 'Type "full-auto": codex --full-auto' || valid=false
-    echo "$output" | grep -Fq 'codex resume --full-auto' || valid=false
+    echo "$output" | grep -Fq 'Type "full-trust": codex --dangerously-bypass-approvals-and-sandbox' || valid=false
+    echo "$output" | grep -Fq 'codex resume -m gpt-5.5' || valid=false
+    echo "$output" | grep -Fq 'codex resume --dangerously-bypass-approvals-and-sandbox' || valid=false
     echo "$output" | grep -Fq 'Handing off into Codex for live setup using plain codex' || valid=false
     ! echo "$output" | grep -Fq 'DEP0190' || valid=false
     ! echo "$output" | grep -Fq 'Scanning project...' || valid=false
@@ -420,7 +421,7 @@ EOF
     fi
 }
 
-test_full_auto_handoff_choice_is_explicit() {
+test_full_trust_handoff_choice_is_explicit() {
     local ws fakebin fakebin_win codex_bin codex_path_entry codex_home args_file input_file output
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
@@ -431,7 +432,7 @@ test_full_auto_handoff_choice_is_explicit() {
     printf '%s' '{"name":"handoff-smoke","scripts":{"test":"npm test"}}' > "$ws/package.json"
     mkdir -p "$ws/tests"
     touch "$ws/tests/app.e2e.ts" "$ws/playwright.config.js"
-    printf 'full-auto\n' > "$input_file"
+    printf 'full-trust\n' > "$input_file"
 
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
@@ -471,19 +472,20 @@ EOF
     ) || true
 
     local valid=true
-    grep -Fq -- '--full-auto' "$args_file" 2>/dev/null || valid=false
+    grep -Fq -- '--dangerously-bypass-approvals-and-sandbox' "$args_file" 2>/dev/null || valid=false
+    grep -Fq -- '--full-auto' "$args_file" 2>/dev/null && valid=false
     grep -Fq 'gpt-5.5' "$args_file" 2>/dev/null || valid=false
     grep -Fq 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
     grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
-    echo "$output" | grep -Fq 'Handing off into Codex for live setup using codex --full-auto' || valid=false
+    echo "$output" | grep -Fq 'Handing off into Codex for live setup using codex --dangerously-bypass-approvals-and-sandbox' || valid=false
     ! echo "$output" | grep -Fq 'Scanning project...' || valid=false
 
     rm -rf "$ws" "$fakebin" "$codex_home"
 
     if [ "$valid" = "true" ]; then
-        pass "full-auto first-run handoff requires an explicit choice"
+        pass "full-trust first-run handoff requires an explicit choice"
     else
-        fail "full-auto first-run handoff was not controlled by the explicit choice"
+        fail "full-trust first-run handoff was not controlled by the explicit choice"
     fi
 }
 
@@ -576,7 +578,7 @@ EOF
     [ ! -f "$completed_file" ] || valid=false
     echo "$output" | grep -Eqi 'timeout|timed out|watchdog' || valid=false
     echo "$output" | grep -Eqi 'terminat|kill' || valid=false
-    echo "$output" | grep -Fq 'codex resume --full-auto' || valid=false
+    echo "$output" | grep -Fq 'codex resume -m gpt-5.5' || valid=false
 
     rm -rf "$ws" "$fakebin" "$codex_home"
 
@@ -1133,7 +1135,7 @@ test_local_npx_setup_honors_model_profile_flag
 test_default_cli_updates_initialized_repo_without_explicit_subcommand
 test_packed_tarball_scratch_smoke
 test_default_interactive_hands_off_to_codex
-test_full_auto_handoff_choice_is_explicit
+test_full_trust_handoff_choice_is_explicit
 test_codex_handoff_watchdog_timeout_is_opt_in
 test_codex_handoff_watchdog_times_out_and_terminates_child
 test_codex_handoff_timeout_force_kills_signal_ignoring_descendant

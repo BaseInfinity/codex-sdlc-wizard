@@ -96,29 +96,33 @@ test_readme_documents_dual_distribution() {
     fi
 }
 
-test_readme_recommends_full_auto() {
-    local has_full_auto=true
+test_readme_recommends_current_codex_startup() {
+    local has_current_start=true
     local has_manual_fallback=true
+    local has_full_trust_boundary=true
 
-    grep -q 'codex --full-auto' "$README" || has_full_auto=false
+    grep -q 'codex -m gpt-5.5' "$README" || has_current_start=false
     grep -q 'plain `codex`' "$README" || has_manual_fallback=false
+    grep -q -- '--dangerously-bypass-approvals-and-sandbox' "$README" || has_full_trust_boundary=false
 
-    if [ "$has_full_auto" = "true" ] && [ "$has_manual_fallback" = "true" ]; then
-        pass "README recommends codex --full-auto with plain codex as the manual fallback"
+    if [ "$has_current_start" = "true" ] && [ "$has_manual_fallback" = "true" ] && [ "$has_full_trust_boundary" = "true" ]; then
+        pass "README recommends current Codex startup with full-trust as a separate mode"
     else
         fail "README does not document the recommended Codex startup mode"
     fi
 }
 
-test_skill_recommends_full_auto_after_install() {
-    local mentions_full_auto=true
+test_skill_recommends_current_codex_after_install() {
+    local mentions_current_start=true
     local mentions_fresh_session=true
+    local mentions_full_trust_boundary=true
 
-    grep -q 'codex --full-auto' "$SKILL_MD" || mentions_full_auto=false
+    grep -q 'codex -m' "$SKILL_MD" || mentions_current_start=false
     grep -qi 'fresh Codex session' "$SKILL_MD" || mentions_fresh_session=false
+    grep -q -- '--dangerously-bypass-approvals-and-sandbox' "$SKILL_MD" || mentions_full_trust_boundary=false
 
-    if [ "$mentions_full_auto" = "true" ] && [ "$mentions_fresh_session" = "true" ]; then
-        pass "SKILL.md tells users to start a fresh codex --full-auto session after install"
+    if [ "$mentions_current_start" = "true" ] && [ "$mentions_fresh_session" = "true" ] && [ "$mentions_full_trust_boundary" = "true" ]; then
+        pass "SKILL.md tells users to start a fresh current Codex session after install"
     else
         fail "SKILL.md does not guide post-install Codex startup clearly enough"
     fi
@@ -276,8 +280,8 @@ test_repo_scoped_sdlc_skill_documents_native_review() {
 test_skill_manifest_exists
 test_agents_openai_yaml_exists
 test_readme_documents_dual_distribution
-test_readme_recommends_full_auto
-test_skill_recommends_full_auto_after_install
+test_readme_recommends_current_codex_startup
+test_skill_recommends_current_codex_after_install
 test_skill_documents_model_profiles
 test_repo_contract_keeps_this_repo_on_maximum
 test_default_repo_scoped_skill_surface_is_sdlc_only

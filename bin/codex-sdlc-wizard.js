@@ -14,6 +14,7 @@ const interactiveSessionPrompt = [
   "Continue setup inside Codex: scan the repo, ask only unresolved questions, preserve intentional existing docs, generate or refresh repo-specific SDLC docs, verify the result, and finish setup.",
   "Use xhigh reasoning for setup."
 ].join(" ");
+const fullTrustFlag = "--dangerously-bypass-approvals-and-sandbox";
 
 function printHelp() {
   process.stdout.write(`Usage: codex-sdlc-wizard [setup|check|update|install] [options]
@@ -25,7 +26,8 @@ Commands:
   install        Advanced escape hatch: run install.sh without adaptive setup
 
 Default behavior: initialized repos run update automatically; new repos use adaptive setup, then hand off into a live plain Codex setup session.
-Type "full-auto" at the handoff prompt if you want codex --full-auto for first-run setup.
+Type "full-trust" at the handoff prompt if you want codex ${fullTrustFlag} for first-run setup.
+Full-trust/yolo is separate from automation posture; it bypasses sandbox and approval prompts.
 Automation/non-interactive behavior: use setup --yes to stay on the shell path.
 Bootstrap/setup recommendation: maximum.
 Routine work after bootstrap: mixed.
@@ -207,7 +209,8 @@ function printHandoffRecovery(reason) {
     reason,
     "Terminating spawned Codex process tree.",
     "Retry from this repo with: npx codex-sdlc-wizard@latest",
-    "If Codex printed a session id before stopping, resume with: codex resume --full-auto -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' <session-id>",
+    "If Codex printed a session id before stopping, resume with: codex resume -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' <session-id>",
+    `For full-trust/yolo-style resume, use: codex resume ${fullTrustFlag} -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' <session-id>`,
     ""
   ].join("\n"));
 }
@@ -404,8 +407,8 @@ function runScript(scriptName, args) {
 }
 
 async function askHandoffMode() {
-  if (process.env.CODEX_SDLC_HANDOFF_MODE === "full-auto") {
-    return "full-auto";
+  if (process.env.CODEX_SDLC_HANDOFF_MODE === "full-trust" || process.env.CODEX_SDLC_HANDOFF_MODE === "yolo") {
+    return "full-trust";
   }
 
   if (process.env.CODEX_SDLC_HANDOFF_MODE === "plain") {
@@ -416,8 +419,9 @@ async function askHandoffMode() {
     "",
     "Choose first-run Codex handoff mode:",
     "  Press Enter: plain codex (recommended)",
-    '  Type "full-auto": codex --full-auto',
-    "  If interrupted later, resume with: codex resume --full-auto <session-id>",
+    `  Type "full-trust": codex ${fullTrustFlag}`,
+    "  If you say yolo, use full-trust; full-auto is not full-trust.",
+    "  If interrupted later, resume with: codex resume -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' <session-id>",
     "> "
   ].join("\n");
 
@@ -425,7 +429,7 @@ async function askHandoffMode() {
     process.stdout.write(prompt);
     const answer = fs.readFileSync(0, "utf8").split(/\r?\n/, 1)[0].trim().toLowerCase();
     process.stdout.write("\n");
-    return answer === "full-auto" ? "full-auto" : "plain";
+    return answer === "full-trust" || answer === "yolo" ? "full-trust" : "plain";
   }
 
   const rl = readline.createInterface({
@@ -435,7 +439,7 @@ async function askHandoffMode() {
 
   try {
     const answer = (await rl.question(prompt)).trim().toLowerCase();
-    return answer === "full-auto" ? "full-auto" : "plain";
+    return answer === "full-trust" || answer === "yolo" ? "full-trust" : "plain";
   } finally {
     rl.close();
   }
@@ -455,7 +459,7 @@ async function handoffToCodex(modelProfile) {
   }
 
   const handoffMode = await askHandoffMode();
-  const modeLabel = handoffMode === "full-auto" ? "codex --full-auto" : "plain codex";
+  const modeLabel = handoffMode === "full-trust" ? `codex ${fullTrustFlag}` : "plain codex";
   process.stdout.write(`\nHanding off into Codex for live setup using ${modeLabel}...\n`);
 
   const codexArgs = [
@@ -468,8 +472,8 @@ async function handoffToCodex(modelProfile) {
     interactiveSessionPrompt
   ];
 
-  if (handoffMode === "full-auto") {
-    codexArgs.unshift("--full-auto");
+  if (handoffMode === "full-trust") {
+    codexArgs.unshift(fullTrustFlag);
   }
 
   const codexResult = await runCodexHandoff(codexArgs);

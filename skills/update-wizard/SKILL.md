@@ -134,7 +134,7 @@ This verification is diagnostic for product behavior. If a failing command point
 
 ### Step 6: Restart and next steps
 
-If skills, hooks, hook config, or helper scripts were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun update just for that restart. If they closed an interrupted handoff and Codex printed a resume id, recommend `codex resume --full-auto <session-id>` for low-friction continuation, or plain `codex resume <session-id>` when they want manual confirmations.
+If skills, hooks, hook config, or helper scripts were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun update just for that restart. If they closed an interrupted handoff and Codex printed a resume id, recommend `codex resume -m <model> -c 'model_reasoning_effort="xhigh"' <session-id>` for model-explicit continuation, or plain `codex resume <session-id>` when they want config-driven startup. If they normally say yolo, give the full-trust variant with `--dangerously-bypass-approvals-and-sandbox` and say full-auto is not full-trust.
 
 ## Rules
 

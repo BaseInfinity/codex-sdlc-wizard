@@ -10,15 +10,15 @@ This adapter brings the [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai
 # Setup a new repo or sync an already-initialized clone
 npx codex-sdlc-wizard@latest
 
-# Start coding with SDLC enforcement
-codex --full-auto
+# Start coding with SDLC enforcement and an explicit model profile
+codex -m gpt-5.5 -c 'model_reasoning_effort="xhigh"'
 ```
 
-`codex --full-auto` is the recommended default once this wizard is installed: you keep the repo guardrails and hook enforcement, but day-to-day editing and runs stay low-friction. Use plain `codex` instead if you want more manual confirmation. If a handoff is interrupted and Codex prints a resume id, continue with `codex resume --full-auto <session-id>` for the same low-friction posture.
+`codex -m gpt-5.5 -c 'model_reasoning_effort="xhigh"'` is the safest explicit start once this wizard is installed. Use plain `codex` instead if you want to rely on trusted repo-local config. If a handoff is interrupted and Codex prints a resume id, continue with `codex resume -m gpt-5.5 -c 'model_reasoning_effort="xhigh"' <session-id>` so resume does not fall back to an older model.
 
-If you normally use yolo-style sessions, use Codex's explicit current flags instead: `--sandbox danger-full-access --ask-for-approval never`. Only use that full-trust variant in repos you fully trust.
+If you normally use yolo-style sessions, use Codex's canonical full-trust flag: `--dangerously-bypass-approvals-and-sandbox`. Current Codex may accept `--yolo` as shorthand, but this wizard prints the canonical flag. Full-auto is not full-trust: full-trust bypasses sandbox and approval prompts. Only use that variant in repos you fully trust.
 
-Bare `npx codex-sdlc-wizard` is the adaptive setup/sync path. In an already-initialized repo clone, it runs the update/check-repair path automatically so a fresh Mac/Windows/Linux checkout can sync hooks, config, and helper skills without remembering separate commands. In a new repo, it bootstraps the repo-local guardrails first, then hands off into a live plain Codex setup session so the unresolved setup questions happen inside Codex instead of inside a shell checklist. At that first-run handoff prompt, press Enter for plain `codex` or type `full-auto` if you explicitly want `codex --full-auto`. `setup --yes` still exists for automation, but it is not the normal human path.
+Bare `npx codex-sdlc-wizard` is the adaptive setup/sync path. In an already-initialized repo clone, it runs the update/check-repair path automatically so a fresh Mac/Windows/Linux checkout can sync hooks, config, and helper skills without remembering separate commands. In a new repo, it bootstraps the repo-local guardrails first, then hands off into a live plain Codex setup session so the unresolved setup questions happen inside Codex instead of inside a shell checklist. At that first-run handoff prompt, press Enter for plain `codex` or type `full-trust` if you explicitly want `codex --dangerously-bypass-approvals-and-sandbox`. `setup --yes` still exists for automation, but it is not the normal human path.
 
 Generic npm entrypoint examples: `npx codex-sdlc-wizard`, `npx codex-sdlc-wizard check`, and `npx codex-sdlc-wizard update`.
 
