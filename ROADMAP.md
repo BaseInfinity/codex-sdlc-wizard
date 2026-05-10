@@ -19,10 +19,10 @@
 - setup/update guidance now treats verification as diagnostic for product failures and stops before editing application code or application tests without explicit user consent
 - setup/update guidance now tells users to exit and reopen Codex after hook/skill repairs, without rerunning setup/update just for that restart
 - install/setup/update now write and repair repo-local `.codex/config.toml` model keys for the selected profile, while preserving unrelated MCP, sandbox, approval, and custom config
-- first-run live setup now defaults to plain `codex` after bootstrap and requires an explicit `full-auto` choice to start that setup handoff with `codex --full-auto`
-- first-run handoff now uses a clearer prompt, recommends `codex resume --full-auto` for interrupted handoffs, and avoids the deprecated Windows `shell:true` plus args launcher path
+- first-run live setup now defaults to plain `codex` after bootstrap and requires an explicit `full-trust` choice to start that setup handoff with `codex --dangerously-bypass-approvals-and-sandbox`
+- first-run handoff now uses a clearer prompt, recommends model-explicit `codex resume -m ... -c ...` for interrupted handoffs, and avoids the deprecated Windows `shell:true` plus args launcher path
 - first-run live Codex handoff now runs as a managed child process with opt-in timeout cleanup, POSIX signal forwarding, process-group termination, repeated-interrupt handling, and explicit retry/resume guidance
-- setup/install output now prints explicit full-trust Codex flags (`--sandbox danger-full-access --ask-for-approval never`) for users who normally say yolo-style sessions
+- setup/install output now prints Codex's canonical full-trust flag (`--dangerously-bypass-approvals-and-sandbox`) for users who normally say yolo-style sessions, while keeping full-trust distinct from historical full-auto wording
 - update guidance now frontloads the npm version boundary: `$update-wizard` repairs repo artifacts, while `npx codex-sdlc-wizard@latest update` consumes the newest package
 - setup guidance now includes Codex Desktop handoff notes for auth-heavy browser/computer-use setup flows
 - generated setup docs and shipped skills now include a task-routing gate that identifies CLI, Desktop/computer-use, browser automation, or human-only lanes before giving execution steps

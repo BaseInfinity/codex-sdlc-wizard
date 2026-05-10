@@ -1931,8 +1931,13 @@ test_setup_and_update_skills_stop_before_product_remediation() {
             all_passed=false
         fi
 
-        if ! grep -q 'codex resume --full-auto' "$skill"; then
-            fail "$(basename "$(dirname "$skill")") does not recommend codex resume --full-auto for interrupted sessions"
+        if ! grep -q 'codex resume -m' "$skill"; then
+            fail "$(basename "$(dirname "$skill")") does not recommend model-explicit codex resume for interrupted sessions"
+            all_passed=false
+        fi
+
+        if ! grep -q -- '--dangerously-bypass-approvals-and-sandbox' "$skill"; then
+            fail "$(basename "$(dirname "$skill")") does not document the full-trust resume variant"
             all_passed=false
         fi
     done
@@ -2062,9 +2067,15 @@ test_repo_defaults_to_xhigh_reasoning() {
         all_passed=false
     fi
 
-    if ! grep -q 'codex resume --full-auto -m gpt-5.5' "$REPO_DIR/install.ps1" ||
+    if ! grep -q 'codex resume -m gpt-5.5' "$REPO_DIR/install.ps1" ||
        ! grep -q 'model_reasoning_effort=`"xhigh`"' "$REPO_DIR/install.ps1"; then
         fail "PowerShell installer does not print model-explicit gpt-5.5 xhigh resume guidance"
+        all_passed=false
+    fi
+
+    if ! grep -q -- '--dangerously-bypass-approvals-and-sandbox' "$REPO_DIR/install.ps1" ||
+       grep -q -- '--full-auto' "$REPO_DIR/install.ps1"; then
+        fail "PowerShell installer does not print current canonical full-trust guidance"
         all_passed=false
     fi
 
@@ -2163,7 +2174,7 @@ test_package_cli_is_honest_about_supported_flags() {
     if echo "$output" | grep -q -- '--model-profile' &&
        echo "$output" | grep -q 'mixed' &&
        echo "$output" | grep -q 'maximum' &&
-       echo "$output" | grep -Fq 'Type "full-auto"'; then
+       echo "$output" | grep -Fq 'Type "full-trust"'; then
         pass "npm CLI help advertises the supported model-profile flag"
     else
         fail "npm CLI help is missing the supported model-profile flag"

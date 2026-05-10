@@ -183,7 +183,7 @@ test_installer_uses_canonical_sdlc_skill_name() {
     fi
 }
 
-test_installer_recommends_full_auto_and_restart_resume() {
+test_installer_recommends_current_codex_restart_resume() {
     local adapter_clone
     local target_repo
     local output
@@ -199,14 +199,15 @@ test_installer_recommends_full_auto_and_restart_resume() {
 
     rm -rf "$adapter_clone" "$target_repo"
 
-    if echo "$output" | grep -q "codex --full-auto" &&
+    if echo "$output" | grep -q "codex -m gpt-5.4-mini -c 'model_reasoning_effort=\"xhigh\"'" &&
        echo "$output" | grep -Eqi 'exit and reopen Codex|restart Codex' &&
        echo "$output" | grep -Eqi '/hooks.*review|review.*\/hooks' &&
-       echo "$output" | grep -q "codex resume --full-auto -m gpt-5.5" &&
-       echo "$output" | grep -Fq 'model_reasoning_effort="xhigh"'; then
-        pass "Installer output recommends codex --full-auto plus restart/resume after setup"
+       echo "$output" | grep -q "codex resume -m gpt-5.5" &&
+       echo "$output" | grep -Fq 'model_reasoning_effort="xhigh"' &&
+       ! echo "$output" | grep -q -- '--full-auto'; then
+        pass "Installer output recommends current Codex restart/resume after setup"
     else
-        fail "Installer output does not recommend codex --full-auto plus restart/resume clearly enough"
+        fail "Installer output does not recommend current Codex restart/resume clearly enough"
     fi
 }
 
@@ -227,14 +228,15 @@ test_installer_prints_explicit_yolo_style_flags() {
     rm -rf "$adapter_clone" "$target_repo"
 
     if echo "$output" | grep -qi 'yolo-style sessions' &&
-       echo "$output" | grep -q -- '--sandbox danger-full-access' &&
-       echo "$output" | grep -q -- '--ask-for-approval never' &&
-       echo "$output" | grep -Fq "codex -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' --sandbox danger-full-access --ask-for-approval never" &&
-       echo "$output" | grep -Fq "codex resume -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' --sandbox danger-full-access --ask-for-approval never" &&
-       echo "$output" | grep -Eqi 'fully trust|full-trust'; then
-        pass "Installer output prints explicit sandbox/approval flags for yolo-style sessions"
+       echo "$output" | grep -q -- '--dangerously-bypass-approvals-and-sandbox' &&
+       echo "$output" | grep -Fq "codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'" &&
+       echo "$output" | grep -Fq "codex resume --dangerously-bypass-approvals-and-sandbox -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'" &&
+       echo "$output" | grep -Eqi 'yolo.*shorthand|shorthand.*yolo' &&
+       echo "$output" | grep -Eqi 'fully trust|full-trust' &&
+       echo "$output" | grep -Eqi 'full-auto.*not.*full-trust|full-trust.*not.*full-auto'; then
+        pass "Installer output prints canonical full-trust flags for yolo-style sessions"
     else
-        fail "Installer output does not print explicit sandbox/approval flags for yolo-style sessions"
+        fail "Installer output does not print canonical full-trust flags for yolo-style sessions"
     fi
 }
 
@@ -393,14 +395,17 @@ test_readme_mentions_packaging_test_command() {
 }
 
 test_readme_recommends_full_auto() {
-    local has_full_auto=true
+    local has_current_start=true
     local has_manual_fallback=true
+    local explains_full_trust=true
 
-    grep -q 'codex --full-auto' "$README" || has_full_auto=false
+    grep -q 'codex -m gpt-5.5' "$README" || has_current_start=false
     grep -q 'plain `codex`' "$README" || has_manual_fallback=false
+    grep -q -- '--dangerously-bypass-approvals-and-sandbox' "$README" || explains_full_trust=false
+    grep -Eqi 'full-auto.*not.*full-trust|full-trust.*not.*full-auto' "$README" || explains_full_trust=false
 
-    if [ "$has_full_auto" = "true" ] && [ "$has_manual_fallback" = "true" ]; then
-        pass "README recommends codex --full-auto and documents plain codex as fallback"
+    if [ "$has_current_start" = "true" ] && [ "$has_manual_fallback" = "true" ] && [ "$explains_full_trust" = "true" ]; then
+        pass "README recommends current Codex startup and documents full-trust separately"
     else
         fail "README does not document the recommended Codex startup mode clearly"
     fi
@@ -774,7 +779,7 @@ test_installer_smoke_test_clean_project
 test_installer_scaffolds_only_default_repo_scope_sdlc_skill
 test_installer_uses_canonical_sdlc_skill_name
 test_installer_writes_default_model_profile
-test_installer_recommends_full_auto_and_restart_resume
+test_installer_recommends_current_codex_restart_resume
 test_installer_prints_explicit_yolo_style_flags
 test_installer_mentions_model_profile_tradeoff
 test_installer_calls_out_auth_heavy_boundary
