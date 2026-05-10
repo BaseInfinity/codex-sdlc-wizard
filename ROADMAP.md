@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.26` and `v0.7.26` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.27` and `v0.7.27` are the current release target for the SDLC-only default repo skill surface
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -49,26 +49,26 @@
 
 ## Next Release Cycle
 
-### 0.7.27
+### 0.7.28
 
-Purpose: continue pilot rollout after the `0.7.26` initialized-clone default-update stabilization while keeping any new patches tied to proven reusable wizard bugs.
+Purpose: continue pilot rollout after the `0.7.27` current-Codex handoff guidance stabilization while keeping any new patches tied to proven reusable wizard bugs.
 
 Scope:
-- keep `0.7.26` as the initialized-clone default-update, demo-runtime claim gate, parallel proof-runner, and current Codex hooks feature-flag baseline for pilot consumption
+- keep `0.7.27` as the initialized-clone default-update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, and current Codex hooks feature-flag baseline for pilot consumption
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work
 
 ## Tracker Cleanup
 
-The stabilization tracker is currently clear after the `0.7.26` initialized-clone default-update stabilization. Remaining open docs/research issues stay outside the stabilization lane.
+The stabilization tracker is currently clear after the `0.7.27` current-Codex handoff guidance stabilization. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.26` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.27` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.26`, the main backlog is:
+After `0.7.27`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
