@@ -6,8 +6,9 @@
 3. Reasoning policy - use `gpt-5.5` with `xhigh` reasoning for this repo
 4. Always keep this repo on `gpt-5.5` `xhigh`; do not switch wizard-repo work to `mixed`, mini-only, or lower-reasoning profiles
 5. Keep this repo on `maximum` (`gpt-5.5` `xhigh` throughout) because codex-sdlc-wizard is unusually meta and high-blast-radius
-6. Write failing test FIRST (TDD RED), then implement (TDD GREEN)
-7. ALL tests must pass before commit - no exceptions
+6. If `GOALS.md` exists, treat it as the active-scope contract and keep `ROADMAP.md` as backlog/history
+7. Write failing test FIRST (TDD RED), then implement (TDD GREEN)
+8. ALL tests must pass before commit - no exceptions
 
 ## TDD Workflow (MANDATORY)
 1. Write the test file FIRST - the test MUST FAIL initially

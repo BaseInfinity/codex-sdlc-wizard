@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
+ROADMAP="$REPO_DIR/ROADMAP.md"
 PACKAGE_JSON="$REPO_DIR/package.json"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
 source "$JSON_HELPERS"
@@ -391,6 +392,45 @@ test_readme_mentions_packaging_test_command() {
         pass "README includes the packaging smoke test command"
     else
         fail "README does not mention the packaging smoke test command"
+    fi
+}
+
+test_readme_documents_optional_goals_contract() {
+    local has_goals=true
+    local has_active_until_stop=true
+    local has_roadmap_boundary=true
+    local has_evidence_contract=true
+
+    grep -q 'GOALS.md' "$README" || has_goals=false
+    grep -q 'complete everything in GOALS.md until the user says stop' "$README" || has_active_until_stop=false
+    grep -Eqi 'ROADMAP.md.*backlog|backlog.*ROADMAP.md' "$README" || has_roadmap_boundary=false
+    grep -Eqi 'evidence contract|runtime boundary' "$README" || has_evidence_contract=false
+
+    if [ "$has_goals" = "true" ] &&
+       [ "$has_active_until_stop" = "true" ] &&
+       [ "$has_roadmap_boundary" = "true" ] &&
+       [ "$has_evidence_contract" = "true" ]; then
+        pass "README documents the optional GOALS.md active-scope contract"
+    else
+        fail "README does not document the optional GOALS.md active-scope contract"
+    fi
+}
+
+test_roadmap_documents_optional_goals_boundary() {
+    local has_goals=true
+    local has_roadmap_boundary=true
+    local has_active_boundary=true
+
+    grep -q 'GOALS.md' "$ROADMAP" || has_goals=false
+    grep -Eqi 'ROADMAP.md.*backlog|backlog.*ROADMAP.md' "$ROADMAP" || has_roadmap_boundary=false
+    grep -Eqi 'active-scope contract|active scope contract|active contract' "$ROADMAP" || has_active_boundary=false
+
+    if [ "$has_goals" = "true" ] &&
+       [ "$has_roadmap_boundary" = "true" ] &&
+       [ "$has_active_boundary" = "true" ]; then
+        pass "ROADMAP documents the optional GOALS.md active-scope boundary"
+    else
+        fail "ROADMAP does not document the optional GOALS.md active-scope boundary"
     fi
 }
 
@@ -788,6 +828,8 @@ test_readme_explains_distribution_model
 test_readme_has_install_choice_table
 test_readme_explains_install_side_effects
 test_readme_mentions_packaging_test_command
+test_readme_documents_optional_goals_contract
+test_roadmap_documents_optional_goals_boundary
 test_readme_recommends_full_auto
 test_readme_stays_consumer_focused
 test_readme_documents_repo_scope_skills

@@ -61,6 +61,7 @@ Read the local repo context first:
 - `PROVE-IT.md`
 - `TESTING.md`
 - `SDLC.md`
+- `GOALS.md` when tracked by the manifest as an optional active-scope contract
 
 If running inside `codex-sdlc-wizard`, also read:
 
@@ -119,6 +120,8 @@ Missing files can be installed or created.
 Customized files should be merged or skipped intentionally.
 
 Never replace strong repo-local docs just to make them look more like the wizard.
+
+If `GOALS.md` is tracked in the manifest, preserve its customization by default and repair it only when missing, broken, or explicitly forced. It is the optional active-scope contract for long-running work; `ROADMAP.md` stays backlog/history.
 
 ### Step 5: Verify
 

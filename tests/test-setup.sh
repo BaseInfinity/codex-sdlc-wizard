@@ -420,7 +420,57 @@ test_setup_generates_sdlc_md() {
     fi
 }
 
-# ---- Test 16: generated SDLC.md blocks unproven demo-ready runtime claims ----
+# ---- Test 16: optional GOALS.md active-scope contract ----
+test_setup_goals_template_is_explicit_opt_in() {
+    local default_ws preexisting_ws goals_ws
+    default_ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    preexisting_ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    goals_ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$default_ws/package.json"
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$preexisting_ws/package.json"
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$goals_ws/package.json"
+    mkdir -p "$default_ws/src" "$preexisting_ws/src" "$goals_ws/src"
+    printf 'project-owned goals\n' > "$preexisting_ws/GOALS.md"
+
+    run_setup "$default_ws"
+    run_setup "$preexisting_ws"
+    run_setup_args "$goals_ws" --yes --goals >/dev/null 2>&1
+
+    local valid=true
+    [ ! -f "$default_ws/GOALS.md" ] || valid=false
+    if [ -f "$default_ws/.codex-sdlc/manifest.json" ]; then
+        json_eval_stdin 'data.managed_files["GOALS.md"]' < "$default_ws/.codex-sdlc/manifest.json" >/dev/null 2>&1 && valid=false
+    fi
+
+    grep -q 'project-owned goals' "$preexisting_ws/GOALS.md" 2>/dev/null || valid=false
+    if [ -f "$preexisting_ws/.codex-sdlc/manifest.json" ]; then
+        json_eval_stdin 'data.managed_files["GOALS.md"]' < "$preexisting_ws/.codex-sdlc/manifest.json" >/dev/null 2>&1 && valid=false
+    fi
+
+    [ -f "$goals_ws/GOALS.md" ] || valid=false
+    grep -q '^## Operating Rule$' "$goals_ws/GOALS.md" 2>/dev/null || valid=false
+    grep -q '^## Active Goals Until Stop$' "$goals_ws/GOALS.md" 2>/dev/null || valid=false
+    grep -q '^## Deferred$' "$goals_ws/GOALS.md" 2>/dev/null || valid=false
+    grep -q '^## Definition Of Done$' "$goals_ws/GOALS.md" 2>/dev/null || valid=false
+    grep -q '^## Runtime Boundary$' "$goals_ws/GOALS.md" 2>/dev/null || valid=false
+    grep -q '^## Evidence Contract$' "$goals_ws/GOALS.md" 2>/dev/null || valid=false
+    grep -q '^## Current Goal Prompt$' "$goals_ws/GOALS.md" 2>/dev/null || valid=false
+    grep -q 'complete everything in GOALS.md until the user says stop' "$goals_ws/GOALS.md" 2>/dev/null || valid=false
+    json_eval_stdin 'data.managed_files["GOALS.md"]' < "$goals_ws/.codex-sdlc/manifest.json" >/dev/null 2>&1 || valid=false
+    run_setup_args "$goals_ws" --yes >/dev/null 2>&1
+    [ -f "$goals_ws/GOALS.md" ] || valid=false
+    json_eval_stdin 'data.managed_files["GOALS.md"]' < "$goals_ws/.codex-sdlc/manifest.json" >/dev/null 2>&1 || valid=false
+
+    rm -rf "$default_ws" "$preexisting_ws" "$goals_ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup.sh creates GOALS.md active-scope contract only when explicitly requested"
+    else
+        fail "setup.sh did not handle optional GOALS.md active-scope contract correctly"
+    fi
+}
+
+# ---- Test 17: generated SDLC.md blocks unproven demo-ready runtime claims ----
 test_setup_generates_demo_runtime_claim_gate() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
@@ -1082,10 +1132,12 @@ EOF
 
 # ---- Test 30: verify-only reports missing managed files without regenerating them ----
 test_setup_verify_only_reports_missing_files() {
-    local ws
+    local ws goals_ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    goals_ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
-    mkdir -p "$ws/src"
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$goals_ws/package.json"
+    mkdir -p "$ws/src" "$goals_ws/src"
 
     run_setup "$ws"
     rm -f "$ws/TESTING.md"
@@ -1101,7 +1153,18 @@ test_setup_verify_only_reports_missing_files() {
     echo "$output" | grep -q 'Verifying installation' 2>/dev/null || valid=false
     echo "$output" | grep -q 'MISSING: TESTING.md' 2>/dev/null || valid=false
     [ ! -f "$ws/TESTING.md" ] || valid=false
-    rm -rf "$ws"
+
+    run_setup_args "$goals_ws" --yes --goals >/dev/null 2>&1
+    rm -f "$goals_ws/GOALS.md"
+    set +e
+    output=$(run_setup_args "$goals_ws" verify-only)
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || valid=false
+    echo "$output" | grep -q 'MISSING: GOALS.md' 2>/dev/null || valid=false
+    [ ! -f "$goals_ws/GOALS.md" ] || valid=false
+    rm -rf "$ws" "$goals_ws"
 
     if [ "$valid" = "true" ]; then
         pass "verify-only reports missing managed files without regenerating them"
@@ -1148,6 +1211,37 @@ fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
         pass "regenerate rebuilds docs from stored setup state without interactive prompts"
     else
         fail "regenerate did not rebuild docs from manifest-backed setup state"
+    fi
+}
+
+test_setup_regenerate_rebuilds_goals_from_manifest() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest","lint":"eslint .","build":"tsc"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/__tests__"
+    touch "$ws/jest.config.js"
+
+    run_setup_args "$ws" --yes --goals >/dev/null 2>&1
+    rm -f "$ws/GOALS.md"
+
+    local output status valid=true
+    set +e
+    output=$(run_setup_args "$ws" regenerate)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    echo "$output" | grep -vq 'Use scan results above and continue' 2>/dev/null || valid=false
+    [ -f "$ws/GOALS.md" ] || valid=false
+    grep -q 'Active Goals Until Stop' "$ws/GOALS.md" 2>/dev/null || valid=false
+    json_eval_stdin 'data.managed_files["GOALS.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1 || valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup regenerate rebuilds optional GOALS.md from manifest"
+    else
+        fail "setup regenerate did not rebuild optional GOALS.md from manifest"
     fi
 }
 
@@ -1368,6 +1462,7 @@ test_template_testing_md_domain
 test_generated_no_placeholders
 test_agents_md_read_directives
 test_setup_generates_sdlc_md
+test_setup_goals_template_is_explicit_opt_in
 test_setup_generates_demo_runtime_claim_gate
 test_setup_interactive_only_asks_preferences
 test_setup_interactive_accepts_scan_without_prompting_optional_blanks
@@ -1389,6 +1484,7 @@ test_setup_generates_extended_setup_docs
 test_setup_interactive_allows_overriding_detected_values
 test_setup_verify_only_reports_missing_files
 test_setup_regenerate_rebuilds_docs_from_manifest
+test_setup_regenerate_rebuilds_goals_from_manifest
 test_setup_hashes_manifest_without_shell_hash_tools
 test_setup_uses_codex_xhigh_reasoning_when_available
 test_setup_writes_mixed_profile_with_xhigh_reasoning

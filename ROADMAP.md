@@ -55,6 +55,7 @@ Purpose: continue pilot rollout after the `0.7.27` current-Codex handoff guidanc
 
 Scope:
 - keep `0.7.27` as the initialized-clone default-update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, and current Codex hooks feature-flag baseline for pilot consumption
+- ship an optional `GOALS.md` active-scope contract for long-running SDLC work, with `ROADMAP.md` staying backlog/history instead of becoming the current active run
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work

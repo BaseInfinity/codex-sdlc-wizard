@@ -8,12 +8,12 @@ const readline = require("node:readline/promises");
 const scriptDir = path.resolve(__dirname, "..");
 const rawArgs = process.argv.slice(2);
 const codexCommand = process.env.CODEX_SDLC_CODEX_BIN || "codex";
-const interactiveSessionPrompt = [
+const baseInteractiveSessionPrompt = [
   "$setup-wizard",
   "This repo was just bootstrapped by codex-sdlc-wizard.",
   "Continue setup inside Codex: scan the repo, ask only unresolved questions, preserve intentional existing docs, generate or refresh repo-specific SDLC docs, verify the result, and finish setup.",
   "Use xhigh reasoning for setup."
-].join(" ");
+];
 const fullTrustFlag = "--dangerously-bypass-approvals-and-sandbox";
 
 function printHelp() {
@@ -39,6 +39,7 @@ Options:
                 Wizard-owned profile toggle. Use 'maximum' for setup/bootstrap
                 work, then switch routine work back to 'mixed' for better
                 speed/token efficiency with xhigh main reasoning and review.
+  --goals       During setup, also generate optional GOALS.md active-scope contract
   --help, -h     Show this help
 
 Examples:
@@ -87,6 +88,20 @@ function getSetupModelProfile(args) {
   }
 
   return "maximum";
+}
+
+function shouldGenerateGoals(args) {
+  return args.includes("--goals") || process.env.CODEX_SDLC_GENERATE_GOALS === "1";
+}
+
+function buildInteractiveSessionPrompt(options) {
+  const prompt = [...baseInteractiveSessionPrompt];
+
+  if (options.generateGoals) {
+    prompt.push("The user requested setup --goals: generate or refresh GOALS.md as the optional active-scope contract for long-running work, keep ROADMAP.md as backlog/history, and preserve the operating phrase \"complete everything in GOALS.md until the user says stop\".");
+  }
+
+  return prompt.join(" ");
 }
 
 function spawnCodex(args, stdio) {
@@ -370,6 +385,7 @@ function isCiEnvironment() {
 
 function isHandoffCompatibleArg(arg) {
   return arg === "--model-profile" ||
+    arg === "--goals" ||
     arg.startsWith("--model-profile=") ||
     arg === "mixed" ||
     arg === "maximum";
@@ -445,7 +461,7 @@ async function askHandoffMode() {
   }
 }
 
-async function handoffToCodex(modelProfile) {
+async function handoffToCodex(modelProfile, options) {
   const installArgs = ["--model-profile", modelProfile];
   const installResult = runScript("install.sh", installArgs);
 
@@ -469,7 +485,7 @@ async function handoffToCodex(modelProfile) {
     "gpt-5.5",
     "-c",
     'model_reasoning_effort="xhigh"',
-    interactiveSessionPrompt
+    buildInteractiveSessionPrompt(options)
   ];
 
   if (handoffMode === "full-trust") {
@@ -488,7 +504,9 @@ async function handoffToCodex(modelProfile) {
 
 async function main() {
   if (shouldHandoffToCodex()) {
-    process.exit(await handoffToCodex(getSetupModelProfile(scriptArgs)));
+    process.exit(await handoffToCodex(getSetupModelProfile(scriptArgs), {
+      generateGoals: shouldGenerateGoals(scriptArgs)
+    }));
   }
 
   const scriptName = command === "setup"

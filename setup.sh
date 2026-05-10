@@ -186,10 +186,14 @@ preferred_state() {
 
 verify_installation() {
     local errors=0
+    local required_files="AGENTS.md SDLC.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .codex-sdlc/model-profile.json .agents/skills/sdlc/SKILL.md"
 
     echo ""
     echo "Verifying installation..."
-    for f in AGENTS.md SDLC.md TESTING.md ARCHITECTURE.md .codex/hooks.json .codex/config.toml .codex-sdlc/manifest.json .codex-sdlc/model-profile.json .agents/skills/sdlc/SKILL.md; do
+    if manifest_tracks_goals; then
+        required_files="$required_files GOALS.md"
+    fi
+    for f in $required_files; do
         if [ ! -f "$f" ]; then
             echo "  MISSING: $f"
             errors=$((errors + 1))
@@ -207,6 +211,14 @@ verify_installation() {
     echo ""
     echo "WARNING: $errors file(s) missing — setup may be incomplete."
     return 1
+}
+
+manifest_tracks_goals() {
+    local manifest=".codex-sdlc/manifest.json"
+    local tracked_hash=""
+    [ -f "$manifest" ] || return 1
+    tracked_hash=$(json_get_file "$manifest" 'data.managed_files?.["GOALS.md"] || ""')
+    [ -n "$tracked_hash" ]
 }
 
 load_regenerate_state() {
@@ -338,10 +350,13 @@ FORCE=false
 SETUP_MODE="normal"
 MODEL_PROFILE="maximum"
 MODEL_PROFILE_SET=false
+GENERATE_GOALS=false
+MANAGE_GOALS=false
 while [ $# -gt 0 ]; do
     case "$1" in
         --yes|-y) AUTO_YES=true ;;
         --force) FORCE=true ;;
+        --goals) GENERATE_GOALS=true; MANAGE_GOALS=true ;;
         regenerate) SETUP_MODE="regenerate" ;;
         verify-only) SETUP_MODE="verify-only" ;;
         --model-profile)
@@ -368,6 +383,16 @@ case "$MODEL_PROFILE" in
         exit 1
         ;;
 esac
+
+if [ "${CODEX_SDLC_GENERATE_GOALS:-0}" = "1" ]; then
+    GENERATE_GOALS=true
+    MANAGE_GOALS=true
+fi
+
+if manifest_tracks_goals; then
+    GENERATE_GOALS=true
+    MANAGE_GOALS=true
+fi
 
 if [ "$SETUP_MODE" = "verify-only" ]; then
     verify_installation
@@ -1071,6 +1096,9 @@ generate_file() {
 generate_file "AGENTS.md" "$SCRIPT_DIR/templates/AGENTS.md.tmpl" "AGENTS.md"
 generate_file "ARCHITECTURE.md" "$SCRIPT_DIR/templates/ARCHITECTURE.md.tmpl" "ARCHITECTURE.md"
 generate_file "SDLC.md" "$SCRIPT_DIR/templates/SDLC.md.tmpl" "SDLC.md"
+if [ "$GENERATE_GOALS" = "true" ]; then
+    generate_file "GOALS.md" "$SCRIPT_DIR/templates/GOALS.md.tmpl" "GOALS.md"
+fi
 
 # TESTING.md needs domain section injection
 generate_testing_md() {
@@ -1208,6 +1236,8 @@ AGENTS_HASH="$(compute_hash AGENTS.md)" \
 SDLC_HASH="$(compute_hash SDLC.md)" \
 TESTING_HASH="$(compute_hash TESTING.md)" \
 ARCH_HASH="$(compute_hash ARCHITECTURE.md)" \
+GOALS_HASH="$(compute_hash GOALS.md)" \
+MANAGE_GOALS="$MANAGE_GOALS" \
 SDLC_LOOP_HASH="$(compute_hash SDLC-LOOP.md)" \
 START_SDLC_HASH="$(compute_hash START-SDLC.md)" \
 PROVE_IT_HASH="$(compute_hash PROVE-IT.md)" \
@@ -1314,6 +1344,10 @@ const manifest = {
     ".codex/hooks/session-start.ps1": process.env.SESSION_START_PS1_HASH || ""
   }
 };
+
+if (process.env.MANAGE_GOALS === "true" && process.env.GOALS_HASH) {
+  manifest.managed_files["GOALS.md"] = process.env.GOALS_HASH;
+}
 
 process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
 ' > "$MANIFEST"

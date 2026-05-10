@@ -1,0 +1,61 @@
+# Active Goals
+
+<!-- SDLC Wizard Version: {{WIZARD_VERSION}} -->
+<!-- Setup Date: {{SETUP_DATE}} -->
+
+`GOALS.md` is the optional active-scope contract for long-running SDLC work.
+Use it when `ROADMAP.md` is too broad to be the current execution target.
+
+## Operating Rule
+
+complete everything in GOALS.md until the user says stop
+
+Do not treat one checkpoint, one slash-command goal, or one proof run as the whole roadmap being complete. `ROADMAP.md` remains backlog/history; `GOALS.md` is the active contract.
+
+## Current Active Progress
+
+- Current goal source: fill this from the user's active prompt.
+- Current status: not started.
+- Last verified checkpoint: none yet.
+
+## Active Goals Until Stop
+
+- [ ] Replace this with the active goal.
+- [ ] Add each follow-on goal the user wants completed in this continuous run.
+
+## Completed Baseline Checkpoint
+
+- Generated SDLC baseline is present.
+- Keep this section updated when a baseline checkpoint becomes real proof, not intent.
+
+## Deferred
+
+- Keep broad backlog, future ideas, and non-active roadmap work in `ROADMAP.md`.
+- Move anything here when it is explicitly out of the current active run.
+
+## Definition Of Done
+
+- Every active goal above is complete or explicitly deferred.
+- Tests, lint, typecheck, build, or repo-specific proof commands have fresh evidence.
+- Native review/self-review findings are resolved or documented.
+- Completion language distinguishes active goal complete from roadmap complete.
+
+## Runtime Boundary
+
+- State any no-Codex, human-only, auth, credential, tenant, MFA, license, deploy, send/delete, or policy-publish boundary before claiming runtime completion.
+- If a real runtime or external system cannot be exercised by Codex, document the human proof required here.
+
+## Evidence Contract
+
+- List exact commands run.
+- Link or name generated artifacts.
+- Record manual proof required for human-only runtime boundaries.
+- Cite the review path used before claiming the active goal is done.
+
+## Current Goal Prompt
+
+Paste this when you want Codex to continue the active run:
+
+```text
+$sdlc complete everything in GOALS.md until the user says stop. Keep ROADMAP.md as backlog/history, update GOALS.md with active progress and deferred work, and prove each completion claim with the evidence contract before saying the active goal is done.
+```
