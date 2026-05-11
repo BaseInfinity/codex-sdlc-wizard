@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
 ROADMAP="$REPO_DIR/ROADMAP.md"
+GOALS_TEMPLATE="$REPO_DIR/templates/GOALS.md.tmpl"
 PACKAGE_JSON="$REPO_DIR/package.json"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
 source "$JSON_HELPERS"
@@ -434,6 +435,45 @@ test_roadmap_documents_optional_goals_boundary() {
     fi
 }
 
+test_readme_and_goals_template_document_goal_mode_with_sdlc() {
+    local has_readme_goal_heading=true
+    local has_sdlc_anchor=true
+    local has_goal_as_sdlc_task=true
+    local has_extra_skills_generic=true
+    local has_confidence_stop=true
+    local has_verification=true
+    local has_clean_break=true
+    local has_template_goal_block=true
+    local has_template_goal_phrase=true
+    local avoids_ecosystem_reveal=true
+
+    grep -q '^### Codex `/goal` With SDLC$' "$README" || has_readme_goal_heading=false
+    grep -Eiq '/goal.*\$sdlc|\$sdlc.*/goal' "$README" || has_sdlc_anchor=false
+    grep -Eiq 'SDLC task|active SDLC task|SDLC-backed' "$README" || has_goal_as_sdlc_task=false
+    grep -Eiq 'repo-local.*skills|repo-specific.*skills|additional.*skills' "$README" || has_extra_skills_generic=false
+    grep -Eiq '95%|confidence.*drop|drops.*confidence' "$README" || has_confidence_stop=false
+    grep -Eiq 'RED/GREEN|focused checks|full.*tests|verification' "$README" || has_verification=false
+    grep -Eiq 'clean break|committed locally|safe.*resume' "$README" || has_clean_break=false
+    grep -q '^## Codex /goal Prompt$' "$GOALS_TEMPLATE" || has_template_goal_block=false
+    grep -q '/goal' "$GOALS_TEMPLATE" || has_template_goal_phrase=false
+    grep -Eqi '^## XDLC Ecosystem|Full ecosystem|\$gdlc|\$adlc|domain DLC' "$README" "$GOALS_TEMPLATE" && avoids_ecosystem_reveal=false
+
+    if [ "$has_readme_goal_heading" = "true" ] &&
+       [ "$has_sdlc_anchor" = "true" ] &&
+       [ "$has_goal_as_sdlc_task" = "true" ] &&
+       [ "$has_extra_skills_generic" = "true" ] &&
+       [ "$has_confidence_stop" = "true" ] &&
+       [ "$has_verification" = "true" ] &&
+       [ "$has_clean_break" = "true" ] &&
+       [ "$has_template_goal_block" = "true" ] &&
+       [ "$has_template_goal_phrase" = "true" ] &&
+       [ "$avoids_ecosystem_reveal" = "true" ]; then
+        pass "README and GOALS template document Codex /goal as SDLC-backed active work"
+    else
+        fail "README or GOALS template does not document Codex /goal as an SDLC-backed active task"
+    fi
+}
+
 test_readme_recommends_full_auto() {
     local has_current_start=true
     local has_manual_fallback=true
@@ -830,6 +870,7 @@ test_readme_explains_install_side_effects
 test_readme_mentions_packaging_test_command
 test_readme_documents_optional_goals_contract
 test_roadmap_documents_optional_goals_boundary
+test_readme_and_goals_template_document_goal_mode_with_sdlc
 test_readme_recommends_full_auto
 test_readme_stays_consumer_focused
 test_readme_documents_repo_scope_skills

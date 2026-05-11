@@ -56,7 +56,8 @@ Purpose: continue pilot rollout after the `0.7.28` optional GOALS active-scope r
 
 Scope:
 - keep `0.7.28` as the initialized-clone default-update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag baseline, and optional `GOALS.md` active-scope contract for pilot consumption
-- dogfood Codex `/goal` with `$sdlc` before adding setup guidance, so any shipped recommendation is based on observed behavior rather than assumptions
+- ship manual Codex `/goal` guidance as SDLC-backed active work: anchor every goal to `$sdlc`, `GOALS.md` or a roadmap slice, repo-local skills already installed, confidence/verification gates, and clean-break commits
+- keep programmatic `/goal` automation unassumed unless Codex exposes a stable CLI/API path for it
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work
@@ -76,7 +77,6 @@ After `0.7.28`, the main backlog is:
 - any new reusable wizard fixes discovered during the pilot set
 - official Codex plugin distribution packaging, after the current npm/skill path stays stable
 - model-profile measurement data collection for `mixed` vs `maximum`
-- later `/goal` command pilot for `$sdlc`, after active release/stabilization work is clear
 - later creator-tool research after the active backlog stays under control
 
 ## Official Codex Plugin Distribution Plan
@@ -109,7 +109,7 @@ Before calling this the default Codex SDLC path, prove it on real pilot repos in
 
 After the current backlog is under control, investigate whether Codex's built-in `Skill Creator` and `Plugin Creator` can help reduce maintenance or packaging friction for this repo.
 
-- dogfood and test Codex `/goal` with `$sdlc` before adding wizard guidance, so any shipped recommendation is based on observed behavior rather than assumptions
+- investigate programmatic `/goal` automation only if Codex exposes a stable CLI/API path; keep manual `/goal` guidance anchored to `$sdlc`
 - evaluate `Skill Creator` as a possible future aid for skill-structure maintenance
 - evaluate `Plugin Creator` only as later research, since plugins are not part of the current shipping path
 - measure `gpt-5.4-mini` for the main working pass while keeping `gpt-5.5` `xhigh` for review or cross-model review, and compare that against simply running the whole slice at `xhigh`

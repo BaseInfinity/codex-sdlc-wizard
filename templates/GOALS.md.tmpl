@@ -52,6 +52,14 @@ Do not treat one checkpoint, one slash-command goal, or one proof run as the who
 - Record manual proof required for human-only runtime boundaries.
 - Cite the review path used before claiming the active goal is done.
 
+## Codex /goal Prompt
+
+If Codex `/goal` is available, use it manually as continuity for this SDLC-backed active task. `/goal` does not replace `$sdlc`, tests, review, proof, or the clean-break requirement.
+
+```text
+Get as far as possible through GOALS.md in small, shippable slices. Follow $sdlc for every code/doc change and include any relevant repo-local skills already installed here. Keep confidence >=95%; if confidence drops, research or stop at a clean handoff point. Use RED/GREEN tests, focused checks, full tests/lint when code or config changed, and native review/self-review before shipping. Stop only at a clean break with evidence recorded and changes committed locally.
+```
+
 ## Current Goal Prompt
 
 Paste this when you want Codex to continue the active run:

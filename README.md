@@ -52,6 +52,25 @@ npx codex-sdlc-wizard@latest setup --yes --goals
 
 The template includes active goals, deferred work, definition of done, runtime boundary, evidence contract, and a paste-ready `$sdlc` prompt. This prevents “active goal complete” from being confused with “whole roadmap complete.”
 
+### Codex `/goal` With SDLC
+
+Use Codex `/goal` for long-running roadmap work only after this repo has a real `$sdlc` setup. Treat the goal as an SDLC-backed active task, not as a substitute for planning, tests, review, proof, or repo-local instructions.
+
+A good goal should include:
+
+- the current `GOALS.md`, roadmap slice, or milestone
+- `$sdlc` as the mandatory delivery contract
+- any additional repo-local skills that are already installed and relevant
+- the 95% confidence rule, including stopping to research or hand back when confidence drops
+- RED/GREEN tests, focused checks, full tests/lint when code or config changed, and native review/self-review
+- a clean break requirement: docs updated, evidence recorded, and changes committed locally before claiming the active task is done
+
+Suggested manual `/goal` text:
+
+```text
+Get as far as possible through GOALS.md in small, shippable slices. Follow $sdlc for every code/doc change and include any relevant repo-local skills already installed here. Keep confidence >=95%; if confidence drops, research or stop at a clean handoff point. Use RED/GREEN tests, focused checks, full tests/lint when code or config changed, and native review/self-review before shipping. Stop only at a clean break with evidence recorded and changes committed locally.
+```
+
 ## What This Repo Is
 
 This repo is now a **Codex skill plus adaptive installer-style adapter** for Codex projects.
