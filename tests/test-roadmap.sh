@@ -139,24 +139,26 @@ test_roadmap_tracks_late_creator_investigation() {
     fi
 }
 
-test_roadmap_tracks_later_goal_command_pilot() {
+test_roadmap_tracks_goal_mode_guidance() {
     local has_goal_command=true
-    local has_sdlc_dogfood=true
-    local has_later_priority=true
+    local has_sdlc_anchor=true
+    local has_manual_guidance=true
+    local keeps_automation_future=true
     local goal_lines
 
     goal_lines=$(grep -F '/goal' "$ROADMAP" 2>/dev/null || true)
     [ -n "$goal_lines" ] || has_goal_command=false
-    echo "$goal_lines" | grep -Eqi 'dogfood|pilot|test' || has_sdlc_dogfood=false
-    echo "$goal_lines" | grep -Fq '$sdlc' || has_sdlc_dogfood=false
-    echo "$goal_lines" | grep -Eqi 'later|after|behind the active backlog' || has_later_priority=false
+    echo "$goal_lines" | grep -Fq '$sdlc' || has_sdlc_anchor=false
+    echo "$goal_lines" | grep -Eqi 'manual|guidance|SDLC-backed' || has_manual_guidance=false
+    echo "$goal_lines" | grep -Eqi 'programmatic|automation|unassumed|not assume' || keeps_automation_future=false
 
     if [ "$has_goal_command" = "true" ] &&
-       [ "$has_sdlc_dogfood" = "true" ] &&
-       [ "$has_later_priority" = "true" ]; then
-        pass "Roadmap tracks the later /goal command pilot behind active SDLC work"
+       [ "$has_sdlc_anchor" = "true" ] &&
+       [ "$has_manual_guidance" = "true" ] &&
+       [ "$keeps_automation_future" = "true" ]; then
+        pass "Roadmap tracks manual /goal guidance as SDLC-backed work and keeps automation unassumed"
     else
-        fail "Roadmap does not track the later /goal command pilot clearly enough"
+        fail "Roadmap does not track SDLC-backed /goal guidance clearly enough"
     fi
 }
 
@@ -281,7 +283,7 @@ test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_calls_out_stale_issue_cleanup
 test_roadmap_tracks_late_creator_investigation
-test_roadmap_tracks_later_goal_command_pilot
+test_roadmap_tracks_goal_mode_guidance
 test_roadmap_tracks_official_codex_plugin_distribution_plan
 test_roadmap_tracks_review_model_measurement
 test_roadmap_sets_numeric_model_profile_targets
