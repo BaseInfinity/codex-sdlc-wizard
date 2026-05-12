@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.29` and `v0.7.29` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.30` and `v0.7.30` are the current release target for the SDLC-only default repo skill surface
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -48,15 +48,16 @@
 - bare `npx codex-sdlc-wizard@latest` now auto-runs the update/check-repair path in already-initialized clones, so cross-machine checkouts sync without remembering separate `check`/`update` commands
 - setup now supports optional `--goals` generation for a manifest-tracked `GOALS.md` active-scope contract, while `ROADMAP.md` remains backlog/history
 - README and generated `GOALS.md` now document manual Codex `/goal` usage as SDLC-backed active work anchored to `$sdlc`, confidence/verification gates, and clean-break commits; programmatic `/goal` automation remains unassumed
+- setup/check now reject unknown arguments before mutating or inspecting the current directory, so mistyped flags do not silently operate on the wrong repo
 
 ## Next Release Cycle
 
-### 0.7.30
+### 0.7.31
 
-Purpose: continue pilot rollout after the `0.7.29` SDLC-backed manual `/goal` guidance release while keeping new patches tied to proven reusable wizard bugs or verified Codex-native workflow behavior.
+Purpose: continue pilot rollout after the `0.7.30` unknown-argument fail-fast release while keeping new patches tied to proven reusable wizard bugs or verified Codex-native workflow behavior.
 
 Scope:
-- keep `0.7.29` as the initialized-clone default-update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag baseline, optional `GOALS.md` active-scope contract, and manual `/goal` guidance baseline for pilot consumption
+- keep `0.7.30` as the initialized-clone default-update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag baseline, optional `GOALS.md` active-scope contract, manual `/goal` guidance baseline, and fail-fast unknown-argument baseline for pilot consumption
 - keep programmatic `/goal` automation unassumed unless Codex exposes a stable CLI/API path for it
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
@@ -64,14 +65,14 @@ Scope:
 
 ## Tracker Cleanup
 
-The stabilization tracker is currently clear after the `0.7.29` SDLC-backed manual `/goal` guidance release. Remaining open docs/research issues stay outside the stabilization lane.
+The stabilization tracker is currently clear after the `0.7.30` unknown-argument fail-fast release. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.29` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.30` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.29`, the main backlog is:
+After `0.7.30`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
