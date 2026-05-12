@@ -155,6 +155,21 @@ test_upstream_sync_workflow_treats_issue_label_as_optional() {
     fi
 }
 
+test_upstream_sync_workflow_can_create_issues() {
+    local has_workflow=true
+    local can_create_issues=true
+
+    [ -f "$UPSTREAM_SYNC_WORKFLOW" ] || has_workflow=false
+    grep -Eq 'issues:[[:space:]]*write' "$UPSTREAM_SYNC_WORKFLOW" || can_create_issues=false
+
+    if [ "$has_workflow" = "true" ] &&
+       [ "$can_create_issues" = "true" ]; then
+        pass "Upstream sync workflow can create tracking issues"
+    else
+        fail "Upstream sync workflow cannot create tracking issues with GITHUB_TOKEN"
+    fi
+}
+
 test_readme_documents_versioned_release_path() {
     local has_section=true
     local has_releases_url=true
@@ -336,6 +351,7 @@ test_release_workflow_can_publish_npm
 test_release_workflow_uses_node24_action_runtimes
 test_upstream_sync_workflow_uses_node24_action_runtime
 test_upstream_sync_workflow_treats_issue_label_as_optional
+test_upstream_sync_workflow_can_create_issues
 test_readme_documents_versioned_release_path
 test_readme_documents_maintainer_release_steps
 test_release_checklist_exists
