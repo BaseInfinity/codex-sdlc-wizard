@@ -283,6 +283,12 @@ run_check() {
     (cd "$project_dir" && bash "$CHECK_SH" 2>/dev/null) || true
 }
 
+run_check_args() {
+    local project_dir="$1"
+    shift
+    (cd "$project_dir" && bash "$CHECK_SH" "$@" 2>&1)
+}
+
 # ---- Test 11: Template substitution produces valid AGENTS.md under 32KiB ----
 test_template_agents_md_valid() {
     local ws
@@ -467,6 +473,33 @@ test_setup_goals_template_is_explicit_opt_in() {
         pass "setup.sh creates GOALS.md active-scope contract only when explicitly requested"
     else
         fail "setup.sh did not handle optional GOALS.md active-scope contract correctly"
+    fi
+}
+
+# ---- Test 16b: setup.sh rejects unknown arguments before mutating the repo ----
+test_setup_rejects_unknown_arguments() {
+    local ws output status
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    if output=$(run_setup_args "$ws" --yes --dir "$ws"); then
+        status=0
+    else
+        status=$?
+    fi
+
+    local valid=true
+    [ "$status" -ne 0 ] || valid=false
+    echo "$output" | grep -q 'Unknown argument: --dir' || valid=false
+    [ ! -f "$ws/AGENTS.md" ] || valid=false
+    [ ! -d "$ws/.codex-sdlc" ] || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup.sh rejects unknown arguments before mutating the repo"
+    else
+        fail "setup.sh ignored an unknown argument or mutated the repo"
     fi
 }
 
@@ -757,6 +790,27 @@ test_check_reports_uninitialized() {
         pass "check.sh reports uninitialized repo when manifest is missing"
     else
         fail "check.sh did not report uninitialized repo (got: $(json_text_get "$output" 'data.repo_state'))"
+    fi
+}
+
+# ---- Test 22b: check.sh rejects unknown arguments instead of checking the wrong cwd ----
+test_check_rejects_unknown_arguments() {
+    local ws output status
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app"}' > "$ws/package.json"
+
+    if output=$(run_check_args "$ws" --dir "$ws"); then
+        status=0
+    else
+        status=$?
+    fi
+
+    rm -rf "$ws"
+
+    if [ "$status" -ne 0 ] && echo "$output" | grep -q 'Unknown argument: --dir'; then
+        pass "check.sh rejects unknown arguments instead of checking the wrong cwd"
+    else
+        fail "check.sh ignored an unknown argument or checked the wrong cwd"
     fi
 }
 
@@ -1463,6 +1517,7 @@ test_generated_no_placeholders
 test_agents_md_read_directives
 test_setup_generates_sdlc_md
 test_setup_goals_template_is_explicit_opt_in
+test_setup_rejects_unknown_arguments
 test_setup_generates_demo_runtime_claim_gate
 test_setup_interactive_only_asks_preferences
 test_setup_interactive_accepts_scan_without_prompting_optional_blanks
@@ -1472,6 +1527,7 @@ test_setup_interactive_shows_inferred_values
 test_manifest_created
 test_setup_repairs_stale_windows_hooks
 test_check_reports_uninitialized
+test_check_rejects_unknown_arguments
 test_check_reports_matches
 test_check_reports_customized
 test_check_reports_missing

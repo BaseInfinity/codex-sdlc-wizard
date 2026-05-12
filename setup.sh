@@ -372,6 +372,10 @@ while [ $# -gt 0 ]; do
             MODEL_PROFILE="${1#*=}"
             MODEL_PROFILE_SET=true
             ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            exit 1
+            ;;
     esac
     shift
 done
