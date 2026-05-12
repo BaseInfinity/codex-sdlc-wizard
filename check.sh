@@ -6,6 +6,25 @@ source "$SCRIPT_DIR/lib/json-node.sh"
 
 require_node
 
+print_help() {
+    cat <<'EOF'
+Usage: check.sh
+
+Report managed-file drift for the current repo.
+EOF
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h) print_help; exit 0 ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            print_help >&2
+            exit 1
+            ;;
+    esac
+done
+
 node - <<'NODE'
 const crypto = require("crypto");
 const fs = require("fs");
