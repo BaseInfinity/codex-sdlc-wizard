@@ -49,6 +49,7 @@
 - setup now supports optional `--goals` generation for a manifest-tracked `GOALS.md` active-scope contract, while `ROADMAP.md` remains backlog/history
 - README and generated `GOALS.md` now document manual Codex `/goal` usage as SDLC-backed active work anchored to `$sdlc`, confidence/verification gates, and clean-break commits; programmatic `/goal` automation remains unassumed
 - setup/check now reject unknown arguments before mutating or inspecting the current directory, so mistyped flags do not silently operate on the wrong repo
+- upstream sync has been reviewed through `agentic-ai-sdlc-wizard` / `claude-sdlc-wizard` `v1.73.0`; Codex-relevant workflow hardening was ported, while Claude-only precompact hooks, plugin packaging, and research churn remain intentionally out of scope unless they prove reusable here
 
 ## Next Release Cycle
 

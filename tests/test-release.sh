@@ -9,12 +9,14 @@ README="$REPO_DIR/README.md"
 RELEASE_DOC="$REPO_DIR/RELEASE.md"
 WORKFLOW="$REPO_DIR/.github/workflows/release.yml"
 UPSTREAM_SYNC_WORKFLOW="$REPO_DIR/.github/workflows/upstream-sync.yml"
+UPSTREAM_VERSION_FILE="$REPO_DIR/UPSTREAM_VERSION"
 PACKAGE_JSON="$REPO_DIR/package.json"
 PROOF_RUNNER="$REPO_DIR/scripts/run-proof-suite.cjs"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
 source "$JSON_HELPERS"
 require_node
 CURRENT_VERSION="$(json_get_file "$PACKAGE_JSON" 'data.version')"
+REVIEWED_UPSTREAM_BASELINE="v1.73.0"
 PASSED=0
 FAILED=0
 
@@ -167,6 +169,17 @@ test_upstream_sync_workflow_can_create_issues() {
         pass "Upstream sync workflow can create tracking issues"
     else
         fail "Upstream sync workflow cannot create tracking issues with GITHUB_TOKEN"
+    fi
+}
+
+test_upstream_version_records_reviewed_baseline() {
+    local recorded_baseline
+    recorded_baseline="$(tr -d '[:space:]' < "$UPSTREAM_VERSION_FILE" 2>/dev/null || true)"
+
+    if [ "$recorded_baseline" = "$REVIEWED_UPSTREAM_BASELINE" ]; then
+        pass "UPSTREAM_VERSION records the reviewed upstream baseline"
+    else
+        fail "UPSTREAM_VERSION should be $REVIEWED_UPSTREAM_BASELINE after upstream sync review, got ${recorded_baseline:-missing}"
     fi
 }
 
@@ -352,6 +365,7 @@ test_release_workflow_uses_node24_action_runtimes
 test_upstream_sync_workflow_uses_node24_action_runtime
 test_upstream_sync_workflow_treats_issue_label_as_optional
 test_upstream_sync_workflow_can_create_issues
+test_upstream_version_records_reviewed_baseline
 test_readme_documents_versioned_release_path
 test_readme_documents_maintainer_release_steps
 test_release_checklist_exists
