@@ -8,6 +8,7 @@ REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
 RELEASE_DOC="$REPO_DIR/RELEASE.md"
 WORKFLOW="$REPO_DIR/.github/workflows/release.yml"
+UPSTREAM_SYNC_WORKFLOW="$REPO_DIR/.github/workflows/upstream-sync.yml"
 PACKAGE_JSON="$REPO_DIR/package.json"
 PROOF_RUNNER="$REPO_DIR/scripts/run-proof-suite.cjs"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
@@ -115,6 +116,42 @@ test_release_workflow_uses_node24_action_runtimes() {
         pass "Release workflow pins Node 24-compatible JavaScript actions"
     else
         fail "Release workflow still uses Node 20-era JavaScript actions"
+    fi
+}
+
+test_upstream_sync_workflow_uses_node24_action_runtime() {
+    local has_workflow=true
+    local has_checkout_node24=true
+    local avoids_node20_checkout=true
+
+    [ -f "$UPSTREAM_SYNC_WORKFLOW" ] || has_workflow=false
+    grep -Eq 'actions/checkout@v6(\.[0-9]+\.[0-9]+)?' "$UPSTREAM_SYNC_WORKFLOW" || has_checkout_node24=false
+    grep -Eq 'actions/checkout@v4' "$UPSTREAM_SYNC_WORKFLOW" && avoids_node20_checkout=false
+
+    if [ "$has_workflow" = "true" ] &&
+       [ "$has_checkout_node24" = "true" ] &&
+       [ "$avoids_node20_checkout" = "true" ]; then
+        pass "Upstream sync workflow pins Node 24-compatible actions"
+    else
+        fail "Upstream sync workflow still uses Node 20-era JavaScript actions"
+    fi
+}
+
+test_upstream_sync_workflow_treats_issue_label_as_optional() {
+    local has_workflow=true
+    local checks_label=true
+    local uses_label_args=true
+
+    [ -f "$UPSTREAM_SYNC_WORKFLOW" ] || has_workflow=false
+    grep -Eq 'gh label view upstream-sync' "$UPSTREAM_SYNC_WORKFLOW" || checks_label=false
+    grep -Eq 'LABEL_ARGS' "$UPSTREAM_SYNC_WORKFLOW" || uses_label_args=false
+
+    if [ "$has_workflow" = "true" ] &&
+       [ "$checks_label" = "true" ] &&
+       [ "$uses_label_args" = "true" ]; then
+        pass "Upstream sync workflow treats the custom issue label as optional"
+    else
+        fail "Upstream sync workflow can fail when the optional issue label is missing"
     fi
 }
 
@@ -297,6 +334,8 @@ test_release_workflow_supports_manual_dispatch
 test_release_workflow_can_publish_release
 test_release_workflow_can_publish_npm
 test_release_workflow_uses_node24_action_runtimes
+test_upstream_sync_workflow_uses_node24_action_runtime
+test_upstream_sync_workflow_treats_issue_label_as_optional
 test_readme_documents_versioned_release_path
 test_readme_documents_maintainer_release_steps
 test_release_checklist_exists
