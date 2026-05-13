@@ -8,7 +8,7 @@ jobs:
   check-upstream:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Check for sdlc-wizard updates
         env:
           GH_TOKEN: ${{ github.token }}
@@ -25,6 +25,13 @@ jobs:
             # Check if issue already exists
             EXISTING=$(gh issue list --search "Upstream sync: $LATEST" --json number -q '.[0].number' 2>/dev/null || echo "")
             if [ -z "$EXISTING" ]; then
+              LABEL_ARGS=()
+              if gh label view upstream-sync >/dev/null 2>&1; then
+                LABEL_ARGS=(--label "upstream-sync")
+              else
+                echo "Optional label 'upstream-sync' not found; creating issue without it"
+              fi
+
               gh issue create \
                 --title "Upstream sync: sdlc-wizard $LATEST" \
                 --body "sdlc-wizard released **$LATEST** (adapter is based on **$CURRENT**).
@@ -32,7 +39,7 @@ jobs:
           Review [release notes](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard/releases/tag/$LATEST) and translate applicable changes to Codex format.
 
           After adapting, update \`UPSTREAM_VERSION\` to \`$LATEST\`." \
-                --label "upstream-sync"
+                "${LABEL_ARGS[@]}"
               echo "Created sync issue for $LATEST"
             else
               echo "Issue already exists: #$EXISTING"
