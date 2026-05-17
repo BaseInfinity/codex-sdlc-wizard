@@ -83,6 +83,18 @@ function hasPlatformHookDrift(relativePath, absolutePath) {
   return content.includes("powershell.exe");
 }
 
+function hasManagedHookSurfaceDrift(relativePath, absolutePath) {
+  if (relativePath !== ".codex/hooks.json") {
+    return false;
+  }
+
+  const content = fs.readFileSync(absolutePath, "utf8");
+
+  return !content.includes('"PreCompact"') ||
+    !content.includes('"PostCompact"') ||
+    !content.includes("node .codex/hooks/compact-guard.cjs");
+}
+
 function isRetiredManagedPath(relativePath) {
   return relativePath === ".codex/hooks/git-guard.js" || relativePath === ".codex/hooks/session-start.js";
 }
@@ -111,7 +123,7 @@ for (const [relativePath, expectedHash] of Object.entries(manifest.managed_files
     if (isRetiredManagedPath(relativePath) || hasPlatformHookDrift(relativePath, absolutePath)) {
       status = "drift / broken";
     } else if (actualHash === expectedHash) {
-      status = "match";
+      status = hasManagedHookSurfaceDrift(relativePath, absolutePath) ? "drift / broken" : "match";
     } else {
       status = "customized";
     }

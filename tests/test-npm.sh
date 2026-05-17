@@ -108,6 +108,7 @@ test_npm_pack_includes_runtime_files() {
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/bash-guard.sh") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/git-guard.cjs") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/session-start.cjs") ? "yes" : ""')" = "yes" ] || has_hooks=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/compact-guard.cjs") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "bin/codex-sdlc-wizard.js") ? "yes" : ""')" = "yes" ] || has_bin=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "SKILL.md") ? "yes" : ""')" = "yes" ] || has_skill=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_canonical_sdlc_skill=false
@@ -167,11 +168,13 @@ test_local_npx_installs_into_clean_repo() {
     [ -x "$target_repo/.codex/hooks/bash-guard.sh" ] || installed=false
     [ -f "$target_repo/.codex/hooks/git-guard.cjs" ] || installed=false
     [ -f "$target_repo/.codex/hooks/session-start.cjs" ] || installed=false
+    [ -f "$target_repo/.codex/hooks/compact-guard.cjs" ] || installed=false
     [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || installed=false
     [ ! -e "$target_repo/.agents/skills/adlc/SKILL.md" ] || installed=false
     [ -f "$target_repo/.codex-sdlc/manifest.json" ] || installed=false
     grep -q 'node \.codex/hooks/git-guard\.cjs' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
     grep -q 'node \.codex/hooks/session-start\.cjs' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
+    grep -q 'node \.codex/hooks/compact-guard\.cjs' "$target_repo/.codex/hooks.json" 2>/dev/null || installed=false
     grep -q 'powershell\.exe' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
     grep -q 'bash-guard\.sh' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
 

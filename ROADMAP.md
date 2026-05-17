@@ -35,6 +35,8 @@
 - setup/update now repair stale platform-specific hook wiring and install universal Node hook entrypoints so a checked-in `.codex/hooks.json` does not flip between macOS Bash and Windows PowerShell commands
 - setup/update now write `[features].hooks = true`, migrate deprecated `[features].codex_hooks` config, and remind users to review pending repo hooks through `/hooks`
 - generated Node hooks now use `.cjs` entrypoints so consumer repos with `"type": "module"` do not break on CommonJS `require`
+- Codex CLI `0.130.0` hook surface is recognized: the wizard intentionally installs `SessionStart`, `PreToolUse`, `PreCompact`, and `PostCompact`, while leaving `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, and `Stop` unwired until a proven SDLC need exists
+- compact lifecycle hooks now preserve SDLC carry-forward context around Codex compaction without blocking normal compaction
 - update now repairs legacy `.js` hook commands and stale `.js` hook manifest entries, including old matching files
 - the git guard is now proof-aware: fresh reviewed SDLC proof allows commit/push, while missing, stale, cross-repo, or mismatched-workdir proof still blocks
 - public install/README/skill copy now keeps unreleased future workflow labels out of handoff text

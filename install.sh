@@ -81,6 +81,7 @@ for required in \
   ".codex/hooks/sdlc-prompt-check.sh" \
   ".codex/hooks/git-guard.cjs" \
   ".codex/hooks/session-start.cjs" \
+  ".codex/hooks/compact-guard.cjs" \
   ".codex/hooks/git-guard.ps1" \
   ".codex/hooks/session-start.ps1" \
   ".agents/skills/sdlc/SKILL.md"; do

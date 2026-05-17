@@ -83,6 +83,7 @@ repair_hooks_bundle() {
     ensure_parent_dir ".codex/hooks/dummy"
     copy_static_file ".codex/hooks/git-guard.cjs"
     copy_static_file ".codex/hooks/session-start.cjs"
+    copy_static_file ".codex/hooks/compact-guard.cjs"
     rm -f .codex/hooks/git-guard.js .codex/hooks/session-start.js
 
     if [ "$IS_WINDOWS" = "true" ]; then

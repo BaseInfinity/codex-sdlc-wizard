@@ -554,6 +554,30 @@ test_readme_documents_honest_codex_shape() {
     fi
 }
 
+test_readme_documents_current_codex_hook_surface() {
+    local has_current_version=true
+    local has_eight_hooks=true
+    local has_active_subset=true
+    local has_all_event_names=true
+
+    grep -q 'Codex CLI `0.130.0`' "$README" || has_current_version=false
+    grep -q 'eight hook events' "$README" || has_eight_hooks=false
+    grep -q 'actively installs `SessionStart`, `PreToolUse`, `PreCompact`, and `PostCompact`' "$README" || has_active_subset=false
+
+    for event in PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart UserPromptSubmit Stop; do
+        grep -Fq "\`$event\`" "$README" || has_all_event_names=false
+    done
+
+    if [ "$has_current_version" = "true" ] &&
+       [ "$has_eight_hooks" = "true" ] &&
+       [ "$has_active_subset" = "true" ] &&
+       [ "$has_all_event_names" = "true" ]; then
+        pass "README documents the current Codex 0.130.0 hook surface and active subset"
+    else
+        fail "README does not document the current Codex hook surface and active subset"
+    fi
+}
+
 test_readme_documents_feedback_flow_and_repo_focus() {
     local feedback_section
     local has_direct_issue=true
@@ -875,6 +899,7 @@ test_readme_recommends_full_auto
 test_readme_stays_consumer_focused
 test_readme_documents_repo_scope_skills
 test_readme_documents_honest_codex_shape
+test_readme_documents_current_codex_hook_surface
 test_readme_documents_feedback_flow_and_repo_focus
 test_readme_documents_model_profiles
 test_readme_documents_native_codex_review

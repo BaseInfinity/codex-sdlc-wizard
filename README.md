@@ -153,6 +153,7 @@ Layer 3: ADAPTIVE SETUP / UPDATE
 
 Layer 2: ENFORCEMENT
   Codex hooks block commit/push until fresh reviewed proof exists, while
+  compact lifecycle hooks preserve SDLC state across context compaction and
   repo-scoped skills carry the explicit workflow contract.
 
 Layer 1: LOCAL TRUTH
@@ -167,6 +168,7 @@ Layer 1: LOCAL TRUTH
 | TDD workflow | AGENTS.md guidance | Soft (Codex has no file-edit hooks) |
 | git commit gate | PreToolUse blocks `git commit` | **Hard** |
 | git push gate | PreToolUse blocks `git push` | **Hard** |
+| Compact lifecycle | PreCompact/PostCompact compact guard | Warns with SDLC carry-forward context |
 | SDLC baseline | repo docs + installed skills | **Hard/Soft mix** |
 | Session init | SessionStart hook | Warns if AGENTS.md is missing |
 
@@ -315,6 +317,10 @@ The current recommended Codex-native architecture is explicit:
 - `hooks = silent event enforcement`
 - `repo docs = source of local truth`
 
+Current Codex CLI `0.130.0` supports eight hook events: `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SessionStart`, `UserPromptSubmit`, and `Stop`.
+
+This wizard actively installs `SessionStart`, `PreToolUse`, `PreCompact`, and `PostCompact`. The remaining hook events are intentionally left unused until there is a proven SDLC need: `PermissionRequest` can change approval behavior, `PostToolUse` can create noisy post-command gates, `UserPromptSubmit` can over-police prompts, and `Stop` can interfere with normal session shutdown.
+
 That means:
 - use repo-scoped or installed skills for the user-facing workflow contract
 - use hooks to block or warn silently at the right events
@@ -395,6 +401,8 @@ The workflow uses GitHub OIDC trusted publishing, validates that the tag matches
 7. Installs global helper skills under `~/.codex/skills` without installing a global `sdlc` duplicate
 
 In other words, `install.sh` mutates the target repo by adding or updating `AGENTS.md`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/*`, and the repo-scoped SDLC skill. It also writes `.codex-sdlc/model-profile.json` so the chosen profile is explicit. Existing `.codex/config.toml` files are merged: model keys and `[features].hooks` are patched, active deprecated `[features].codex_hooks` entries are migrated away, and MCP, sandbox, approval, and other custom settings are preserved. If an older wizard-managed global `sdlc` skill is detected, update/setup backs it up and removes it; user-owned global `sdlc` skills are preserved.
+
+Installed hook entrypoints are quiet and current-Codex aware: `git-guard.cjs` handles `PreToolUse` commit/push gates, `session-start.cjs` handles `SessionStart` baseline warnings, and `compact-guard.cjs` handles `PreCompact`/`PostCompact` SDLC carry-forward reminders.
 
 After restart, hook install is not complete until Codex trusts the repo and any pending repo hooks are reviewed. If Codex reports hooks need review, open `/hooks` and review the pending hooks before relying on SDLC enforcement.
 

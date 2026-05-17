@@ -7,6 +7,7 @@ HOOKS_DIR="$REPO_DIR/.codex/hooks"
 ACTIVE_HOOKS_FILE="$REPO_DIR/.codex/hooks.json"
 UNIVERSAL_PRETOOL_SCRIPT="$HOOKS_DIR/git-guard.cjs"
 UNIVERSAL_SESSION_SCRIPT="$HOOKS_DIR/session-start.cjs"
+UNIVERSAL_COMPACT_SCRIPT="$HOOKS_DIR/compact-guard.cjs"
 PASSED=0
 FAILED=0
 
@@ -69,6 +70,18 @@ run_node_session_hook() {
     local script_path="$2"
 
     (cd "$tmpdir" && node "$script_path" 2>/dev/null)
+}
+
+payload_for_compact() {
+    HOOK_EVENT="$1" TRIGGER_TEXT="${2:-auto}" CWD_TEXT="${3:-$PWD}" node -e 'process.stdout.write(JSON.stringify({
+      cwd: process.env.CWD_TEXT,
+      hook_event_name: process.env.HOOK_EVENT,
+      model: "gpt-5.5",
+      session_id: "session-test",
+      transcript_path: null,
+      trigger: process.env.TRIGGER_TEXT,
+      turn_id: "turn-test"
+    }));'
 }
 
 run_hook_status() {
@@ -1501,6 +1514,45 @@ test_universal_session_warns_missing() {
     fi
 }
 
+test_universal_compact_guard_emits_lifecycle_context() {
+    local tmpdir output
+
+    tmpdir=$(mktemp -d)
+    (
+        cd "$tmpdir" || exit 1
+        git init -q
+        printf '%s\n' "work in progress" > app.txt
+    )
+
+    output=$(run_node_json_hook "$(payload_for_compact PreCompact auto "$tmpdir")" "$UNIVERSAL_COMPACT_SCRIPT")
+    rm -rf "$tmpdir"
+
+    if echo "$output" | grep -q '"continue":true' \
+        && echo "$output" | grep -q 'systemMessage' \
+        && echo "$output" | grep -q 'SDLC compact guard' \
+        && echo "$output" | grep -q 'dirty worktree'; then
+        pass "universal compact guard emits SDLC lifecycle context before compaction"
+    else
+        fail "universal compact guard did not emit expected PreCompact context (output: $output)"
+    fi
+}
+
+test_universal_compact_guard_handles_post_compact() {
+    local tmpdir output
+
+    tmpdir=$(mktemp -d)
+    output=$(run_node_json_hook "$(payload_for_compact PostCompact manual "$tmpdir")" "$UNIVERSAL_COMPACT_SCRIPT")
+    rm -rf "$tmpdir"
+
+    if echo "$output" | grep -q '"continue":true' \
+        && echo "$output" | grep -q 'PostCompact' \
+        && echo "$output" | grep -q 'reread'; then
+        pass "universal compact guard emits post-compact recovery context"
+    else
+        fail "universal compact guard did not emit expected PostCompact context (output: $output)"
+    fi
+}
+
 test_universal_node_hooks_work_in_type_module_repos() {
     local tmpdir
     local session_command
@@ -1514,20 +1566,25 @@ test_universal_node_hooks_work_in_type_module_repos() {
     cp "$ACTIVE_HOOKS_FILE" "$tmpdir/.codex/hooks.json"
     cp "$HOOKS_DIR"/git-guard.* "$tmpdir/.codex/hooks/" 2>/dev/null || true
     cp "$HOOKS_DIR"/session-start.* "$tmpdir/.codex/hooks/" 2>/dev/null || true
+    cp "$HOOKS_DIR"/compact-guard.* "$tmpdir/.codex/hooks/" 2>/dev/null || true
     printf '%s\n' '{"type":"module"}' > "$tmpdir/package.json"
 
     session_command=$(node -e 'const config = require(process.argv[1]); process.stdout.write(config.hooks.SessionStart[0].hooks[0].command);' "$tmpdir/.codex/hooks.json")
     pretool_command=$(node -e 'const config = require(process.argv[1]); process.stdout.write(config.hooks.PreToolUse[0].hooks[0].command);' "$tmpdir/.codex/hooks.json")
+    compact_command=$(node -e 'const config = require(process.argv[1]); process.stdout.write(config.hooks.PreCompact[0].hooks[0].command);' "$tmpdir/.codex/hooks.json")
 
     echo "$session_command" | grep -q '\.cjs' || all_passed=false
     echo "$pretool_command" | grep -q '\.cjs' || all_passed=false
+    echo "$compact_command" | grep -q '\.cjs' || all_passed=false
 
     session_output=$(cd "$tmpdir" && sh -c "$session_command" 2>&1) || all_passed=false
     pretool_output=$(cd "$tmpdir" && printf '%s' '{"tool_input":{"command":"git commit -m test"}}' | sh -c "$pretool_command" 2>&1) || all_passed=false
+    compact_output=$(cd "$tmpdir" && printf '%s' "$(payload_for_compact PreCompact auto "$tmpdir")" | sh -c "$compact_command" 2>&1) || all_passed=false
 
     echo "$session_output" | grep -q '"additionalContext"' || all_passed=false
     echo "$pretool_output" | grep -q '"decision":"block"' || all_passed=false
-    echo "$session_output$pretool_output" | grep -q 'require is not defined' && all_passed=false
+    echo "$compact_output" | grep -q '"continue":true' || all_passed=false
+    echo "$session_output$pretool_output$compact_output" | grep -q 'require is not defined' && all_passed=false
 
     rm -rf "$tmpdir"
 
@@ -1551,16 +1608,22 @@ test_hooks_json_matcher() {
 test_hooks_json_valid() {
     if grep -q '"PreToolUse"' "$HOOKS_FILE" \
         && grep -q '"SessionStart"' "$HOOKS_FILE" \
+        && grep -q '"PreCompact"' "$HOOKS_FILE" \
+        && grep -q '"PostCompact"' "$HOOKS_FILE" \
+        && grep -q 'node \.codex/hooks/compact-guard\.cjs' "$HOOKS_FILE" \
+        && ! grep -q '"PermissionRequest"' "$HOOKS_FILE" \
+        && ! grep -q '"PostToolUse"' "$HOOKS_FILE" \
         && ! grep -q '"UserPromptSubmit"' "$HOOKS_FILE"; then
-        pass "hook config matches the quiet hook set"
+        pass "hook config uses the current compact lifecycle hooks without over-wiring noisy events"
     else
-        fail "hook config does not match the quiet hook set"
+        fail "hook config does not match the current compact-aware quiet hook set"
     fi
 }
 
 test_live_hooks_file_uses_universal_node_hooks() {
     if grep -q 'node \.codex/hooks/git-guard\.cjs' "$ACTIVE_HOOKS_FILE" \
         && grep -q 'node \.codex/hooks/session-start\.cjs' "$ACTIVE_HOOKS_FILE" \
+        && grep -q 'node \.codex/hooks/compact-guard\.cjs' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q 'powershell\.exe' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q 'bash-guard\.sh' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q 'session-start\.sh' "$ACTIVE_HOOKS_FILE"; then
@@ -1577,6 +1640,7 @@ test_live_hooks_file_is_windows_safe() {
 
     if grep -q 'node \.codex/hooks/git-guard\.cjs' "$ACTIVE_HOOKS_FILE" \
         && grep -q 'node \.codex/hooks/session-start\.cjs' "$ACTIVE_HOOKS_FILE" \
+        && grep -q 'node \.codex/hooks/compact-guard\.cjs' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q 'powershell\.exe' "$ACTIVE_HOOKS_FILE" \
         && ! grep -q '\.sh' "$ACTIVE_HOOKS_FILE"; then
         pass "live hooks.json uses universal Node hooks on Windows"
@@ -2081,6 +2145,7 @@ test_repo_defaults_to_xhigh_reasoning() {
 
     if ! grep -Fq '.codex\hooks\git-guard.cjs' "$REPO_DIR/install.ps1" ||
        ! grep -Fq '.codex\hooks\session-start.cjs' "$REPO_DIR/install.ps1" ||
+       ! grep -Fq '.codex\hooks\compact-guard.cjs' "$REPO_DIR/install.ps1" ||
        grep -Eq 'Copy-Item.*(git-guard|session-start)\.js' "$REPO_DIR/install.ps1"; then
         fail "PowerShell installer does not install the universal .cjs hook runtime"
         all_passed=false
@@ -2369,6 +2434,8 @@ test_universal_pretool_allows_non_git_command_mentions
 test_universal_pretool_does_not_crash_on_non_git_prototype_words
 test_universal_pretool_blocks_deep_wrapper_recursion
 test_universal_session_warns_missing
+test_universal_compact_guard_emits_lifecycle_context
+test_universal_compact_guard_handles_post_compact
 test_universal_node_hooks_work_in_type_module_repos
 test_hooks_json_matcher
 test_hooks_json_valid
