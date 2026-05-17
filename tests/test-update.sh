@@ -453,7 +453,127 @@ NODE
     fi
 }
 
-# ---- Test 10: update merges managed hook config into existing config.toml ----
+# ---- Test 10: update repairs old managed hook configs missing compact lifecycle hooks ----
+test_update_repairs_matching_hook_surface_without_compact_lifecycle() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    cat > "$ws/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/git-guard.cjs"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/session-start.cjs"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+    rm -f "$ws/.codex/hooks/compact-guard.cjs"
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" \
+    HOOKS_JSON_PATH="$ws/.codex/hooks.json" \
+    node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+const manifestPath = process.env.MANIFEST_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+delete manifest.managed_files[".codex/hooks/compact-guard.cjs"];
+manifest.managed_files[".codex/hooks.json"] = `sha256:${crypto
+  .createHash("sha256")
+  .update(fs.readFileSync(process.env.HOOKS_JSON_PATH))
+  .digest("hex")}`;
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    local output check_output valid=true
+    output=$(run_update "$ws" 2>&1) || valid=false
+    check_output=$(run_check "$ws")
+
+    grep -q 'node \.codex/hooks/compact-guard\.cjs' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    grep -q '"PreCompact"' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    grep -q '"PostCompact"' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    [ -f "$ws/.codex/hooks/compact-guard.cjs" ] || valid=false
+    grep -q 'compact-guard\.cjs' "$ws/.codex-sdlc/manifest.json" 2>/dev/null || valid=false
+    echo "$output" | grep -q '.codex/hooks.json' 2>/dev/null || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "match" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/compact-guard.cjs"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update repairs old managed hook configs missing compact lifecycle hooks"
+    else
+        echo "$output" >&2
+        fail "update did not repair old managed hook configs missing compact lifecycle hooks"
+    fi
+}
+
+# ---- Test 11: update repairs missing compact guard without overwriting customized hooks ----
+test_update_repairs_missing_compact_guard_without_overwriting_custom_hooks() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    HOOKS_JSON_PATH="$ws/.codex/hooks.json" node <<'NODE'
+const fs = require("fs");
+
+const hooksPath = process.env.HOOKS_JSON_PATH;
+const hooks = JSON.parse(fs.readFileSync(hooksPath, "utf8"));
+hooks.hooks.CustomEvent = [
+  {
+    hooks: [
+      {
+        type: "command",
+        command: "echo custom",
+      },
+    ],
+  },
+];
+fs.writeFileSync(hooksPath, `${JSON.stringify(hooks, null, 2)}\n`);
+NODE
+    rm -f "$ws/.codex/hooks/compact-guard.cjs"
+
+    local output check_output valid=true
+    output=$(run_update "$ws" 2>&1) || valid=false
+    check_output=$(run_check "$ws")
+
+    [ -f "$ws/.codex/hooks/compact-guard.cjs" ] || valid=false
+    grep -q '"CustomEvent"' "$ws/.codex/hooks.json" 2>/dev/null || valid=false
+    echo "$output" | grep -q '.codex/hooks/compact-guard.cjs' 2>/dev/null || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "customized" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/compact-guard.cjs"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update repairs missing compact guard without overwriting customized hooks"
+    else
+        echo "$output" >&2
+        fail "update overwrote customized hooks while repairing the compact guard"
+    fi
+}
+
+# ---- Test 12: update merges managed hook config into existing config.toml ----
 test_update_merges_config_without_dropping_other_settings() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -780,6 +900,8 @@ test_update_repairs_windows_hook_drift
 test_update_repairs_legacy_js_node_hooks
 test_update_repairs_legacy_js_hook_manifest_entries
 test_update_repairs_matching_legacy_js_hook_manifest_entries
+test_update_repairs_matching_hook_surface_without_compact_lifecycle
+test_update_repairs_missing_compact_guard_without_overwriting_custom_hooks
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills
 test_update_removes_legacy_codex_sdlc_skill

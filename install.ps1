@@ -233,6 +233,7 @@ if (Test-Path -LiteralPath $hooksPath) {
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\windows-hooks.json") -Destination $hooksPath
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\git-guard.cjs") -Destination ".codex\hooks\git-guard.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\session-start.cjs") -Destination ".codex\hooks\session-start.cjs"
+Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\compact-guard.cjs") -Destination ".codex\hooks\compact-guard.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\git-guard.ps1") -Destination ".codex\hooks\git-guard.ps1"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\session-start.ps1") -Destination ".codex\hooks\session-start.ps1"
 Remove-Item -LiteralPath ".codex\hooks\git-guard.js", ".codex\hooks\session-start.js" -ErrorAction SilentlyContinue

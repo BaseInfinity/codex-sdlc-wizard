@@ -20,6 +20,28 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "^(manual|auto)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/compact-guard.cjs"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "^(manual|auto)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/compact-guard.cjs"
+          }
+        ]
+      }
     ]
   }
 }
