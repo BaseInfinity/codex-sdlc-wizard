@@ -22,6 +22,10 @@
 2. Run full test suite - ALL tests must pass
 3. Only then: commit and push
 
+## AI Setup Lanes
+
+This repo recommends two setup lanes — Setup A (Codex Premium: GPT-5.5 xhigh all three roles) and Setup B (Codex Saver: GPT-5.5 xhigh planner+reviewer, GPT-5.3 Codex Spark max driver from a different billing bucket, fallback to GPT-5.4 mini xhigh). See [`AI_SETUP_LANES.md`](AI_SETUP_LANES.md) for the full pick list.
+
 ## Rules
 - Delete legacy code - no backwards compatibility hacks
 - Less is more - don't add what wasn't asked for
