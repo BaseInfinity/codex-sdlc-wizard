@@ -20,7 +20,7 @@ Quality-first lane. GPT-5.5 xhigh all the way through — planning, implementati
 |------|-------|-------|
 | **Planner** | Codex (GPT-5.5) xhigh | |
 | **Driver** | GPT-5.3 Codex Spark (max reasoning) | Primary — different billing bucket (preview) |
-| **Driver fallback** | GPT-5.4 mini xhigh | If Spark unavailable — also a different bucket |
+| **Driver fallback** | GPT-5.4 mini xhigh | If Spark unavailable — same billing pool as GPT-5.5 but cheaper per token |
 | **Reviewer** | Codex (GPT-5.5) xhigh | |
 
 Cost-efficient lane. Keeps GPT-5.5 xhigh as both the planning brain and the final reviewer — where reasoning and judgment matter most. Moves the driver to **GPT-5.3 Codex Spark** (max reasoning), which draws from a separate billing bucket because it's currently a preview model. If Spark isn't available, fall back to **GPT-5.4 mini xhigh** (also a different bucket). The cheaper driver handles routine coding while the flagship reviewer catches what it missed.
@@ -60,7 +60,7 @@ Setup B is sufficient for routine work where the mini driver can ship with a str
 Setup A bills everything against your OpenAI account at GPT-5.5 rates. Setup B's driver draws from a **different billing bucket** than GPT-5.5 — that's the cost-saving mechanism:
 
 - **GPT-5.3 Codex Spark** (primary driver): separate bucket because it's a preview model. Max reasoning keeps quality high while the billing stays off the main GPT-5.5 pool.
-- **GPT-5.4 mini xhigh** (fallback driver): also a different bucket from GPT-5.5.
+- **GPT-5.4 mini xhigh** (fallback driver): same billing pool as GPT-5.5 but cheaper per token.
 
 The planner and reviewer in Setup B still use GPT-5.5, so the savings come specifically from the driver leg being routed to a cheaper billing pool.
 
