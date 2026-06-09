@@ -483,3 +483,15 @@ Come join **[Automation Station](https://discord.com/invite/fGPEF7GHrF)** — a 
 ## License
 
 MIT
+
+## AI Setup Lanes
+
+Three recommended setups in [`AI_SETUP_LANES.md`](AI_SETUP_LANES.md):
+
+| Lane | Planner | Driver | Reviewer | When |
+|------|---------|--------|----------|------|
+| **A — Codex Premium** | GPT-5.5 xhigh | GPT-5.5 xhigh | GPT-5.5 xhigh | Architecture, releases, security, high-stakes |
+| **B — Codex Saver** | GPT-5.5 xhigh | GPT-5.3 Spark max (fallback: 5.4 mini) | GPT-5.5 xhigh | Routine impl, docs, tests |
+| **C — Codex Lite** | You | GPT-5.4 mini standard | None | Scripts, deploys to staging, config, grunt work |
+
+Setup C is the discipline of knowing when NOT to use discipline.
