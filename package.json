@@ -41,7 +41,8 @@
     "PROVE-IT.md",
     "UPSTREAM_VERSION",
     "start-sdlc.sh",
-    "start-sdlc.ps1"
+    "start-sdlc.ps1",
+    "AI_SETUP_LANES.md"
   ],
   "engines": {
     "node": ">=18"
