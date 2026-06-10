@@ -1,6 +1,6 @@
 # AI Setup Lanes
 
-Two recommended AI coding setups for this repo. Each is a complete triad: **planner → driver → reviewer**.
+Three recommended AI coding setups for this repo. Setups A and B are complete triads: **planner → driver → reviewer**. Setup C is a lightweight driver-only lane for operational grunt work.
 
 This is **guidance, not a hard rule**. Maintainer override is always allowed.
 
@@ -51,9 +51,36 @@ Setup B is sufficient for routine work where the mini driver can ship with a str
 - Low-risk methodology edits
 - Mechanical refactors
 
+## Setup C — Codex Lite
+
+| Role | Model | Notes |
+|------|-------|-------|
+| **Planner** | You (the user) | Task is pre-planned, no model reasoning needed |
+| **Driver** | GPT-5.4 mini standard | Cheapest available in the Codex ecosystem |
+| **Driver fallback** | GPT-5.4 standard | If mini can't handle the task |
+| **Reviewer** | None | Blast radius too low for review overhead |
+
+The "just do the thing" lane. No SDLC enforcement, no cross-model review, no planning phase. You already know what to do — you just need a fast, cheap pair of hands.
+
+## When to Use Setup C
+
+Setup C is for work where SDLC discipline overhead exceeds the value:
+
+- Run a script with basic intelligence
+- Deploy to staging or prod
+- Config updates, env var changes
+- File moves, renames, bulk operations
+- Repo maintenance (dependency bumps, lockfile refreshes)
+- Simple administrative tasks
+- Anything where blast radius is low and you need speed, not depth
+
+**Escalation rule:** if the task turns out harder than expected, escalate to Setup B or A. Don't force-fit mini on a complex problem.
+
 ## Final Review Policy
 
-**Both lanes end at GPT-5.5 xhigh as the reviewer.** The review step catches what the driver missed — in Setup A that's self-review at flagship; in Setup B the flagship reviewer catches what the mini driver missed.
+**Setups A and B end at GPT-5.5 xhigh as the reviewer.** The review step catches what the driver missed — in Setup A that's self-review at flagship; in Setup B the flagship reviewer catches what the mini driver missed.
+
+**Setup C has no reviewer** — the blast radius doesn't justify it. If you're unsure whether a task is truly Lite, it probably isn't. Escalate.
 
 ## Credit-Spend Warning
 
