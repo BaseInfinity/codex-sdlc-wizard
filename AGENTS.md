@@ -24,7 +24,7 @@
 
 ## AI Setup Lanes
 
-This repo recommends two setup lanes for AI coding — Setup A (Codex Premium) and Setup B (Codex Saver). Both end at Claude Opus 4.6 max as the cross-model reviewer (different lab, different blind spots); only the planner/driver effort levels differ. See [`AI_SETUP_LANES.md`](AI_SETUP_LANES.md) for the full pick list (when to use which, credit-spend warning, override policy).
+This repo recommends two setup lanes — Setup A (Codex Premium: GPT-5.5 xhigh all three roles) and Setup B (Codex Saver: GPT-5.5 xhigh planner+reviewer, GPT-5.4 mini xhigh driver from a different billing bucket). See [`AI_SETUP_LANES.md`](AI_SETUP_LANES.md) for the full pick list (when to use which, credit-spend warning, override policy).
 
 ## Rules
 - Delete legacy code - no backwards compatibility hacks

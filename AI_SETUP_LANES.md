@@ -10,19 +10,19 @@ This is **guidance, not a hard rule**. Maintainer override is always allowed.
 |------|-------|
 | **Planner** | Codex (GPT-5.5) xhigh |
 | **Driver** | Codex (GPT-5.5) xhigh |
-| **Reviewer** | Claude Code (Opus 4.6) max |
+| **Reviewer** | Codex (GPT-5.5) xhigh |
 
-Quality-first lane. GPT-5.5 xhigh drives both the planning brain and the implementation hands; Claude Opus 4.6 max is the cross-model final gate — different lab, different training, different blind spots.
+Quality-first lane. GPT-5.5 xhigh all the way through — planning, implementation, and review all stay at the flagship level. No model switching, no billing-pool surprises. One model, one effort level, maximum quality.
 
 ## Setup B — Codex Saver
 
 | Role | Model |
 |------|-------|
 | **Planner** | Codex (GPT-5.5) xhigh |
-| **Driver** | Codex (GPT-5.5) standard |
-| **Reviewer** | Claude Code (Opus 4.6) max |
+| **Driver** | GPT-5.4 mini xhigh |
+| **Reviewer** | Codex (GPT-5.5) xhigh |
 
-Cost-efficient lane. Keeps GPT-5.5 xhigh as the planning brain — where reasoning matters most — but drops driver effort to standard for routine work. Claude Opus 4.6 max still the final reviewer.
+Cost-efficient lane. Keeps GPT-5.5 xhigh as both the planning brain and the final reviewer — where reasoning and judgment matter most. Moves the driver (the implementation grunt work) to GPT-5.4 mini xhigh, which draws from a different billing bucket. The cheaper driver handles routine coding while the flagship reviewer catches what it missed.
 
 ## When to Use Setup A
 
@@ -40,7 +40,7 @@ Reach for Premium when the change can damage a consumer repo or has high blast r
 
 ## When to Use Setup B
 
-Setup B is sufficient for routine work:
+Setup B is sufficient for routine work where the mini driver can ship with a strong reviewer:
 
 - Routine implementation
 - Documentation
@@ -52,30 +52,11 @@ Setup B is sufficient for routine work:
 
 ## Final Review Policy
 
-**Both lanes end at Claude Opus 4.6 max as the cross-model reviewer.** Codex can't grade its own homework — the reviewer always belongs to a different lab with different blind spots.
-
-**How to run the Claude reviewer from a Codex session:**
-
-```bash
-claude -p \
-  "Read .reviews/handoff.json and review per the checklist. Output findings + CERTIFIED or NOT CERTIFIED." \
-  --model claude-opus-4-6[1m] \
-  --output-format text \
-  > .reviews/latest-review.md
-```
-
-Append `< /dev/null` if running from a non-interactive parent. Use `--model claude-opus-4-6[1m]` explicitly — this pins the reviewer to the wizard's recommended flagship, not whatever alias resolves to. If `claude` CLI is not installed, use `npx @anthropic-ai/claude-code` or the API directly.
+**Both lanes end at GPT-5.5 xhigh as the reviewer.** The review step catches what the driver missed — in Setup A that's self-review at flagship; in Setup B the flagship reviewer catches what the mini driver missed.
 
 ## Credit-Spend Warning
 
-Both lanes use GPT-5.5 for the planner + driver — billed against your OpenAI account. The reviewer (Claude Opus 4.6 max) bills against your Anthropic Max subscription for interactive use, or against the Anthropic credit pool for headless `claude -p` use (post-June-15-2026 billing split).
-
-If you're running the reviewer via `claude -p` (headless), that draws from your Anthropic credits:
-- Max 5x: $100/mo
-- Max 20x: $200/mo
-- No rollover
-
-For interactive Claude Code reviews (you open a separate Claude Code session to review), it stays on your Max subscription — no credit drawdown.
+Setup A bills everything against your OpenAI account at GPT-5.5 rates. Setup B's driver (GPT-5.4 mini) draws from a **different billing bucket** than GPT-5.5 — that's the cost-saving mechanism. The planner and reviewer in Setup B still use GPT-5.5, so the savings come specifically from the driver leg.
 
 ## Maintainer Override
 
@@ -86,4 +67,4 @@ The wizard does not enforce setup lane selection — it documents the recommende
 ## See Also
 
 - [`AGENTS.md`](AGENTS.md) — SDLC enforcement rules for this repo
-- [claude-sdlc-wizard `AI_SETUP_LANES.md`](https://github.com/BaseInfinity/claude-sdlc-wizard/blob/main/AI_SETUP_LANES.md) — Sibling lanes doc for Claude Code environments (Setup A/B use Claude Opus 4.6 max as primary coder, GPT-5.5 xhigh as reviewer — the inverse of this doc)
+- [claude-sdlc-wizard `AI_SETUP_LANES.md`](https://github.com/BaseInfinity/claude-sdlc-wizard/blob/main/AI_SETUP_LANES.md) — Sibling lanes doc for Claude Code environments (uses Opus 4.6 max as primary coder + GPT-5.5 xhigh as cross-model reviewer — the Claude-side equivalent)
