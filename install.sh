@@ -11,7 +11,7 @@ case "$(uname -s)" in
     *) IS_WINDOWS=false ;;
 esac
 
-MODEL_PROFILE="mixed"
+MODEL_PROFILE="maximum"
 while [ $# -gt 0 ]; do
   case "$1" in
     --model-profile)
@@ -36,6 +36,8 @@ case "$MODEL_PROFILE" in
     exit 1
     ;;
 esac
+
+require_gpt56_codex_version
 
 WIZARD_VERSION="$(json_get_file "$SCRIPT_DIR/package.json" 'data.version || "unknown"')"
 [ -z "$WIZARD_VERSION" ] && WIZARD_VERSION="unknown"
@@ -178,38 +180,31 @@ prune_legacy_global_skill() {
 }
 
 write_model_profile() {
-  mkdir -p .codex-sdlc
-  cat > .codex-sdlc/model-profile.json <<EOF
-{
-  "selected_profile": "$MODEL_PROFILE",
-  "profiles": {
-    "mixed": {
-      "main_model": "gpt-5.4-mini",
-      "main_reasoning": "xhigh",
-      "review_model": "gpt-5.5",
-      "review_reasoning": "xhigh",
-      "tradeoff": "Smaller/faster main model for routine work while keeping xhigh main reasoning and xhigh review."
-    },
-    "maximum": {
-      "main_model": "gpt-5.5",
-      "main_reasoning": "xhigh",
-      "review_model": "gpt-5.5",
-      "review_reasoning": "xhigh",
-      "tradeoff": "Higher latency and token usage in exchange for maximum stability and depth."
-    }
-  },
-  "policy": {
-    "high_confidence_threshold_percent": 95,
-    "low_confidence_rule": "Research more first. If confidence stays below 95%, escalate review to xhigh. Use the maximum profile for abstract, complex, or high-blast-radius work."
-  }
-}
-EOF
+  write_model_profile_metadata ".codex-sdlc/model-profile.json" "$MODEL_PROFILE"
   echo "Wrote .codex-sdlc/model-profile.json ($MODEL_PROFILE)"
+}
+
+install_agents_baseline() {
+  local source="$SCRIPT_DIR/templates/AGENTS.baseline.md"
+  local target="AGENTS.md"
+  local reasoning_baseline
+
+  if [ -f "$target" ]; then
+    echo "AGENTS.md already exists - skipping (review manually)"
+    return 0
+  fi
+
+  reasoning_baseline="$(profile_reasoning "$MODEL_PROFILE")"
+  sed \
+    -e "s|{{MODEL_PROFILE}}|$MODEL_PROFILE|g" \
+    -e "s|{{REASONING_BASELINE}}|$reasoning_baseline|g" \
+    "$source" > "$target"
+  echo "Created AGENTS.md"
 }
 
 echo "Installing SDLC Wizard for Codex CLI..."
 
-copy_if_missing "$SCRIPT_DIR/AGENTS.md" "AGENTS.md" "AGENTS.md"
+install_agents_baseline
 copy_if_missing "$SCRIPT_DIR/SDLC-LOOP.md" "SDLC-LOOP.md" "SDLC-LOOP.md"
 copy_if_missing "$SCRIPT_DIR/START-SDLC.md" "START-SDLC.md" "START-SDLC.md"
 copy_if_missing "$SCRIPT_DIR/PROVE-IT.md" "PROVE-IT.md" "PROVE-IT.md"
@@ -265,7 +260,7 @@ echo "Fresh-session note: if you ran this from inside an existing Codex session,
 echo "Hook review note: if Codex says hooks need review, open /hooks after restart and review pending repo hooks before relying on enforcement."
 echo "Start new with selected profile: codex -m $START_MODEL -c 'model_reasoning_effort=\"$START_REASONING\"'"
 echo "Resume with selected profile: codex resume -m $START_MODEL -c 'model_reasoning_effort=\"$START_REASONING\"'"
-echo "If resume warns it came back with a different model, resume explicitly with: codex resume -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'"
+echo "If resume warns it came back with a different model, resume explicitly with: codex resume -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"'"
 echo "If you normally use yolo-style sessions, use the canonical full-trust Codex flag:"
 echo "  codex --dangerously-bypass-approvals-and-sandbox -m $START_MODEL -c 'model_reasoning_effort=\"$START_REASONING\"'"
 echo "  codex resume --dangerously-bypass-approvals-and-sandbox -m $START_MODEL -c 'model_reasoning_effort=\"$START_REASONING\"'"
@@ -273,9 +268,11 @@ echo "Codex may accept --yolo as shorthand; this wizard prints the canonical ful
 echo "Full-auto is not full-trust: full-trust bypasses sandbox and approval prompts."
 echo "Full-trust warning: only use that variant in repos you fully trust."
 echo "Model profile: '$MODEL_PROFILE'."
-echo "  - mixed: gpt-5.4-mini main pass + gpt-5.5 xhigh review for better speed, lower latency, and lower token usage."
-echo "  - maximum: gpt-5.5 xhigh throughout for maximum stability and the most thorough \"ultimate mode\"."
-echo "Wrote repo-local .codex/config.toml model keys for this profile; mixed is wizard policy, not a native Codex mode."
+echo "  - maximum: gpt-5.6-sol high throughout for flagship stability and depth; Sol high is the default normal driver for meaningful SDLC work."
+echo "  - mixed: experimental explicit opt-in using gpt-5.6-terra medium + gpt-5.6-sol review for measured speed, latency, or token-efficiency trials; invoke review with an explicit high effort override."
+echo "  - reasoning: keep Sol high as the standing root driver; escalate only difficult or high-risk slices to xhigh."
+echo "  - escalation: Max is single-task reasoning; Ultra is subagent-backed parallel work. Most tasks do not need either, and neither is a default wizard profile."
+echo "Wrote repo-local .codex/config.toml model keys for this profile; mixed is experimental wizard policy, not a native Codex mode."
 echo "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
 echo "If confidence drops below 95%, research more first. If it still stays below 95%, escalate review to xhigh."
 echo "Repo-scoped skills are still a work in progress. Today the supported public workflow skill is '\$sdlc'."

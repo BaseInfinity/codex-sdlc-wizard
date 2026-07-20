@@ -8,11 +8,13 @@ const readline = require("node:readline/promises");
 const scriptDir = path.resolve(__dirname, "..");
 const rawArgs = process.argv.slice(2);
 const codexCommand = process.env.CODEX_SDLC_CODEX_BIN || "codex";
+const minimumGpt56CodexVersion = [0, 144, 0];
+const minimumGpt56CodexVersionText = minimumGpt56CodexVersion.join(".");
 const baseInteractiveSessionPrompt = [
   "$setup-wizard",
   "This repo was just bootstrapped by codex-sdlc-wizard.",
   "Continue setup inside Codex: scan the repo, ask only unresolved questions, preserve intentional existing docs, generate or refresh repo-specific SDLC docs, verify the result, and finish setup.",
-  "Use xhigh reasoning for setup."
+  "Use high reasoning for setup. Escalate only security-sensitive, migration, destructive, long-running, or unusually difficult slices to xhigh."
 ];
 const fullTrustFlag = "--dangerously-bypass-approvals-and-sandbox";
 
@@ -30,15 +32,21 @@ Type "full-trust" at the handoff prompt if you want codex ${fullTrustFlag} for f
 Full-trust/yolo is separate from automation posture; it bypasses sandbox and approval prompts.
 Automation/non-interactive behavior: use setup --yes to stay on the shell path.
 Bootstrap/setup recommendation: maximum.
-Routine work after bootstrap: mixed.
+Normal driver for meaningful SDLC work: Sol high through maximum.
+The mixed profile is experimental and requires explicit opt-in.
+Mixed profile review: use an explicit high review effort override.
+Reasoning policy: keep Sol high as the standing root driver; use xhigh for difficult or high-risk slices.
+GPT-5.6 requirement: Codex CLI ${minimumGpt56CodexVersionText} or newer. Update with: npm install -g @openai/codex@latest
 Update boundary: update repairs repo artifacts with the invoked package; it does not self-update the npm package.
 To consume the newest release, run: npx codex-sdlc-wizard@latest update
 
 Options:
   --model-profile <mixed|maximum>
-                Wizard-owned profile toggle. Use 'maximum' for setup/bootstrap
-                work, then switch routine work back to 'mixed' for better
-                speed/token efficiency with xhigh main reasoning and review.
+                Wizard-owned profile toggle. 'maximum' is the quality-first
+                default and normal Sol-high driver. 'mixed' is an experimental
+                explicit opt-in for measured efficiency trials: gpt-5.6-terra
+                medium with gpt-5.6-sol review and an explicit high review
+                effort override.
   --goals       During setup, also generate optional GOALS.md active-scope contract
   --help, -h     Show this help
 
@@ -224,8 +232,8 @@ function printHandoffRecovery(reason) {
     reason,
     "Terminating spawned Codex process tree.",
     "Retry from this repo with: npx codex-sdlc-wizard@latest",
-    "If Codex printed a session id before stopping, resume with: codex resume -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' <session-id>",
-    `For full-trust/yolo-style resume, use: codex resume ${fullTrustFlag} -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' <session-id>`,
+    "If Codex printed a session id before stopping, resume with: codex resume -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"' <session-id>",
+    `For full-trust/yolo-style resume, use: codex resume ${fullTrustFlag} -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"' <session-id>`,
     ""
   ].join("\n"));
 }
@@ -367,10 +375,46 @@ function quoteWindowsCmdArg(value) {
   return `"${value.replace(/"/g, "\"\"")}"`;
 }
 
-function codexAvailable() {
-  const result = spawnCodex(["--version"], "ignore");
+function parseCodexVersion(output) {
+  const match = output.match(/(?:^|\n)\s*(?:OpenAI\s+)?Codex(?:-CLI)?\s+v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(?:\s|$)/i);
+  return match ? {
+    numbers: match.slice(1, 4).map(Number),
+    prerelease: match[4] || "",
+    text: `${match.slice(1, 4).join(".")}${match[4] || ""}`
+  } : null;
+}
 
-  return !result.error && result.status === 0;
+function compareVersions(left, right) {
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const difference = (left[index] || 0) - (right[index] || 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  return 0;
+}
+
+function codexAvailable() {
+  const result = spawnCodex(["--version"], "pipe");
+
+  if (result.error || result.status !== 0) {
+    return false;
+  }
+
+  const output = `${result.stdout || ""}\n${result.stderr || ""}`.trim();
+  const version = parseCodexVersion(output);
+
+  const comparison = version ? compareVersions(version.numbers, minimumGpt56CodexVersion) : -1;
+  if (!version || comparison < 0 || (comparison === 0 && version.prerelease)) {
+    const found = version ? version.text : output || "an unparseable version";
+    throw new Error(
+      `GPT-5.6 profiles require Codex CLI ${minimumGpt56CodexVersionText} or newer (found ${found}). ` +
+      "Update with: npm install -g @openai/codex@latest"
+    );
+  }
+
+  return true;
 }
 
 function isCiEnvironment() {
@@ -405,6 +449,7 @@ function shouldHandoffToCodex() {
   }
 
   if (process.env.CODEX_SDLC_FORCE_CODEX_HANDOFF === "1") {
+    codexAvailable();
     return true;
   }
 
@@ -437,7 +482,7 @@ async function askHandoffMode() {
     "  Press Enter: plain codex (recommended)",
     `  Type "full-trust": codex ${fullTrustFlag}`,
     "  If you say yolo, use full-trust; full-auto is not full-trust.",
-    "  If interrupted later, resume with: codex resume -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' <session-id>",
+    "  If interrupted later, resume with: codex resume -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"' <session-id>",
     "> "
   ].join("\n");
 
@@ -482,9 +527,9 @@ async function handoffToCodex(modelProfile, options) {
     "-C",
     process.cwd(),
     "-m",
-    "gpt-5.5",
+    "gpt-5.6-sol",
     "-c",
-    'model_reasoning_effort="xhigh"',
+    'model_reasoning_effort="high"',
     buildInteractiveSessionPrompt(options)
   ];
 

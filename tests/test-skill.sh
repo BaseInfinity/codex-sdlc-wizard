@@ -101,7 +101,7 @@ test_readme_recommends_current_codex_startup() {
     local has_manual_fallback=true
     local has_full_trust_boundary=true
 
-    grep -q 'codex -m gpt-5.5' "$README" || has_current_start=false
+    grep -q 'codex -m gpt-5.6-sol' "$README" || has_current_start=false
     grep -q 'plain `codex`' "$README" || has_manual_fallback=false
     grep -q -- '--dangerously-bypass-approvals-and-sandbox' "$README" || has_full_trust_boundary=false
 
@@ -135,15 +135,25 @@ test_skill_documents_model_profiles() {
     local has_interactive_setup=true
     local has_repo_maximum_rule=true
     local has_bootstrap_maximum_rule=true
-    local has_routine_mixed_rule=true
+    local has_sol_driver_default=true
+    local has_experimental_mixed_rule=true
+    local avoids_routine_mixed_recommendation=true
+    local has_adaptive_reasoning_policy=true
 
     grep -q '`mixed`' "$SKILL_MD" || has_mixed=false
     grep -q '`maximum`' "$SKILL_MD" || has_maximum=false
+    grep -q 'gpt-5.6-sol' "$SKILL_MD" || has_tradeoff=false
+    grep -q 'gpt-5.6-terra' "$SKILL_MD" || has_tradeoff=false
+    grep -q 'gpt-5.6-luna' "$SKILL_MD" || has_tradeoff=false
     grep -Eqi 'speed|latency|token|stability|ultimate' "$SKILL_MD" || has_tradeoff=false
     grep -Eqi 'ask|interactive `setup` should ask|does not pass `--yes`' "$SKILL_MD" || has_interactive_setup=false
     grep -Eqi 'this repo.*maximum|wizard repo.*maximum|maintaining codex-sdlc-wizard.*maximum' "$SKILL_MD" || has_repo_maximum_rule=false
     grep -Eqi 'setup/update.*maximum|bootstrap.*maximum' "$SKILL_MD" || has_bootstrap_maximum_rule=false
-    grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' "$SKILL_MD" || has_routine_mixed_rule=false
+    grep -Eqi 'Sol `high`.*(normal|default|standing).*(driver|root|work)|normal.*(driver|root|work).*Sol `high`' "$SKILL_MD" || has_sol_driver_default=false
+    grep -Eqi '`mixed`.*experimental.*explicit opt-in|experimental.*`mixed`.*explicit opt-in' "$SKILL_MD" || has_experimental_mixed_rule=false
+    grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' "$SKILL_MD" && avoids_routine_mixed_recommendation=false
+    grep -Eqi 'consumer.*default.*`high`|agentic coding.*default.*`high`|default.*`high`.*agentic' "$SKILL_MD" || has_adaptive_reasoning_policy=false
+    grep -Eqi 'xhigh.*(security|migration|destructive|long-running|difficult)|security.*xhigh|migration.*xhigh' "$SKILL_MD" || has_adaptive_reasoning_policy=false
 
     if [ "$has_mixed" = "true" ] &&
        [ "$has_maximum" = "true" ] &&
@@ -151,32 +161,38 @@ test_skill_documents_model_profiles() {
        [ "$has_interactive_setup" = "true" ] &&
        [ "$has_repo_maximum_rule" = "true" ] &&
        [ "$has_bootstrap_maximum_rule" = "true" ] &&
-       [ "$has_routine_mixed_rule" = "true" ]; then
-        pass "SKILL.md documents bootstrap maximum, routine mixed, and keeps this repo on maximum"
+       [ "$has_sol_driver_default" = "true" ] &&
+       [ "$has_experimental_mixed_rule" = "true" ] &&
+       [ "$avoids_routine_mixed_recommendation" = "true" ] &&
+       [ "$has_adaptive_reasoning_policy" = "true" ]; then
+        pass "SKILL.md documents Sol high as the normal driver, mixed as experimental opt-in, and keeps this repo on maximum"
     else
-        fail "SKILL.md does not document bootstrap maximum, routine mixed, and this repo's maximum-only policy clearly enough"
+        fail "SKILL.md does not document the Sol-high default, experimental mixed policy, and this repo's maximum-only policy clearly enough"
     fi
 }
 
 test_repo_contract_keeps_this_repo_on_maximum() {
     local has_maximum_rule=true
-    local has_gpt55_xhigh_rule=true
+    local has_sol_xhigh_rule=true
     local has_no_downgrade_rule=true
     local has_meta_reason=true
+    local has_high_measurement_gate=true
 
     grep -Eqi 'this repo.*maximum|codex-sdlc-wizard itself.*maximum|maintaining this wizard repo.*maximum' "$REPO_AGENTS" || has_maximum_rule=false
-    grep -Eqi 'gpt-5\.5.*xhigh|xhigh.*gpt-5\.5' "$REPO_AGENTS" || has_gpt55_xhigh_rule=false
-    grep -Eqi 'do not.*(downgrade|switch).*(mixed|mini|lower)|always.*gpt-5\.5.*xhigh|gpt-5\.5.*xhigh.*always' "$REPO_AGENTS" || has_no_downgrade_rule=false
+    grep -Eqi 'gpt-5\.6-sol.*xhigh|xhigh.*gpt-5\.6-sol' "$REPO_AGENTS" || has_sol_xhigh_rule=false
+    grep -Eqi 'do not.*(downgrade|switch).*(mixed|terra|luna|lower)|always.*gpt-5\.6-sol.*xhigh|gpt-5\.6-sol.*xhigh.*always' "$REPO_AGENTS" || has_no_downgrade_rule=false
     grep -Eqi 'explicitly asks for less|asks for less' "$REPO_AGENTS" && has_no_downgrade_rule=false
     grep -Eqi 'meta|high-blast-radius|too meta' "$REPO_AGENTS" || has_meta_reason=false
+    grep -Eqi 'measure.*high|compare.*high|high.*candidate|one level lower' "$REPO_AGENTS" || has_high_measurement_gate=false
 
     if [ "$has_maximum_rule" = "true" ] &&
-       [ "$has_gpt55_xhigh_rule" = "true" ] &&
+       [ "$has_sol_xhigh_rule" = "true" ] &&
        [ "$has_no_downgrade_rule" = "true" ] &&
-       [ "$has_meta_reason" = "true" ]; then
-        pass "AGENTS.md keeps this wizard repo on gpt-5.5 xhigh maximum because the work is meta/high-blast-radius"
+       [ "$has_meta_reason" = "true" ] &&
+       [ "$has_high_measurement_gate" = "true" ]; then
+        pass "AGENTS.md keeps this wizard repo on gpt-5.6 Sol xhigh maximum because the work is meta/high-blast-radius"
     else
-        fail "AGENTS.md does not keep this wizard repo on gpt-5.5 xhigh maximum clearly enough"
+        fail "AGENTS.md does not keep this wizard repo on gpt-5.6 Sol xhigh maximum clearly enough"
     fi
 }
 
@@ -253,6 +269,8 @@ test_repo_scoped_sdlc_skill_documents_native_review() {
     local has_base=true
     local has_commit=true
     local has_review_model=true
+    local has_explicit_high_review=true
+    local explains_review_effort_boundary=true
     local explains_slash_boundary=true
     local avoids_autoreview_requirement=true
 
@@ -261,6 +279,8 @@ test_repo_scoped_sdlc_skill_documents_native_review() {
     grep -q 'codex review --base' "$REPO_SDLC_SKILL" || has_base=false
     grep -q 'codex review --commit' "$REPO_SDLC_SKILL" || has_commit=false
     grep -q 'review_model' "$REPO_SDLC_SKILL" || has_review_model=false
+    grep -Fq "codex -c 'model_reasoning_effort=\"high\"' review --uncommitted" "$REPO_SDLC_SKILL" || has_explicit_high_review=false
+    grep -Eqi 'review_model.*(does not|doesn.t).*reasoning|reasoning.*(does not|doesn.t).*review_model' "$REPO_SDLC_SKILL" || explains_review_effort_boundary=false
     grep -Eqi 'slash-command|slash command' "$REPO_SDLC_SKILL" || explains_slash_boundary=false
     grep -Eqi '(must|always|requires).*/autoreview|/autoreview.*(must|always)' "$REPO_SDLC_SKILL" && avoids_autoreview_requirement=false
 
@@ -269,6 +289,8 @@ test_repo_scoped_sdlc_skill_documents_native_review() {
        [ "$has_base" = "true" ] &&
        [ "$has_commit" = "true" ] &&
        [ "$has_review_model" = "true" ] &&
+       [ "$has_explicit_high_review" = "true" ] &&
+       [ "$explains_review_effort_boundary" = "true" ] &&
        [ "$explains_slash_boundary" = "true" ] &&
        [ "$avoids_autoreview_requirement" = "true" ]; then
         pass "Repo-scoped sdlc skill documents native Codex review"

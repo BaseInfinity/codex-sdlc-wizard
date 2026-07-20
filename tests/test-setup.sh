@@ -694,6 +694,9 @@ test_manifest_created() {
         if ! json_eval_stdin 'data.managed_files["START-SDLC.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
             valid=false
         fi
+        if ! json_eval_stdin 'data.managed_files[".agents/skills/sdlc/SKILL.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
         if ! json_eval_stdin 'data.managed_files["PROVE-IT.md"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
             valid=false
         fi
@@ -1333,8 +1336,8 @@ test_setup_hashes_manifest_without_shell_hash_tools() {
     fi
 }
 
-# ---- Test 33: interactive setup uses codex exec with gpt-5.5 xhigh reasoning when available ----
-test_setup_uses_codex_xhigh_reasoning_when_available() {
+# ---- Test 33: interactive setup uses codex exec with gpt-5.6 Sol high reasoning when available ----
+test_setup_uses_codex_high_reasoning_when_available() {
     local ws
     local fakebin
     local args_file
@@ -1351,6 +1354,10 @@ EOF
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
 set -eu
+if [ "${1:-}" = "--version" ]; then
+    echo "codex-cli 0.144.0"
+    exit 0
+fi
 args_file="${FAKE_CODEX_ARGS_FILE:-}"
 output_file=""
 previous=""
@@ -1420,8 +1427,8 @@ EOF
     grep -qx 'read-only' "$args_file" 2>/dev/null || valid=false
     grep -qx -- '--skip-git-repo-check' "$args_file" 2>/dev/null || valid=false
     grep -qx -- '--output-schema' "$args_file" 2>/dev/null || valid=false
-    grep -qx 'model="gpt-5.5"' "$args_file" 2>/dev/null || valid=false
-    grep -qx 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
+    grep -qx 'model="gpt-5.6-sol"' "$args_file" 2>/dev/null || valid=false
+    grep -qx 'model_reasoning_effort="high"' "$args_file" 2>/dev/null || valid=false
     echo "$output" | grep -vq 'Set source directory' 2>/dev/null || valid=false
     grep -q 'Source directory: `app/`' "$ws/SDLC.md" 2>/dev/null || valid=false
     if ! json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.resolved_values.source_dir' "app/"; then
@@ -1431,14 +1438,14 @@ EOF
     rm -rf "$ws" "$fakebin"
 
     if [ "$valid" = "true" ]; then
-        pass "interactive setup uses codex exec with gpt-5.5 xhigh reasoning when available"
+        pass "interactive setup uses codex exec with gpt-5.6 Sol high reasoning when available"
     else
-        fail "interactive setup did not use the codex xhigh reasoning path correctly"
+        fail "interactive setup did not use the codex high reasoning path correctly"
     fi
 }
 
-# ---- Test 34: setup writes mixed profile with xhigh main reasoning ----
-test_setup_writes_mixed_profile_with_xhigh_reasoning() {
+# ---- Test 34: setup writes mixed profile with medium main reasoning ----
+test_setup_writes_mixed_profile_with_medium_reasoning() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
@@ -1447,19 +1454,183 @@ test_setup_writes_mixed_profile_with_xhigh_reasoning() {
     run_setup_args "$ws" --yes --model-profile mixed >/dev/null 2>&1
 
     local valid=true
-    grep -q '^model = "gpt-5.4-mini"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    grep -q '^review_model = "gpt-5.5"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    if ! json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.main_reasoning' "xhigh"; then
+    grep -q '^model = "gpt-5.6-terra"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model_reasoning_effort = "medium"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^review_model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -Fq 'Baseline reasoning: `medium`' "$ws/AGENTS.md" 2>/dev/null || valid=false
+    if ! json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.main_reasoning' "medium"; then
+        valid=false
+    fi
+    if ! json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.baseline_reasoning' "medium"; then
         valid=false
     fi
 
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "setup writes mixed profile with xhigh main reasoning"
+        pass "setup writes mixed profile with medium main reasoning"
     else
-        fail "setup did not write mixed profile with xhigh main reasoning"
+        fail "setup did not write mixed profile with medium main reasoning"
+    fi
+}
+
+# ---- Test 35: setup rejects Codex versions that cannot run GPT-5.6 ----
+test_setup_rejects_unsupported_codex_version_before_mutation() {
+    local ws fakebin output status valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+    echo "codex-cli 0.143.9"
+    exit 0
+fi
+exit 99
+EOF
+    chmod +x "$fakebin/codex"
+
+    set +e
+    output=$(cd "$ws" && CODEX_HOME="$ws/.codex-home" PATH="$fakebin:$PATH" bash "$SETUP_SH" --yes 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || valid=false
+    echo "$output" | grep -Fq 'Codex CLI 0.144.0 or newer' || valid=false
+    echo "$output" | grep -Fq 'npm install -g @openai/codex@latest' || valid=false
+    [ ! -e "$ws/AGENTS.md" ] || valid=false
+    [ ! -e "$ws/.codex-sdlc/manifest.json" ] || valid=false
+
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup rejects unsupported Codex versions before mutating the target repo"
+    else
+        fail "setup did not reject an unsupported Codex version before mutation"
+    fi
+}
+
+# ---- Test 35: setup writes repo-aware xhigh escalation scopes while keeping high as the baseline ----
+test_setup_adapts_reasoning_guidance_to_repo_risk_signals() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"payments-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/prisma" "$ws/.github/workflows"
+    cat > "$ws/prisma/schema.prisma" <<'EOF'
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+EOF
+    touch "$ws/Dockerfile" "$ws/.github/workflows/deploy.yml"
+
+    run_setup_args "$ws" --yes --model-profile maximum >/dev/null 2>&1
+
+    local valid=true
+    grep -q '^model_reasoning_effort = "high"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -Fq 'Baseline reasoning: `high`' "$ws/AGENTS.md" 2>/dev/null || valid=false
+    grep -Eqi 'xhigh.*deployment.*docker|deployment.*docker.*xhigh' "$ws/AGENTS.md" 2>/dev/null || valid=false
+    grep -Eqi 'xhigh.*database.*postgresql|database.*postgresql.*xhigh' "$ws/AGENTS.md" 2>/dev/null || valid=false
+    grep -Eqi 'xhigh.*CI.*github-actions|CI.*github-actions.*xhigh' "$ws/AGENTS.md" 2>/dev/null || valid=false
+    if ! json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.baseline_reasoning' "high"; then
+        valid=false
+    fi
+    if ! json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.escalation_reasoning' "xhigh"; then
+        valid=false
+    fi
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup keeps high as the baseline and adapts xhigh escalation scopes to repo risk signals"
+    else
+        fail "setup did not generate repo-aware high-to-xhigh reasoning guidance"
+    fi
+}
+
+# ---- Test 36: setup supports stock macOS Bash when no repo risk signals are present ----
+test_setup_handles_empty_reasoning_risk_signals_on_bash_3() {
+    local ws output status valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"simple-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_DISABLE_REASONING=1 CODEX_HOME="$ws/.codex-home" /bin/bash "$SETUP_SH" --yes 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    [ -f "$ws/AGENTS.md" ] || valid=false
+    grep -Fq 'Detected repo risk signals: none detected during setup' "$ws/AGENTS.md" 2>/dev/null || valid=false
+    echo "$output" | grep -Fq 'unbound variable' && valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup handles an empty reasoning-risk set on the supported stock macOS Bash"
+    else
+        echo "$output" >&2
+        fail "setup expands an empty reasoning-risk array unsafely on stock macOS Bash"
+    fi
+}
+
+# ---- Test 37: scan refinement uses the same configured Codex binary as version validation ----
+test_setup_uses_configured_codex_binary_for_scan_refinement() {
+    local ws oldbin currentbin output status valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    oldbin=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    currentbin=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"configured-codex","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    cat > "$oldbin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+    echo "codex-cli 0.143.9"
+    exit 0
+fi
+printf 'old\n' >> "$CODEX_INVOCATION_LOG"
+exit 42
+EOF
+    cat > "$currentbin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+    echo "codex-cli 0.144.0"
+    exit 0
+fi
+printf 'current\n' >> "$CODEX_INVOCATION_LOG"
+exit 42
+EOF
+    chmod +x "$oldbin/codex" "$currentbin/codex"
+
+    set +e
+    output=$(
+        cd "$ws" && \
+        CODEX_HOME="$ws/.codex-home" \
+        CODEX_INVOCATION_LOG="$ws/codex-invocations.log" \
+        CODEX_SDLC_CODEX_BIN="$currentbin/codex" \
+        PATH="$oldbin:$PATH" \
+        bash "$SETUP_SH" --yes 2>&1
+    )
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    grep -Fxq 'current' "$ws/codex-invocations.log" 2>/dev/null || valid=false
+    grep -Fxq 'old' "$ws/codex-invocations.log" 2>/dev/null && valid=false
+    [ -f "$ws/.codex-sdlc/manifest.json" ] || valid=false
+
+    rm -rf "$ws" "$oldbin" "$currentbin"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup uses CODEX_SDLC_CODEX_BIN for scan refinement after validating it"
+    else
+        echo "$output" >&2
+        fail "setup validated CODEX_SDLC_CODEX_BIN but refined the scan with another Codex binary"
     fi
 }
 
@@ -1476,6 +1647,10 @@ test_setup_falls_back_when_codex_reasoning_fails() {
 
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+    echo "codex-cli 0.144.0"
+    exit 0
+fi
 exit 42
 EOF
     chmod +x "$fakebin/codex"
@@ -1542,8 +1717,12 @@ test_setup_verify_only_reports_missing_files
 test_setup_regenerate_rebuilds_docs_from_manifest
 test_setup_regenerate_rebuilds_goals_from_manifest
 test_setup_hashes_manifest_without_shell_hash_tools
-test_setup_uses_codex_xhigh_reasoning_when_available
-test_setup_writes_mixed_profile_with_xhigh_reasoning
+test_setup_uses_codex_high_reasoning_when_available
+test_setup_writes_mixed_profile_with_medium_reasoning
+test_setup_rejects_unsupported_codex_version_before_mutation
+test_setup_adapts_reasoning_guidance_to_repo_risk_signals
+test_setup_handles_empty_reasoning_risk_signals_on_bash_3
+test_setup_uses_configured_codex_binary_for_scan_refinement
 test_setup_falls_back_when_codex_reasoning_fails
 
 echo ""

@@ -7,9 +7,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Source dependencies
 source "$SCRIPT_DIR/lib/json-node.sh"
+source "$SCRIPT_DIR/lib/codex-config.sh"
 source "$SCRIPT_DIR/templates/domain-testing-sections.sh"
 
 require_node
+
+CODEX_COMMAND="${CODEX_SDLC_CODEX_BIN:-codex}"
 
 setup_tmpfile() {
     mktemp "${TMPDIR:-/tmp}/codex-sdlc-$1.XXXXXX"
@@ -17,7 +20,7 @@ setup_tmpfile() {
 
 codex_reasoning_enabled() {
     [ "${CODEX_SDLC_DISABLE_REASONING:-0}" != "1" ] || return 1
-    command -v codex >/dev/null 2>&1
+    command -v "$CODEX_COMMAND" >/dev/null 2>&1
 }
 
 refine_scan_with_codex() {
@@ -107,15 +110,15 @@ Rules:
 - Do not invent tools, frameworks, or commands that the repo does not support.
 EOF
 
-    if codex exec \
+    if "$CODEX_COMMAND" exec \
         -s read-only \
         --skip-git-repo-check \
         --ignore-rules \
         --ephemeral \
         --output-schema "$schema_file" \
         -o "$output_file" \
-        -c 'model="gpt-5.5"' \
-        -c 'model_reasoning_effort="xhigh"' \
+        -c 'model="gpt-5.6-sol"' \
+        -c 'model_reasoning_effort="high"' \
         "$(cat "$prompt_file")" >/dev/null 2>&1; then
         if json_has_truthy_file "$output_file" 'typeof data === "object" && data !== null && !Array.isArray(data)'; then
             refined_scan_json=$(BASE_SCAN_FILE="$base_scan_file" REFINED_SCAN_FILE="$output_file" node -e '
@@ -402,6 +405,8 @@ if [ "$SETUP_MODE" = "verify-only" ]; then
     verify_installation
     exit $?
 fi
+
+require_gpt56_codex_version
 
 # ---- Step 1: Scan project ----
 if [ "$SETUP_MODE" = "regenerate" ]; then
@@ -720,7 +725,7 @@ choose_model_profile() {
         return 0
     fi
 
-    printf "Model profile [maximum/mixed] (recommended/default for setup: maximum): " >&2
+    printf "Model profile [maximum/mixed] (recommended/default for normal work: maximum / Sol high; mixed is experimental): " >&2
     IFS= read -r answer || answer=""
     case "$answer" in
         ""|maximum)
@@ -734,6 +739,42 @@ choose_model_profile() {
             exit 1
             ;;
     esac
+}
+
+derive_reasoning_policy() {
+    local scopes=()
+    local joined=""
+    local scope=""
+
+    if [ "$MODEL_PROFILE" = "mixed" ]; then
+        REASONING_BASELINE="medium"
+    else
+        REASONING_BASELINE="high"
+    fi
+    REASONING_ESCALATION="xhigh"
+
+    [ -n "${DEPLOYMENT_SETUP:-}" ] && [ "$DEPLOYMENT_SETUP" != "none" ] && scopes+=("deployment ($DEPLOYMENT_SETUP)")
+    [ -n "${DATABASES:-}" ] && [ "$DATABASES" != "none" ] && scopes+=("databases ($DATABASES)")
+    [ -n "${CI:-}" ] && [ "$CI" != "none" ] && scopes+=("CI ($CI)")
+    [ "${DOMAIN:-}" = "firmware" ] && scopes+=("firmware or device-facing code")
+
+    if [ "${#scopes[@]}" -gt 0 ]; then
+        for scope in "${scopes[@]}"; do
+            if [ -n "$joined" ]; then
+                joined="$joined, $scope"
+            else
+                joined="$scope"
+            fi
+        done
+    fi
+
+    if [ -n "$joined" ]; then
+        REASONING_RISK_SIGNALS="$joined"
+        REASONING_ESCALATION_SCOPES="Use xhigh for changes touching $joined, and for security review, migrations, destructive operations, long-running research, or difficult coding when the selected baseline and explicit Sol high review leave risk unresolved."
+    else
+        REASONING_RISK_SIGNALS="none detected during setup"
+        REASONING_ESCALATION_SCOPES="Use xhigh for security review, migrations, destructive operations, long-running research, or difficult coding when the selected baseline and explicit Sol high review leave risk unresolved."
+    fi
 }
 
 refresh_setup_template_values() {
@@ -1035,6 +1076,7 @@ if [ "$SETUP_MODE" = "normal" ]; then
     collect_setup_answers
 fi
 
+derive_reasoning_policy
 refresh_setup_template_values
 
 # ---- Step 3: Generate docs from templates ----
@@ -1067,6 +1109,10 @@ substitute_template() {
         -e "s|{{SETUP_KNOWN_SUMMARY}}|${SETUP_KNOWN_SUMMARY}|g" \
         -e "s|{{SETUP_UNRESOLVED_SUMMARY}}|${SETUP_UNRESOLVED_SUMMARY}|g" \
         -e "s|{{MODEL_PROFILE}}|${MODEL_PROFILE}|g" \
+        -e "s|{{REASONING_BASELINE}}|${REASONING_BASELINE}|g" \
+        -e "s|{{REASONING_ESCALATION}}|${REASONING_ESCALATION}|g" \
+        -e "s|{{REASONING_RISK_SIGNALS}}|${REASONING_RISK_SIGNALS}|g" \
+        -e "s|{{REASONING_ESCALATION_SCOPES}}|${REASONING_ESCALATION_SCOPES}|g" \
         -e "s|{{WIZARD_VERSION}}|${ADAPTER_VERSION}|g" \
         -e "s|{{SETUP_DATE}}|${SETUP_DATE}|g" \
         -e "s|{{COMPLETED_STEPS}}|${COMPLETED_STEPS}|g" \
@@ -1236,6 +1282,10 @@ CONF_DOMAIN="$DOMAIN_STATE" \
 CONF_MCP_BROWSER_TOOLING="$MCP_BROWSER_TOOLING_STATE" \
 CONF_MCP_BROWSER_PROFILE_POLICY="$MCP_BROWSER_PROFILE_POLICY_STATE" \
 MODEL_PROFILE_SELECTED="$MODEL_PROFILE" \
+MODEL_POLICY_SCHEMA_VERSION_SELECTED="$MODEL_POLICY_SCHEMA_VERSION" \
+REASONING_BASELINE_SELECTED="$REASONING_BASELINE" \
+REASONING_ESCALATION_SELECTED="$REASONING_ESCALATION" \
+REASONING_RISK_SIGNALS_SELECTED="$REASONING_RISK_SIGNALS" \
 AGENTS_HASH="$(compute_hash AGENTS.md)" \
 SDLC_HASH="$(compute_hash SDLC.md)" \
 TESTING_HASH="$(compute_hash TESTING.md)" \
@@ -1245,6 +1295,7 @@ MANAGE_GOALS="$MANAGE_GOALS" \
 SDLC_LOOP_HASH="$(compute_hash SDLC-LOOP.md)" \
 START_SDLC_HASH="$(compute_hash START-SDLC.md)" \
 PROVE_IT_HASH="$(compute_hash PROVE-IT.md)" \
+SDLC_SKILL_HASH="$(compute_hash .agents/skills/sdlc/SKILL.md)" \
 CONFIG_HASH="$(compute_hash .codex/config.toml)" \
 HOOKS_JSON_HASH="$(compute_hash .codex/hooks.json)" \
 MODEL_PROFILE_HASH="$(compute_hash .codex-sdlc/model-profile.json)" \
@@ -1328,7 +1379,11 @@ const manifest = {
     mcp_browser_profile_policy: process.env.CONF_MCP_BROWSER_PROFILE_POLICY || ""
   },
   model_profile: {
-    selected_profile: process.env.MODEL_PROFILE_SELECTED || ""
+    selected_profile: process.env.MODEL_PROFILE_SELECTED || "",
+    policy_schema_version: Number(process.env.MODEL_POLICY_SCHEMA_VERSION_SELECTED || "2"),
+    baseline_reasoning: process.env.REASONING_BASELINE_SELECTED || "high",
+    escalation_reasoning: process.env.REASONING_ESCALATION_SELECTED || "xhigh",
+    repo_risk_signals: process.env.REASONING_RISK_SIGNALS_SELECTED || "none detected during setup"
   },
   managed_files: {
     "AGENTS.md": process.env.AGENTS_HASH || "",
@@ -1338,6 +1393,7 @@ const manifest = {
     "SDLC-LOOP.md": process.env.SDLC_LOOP_HASH || "",
     "START-SDLC.md": process.env.START_SDLC_HASH || "",
     "PROVE-IT.md": process.env.PROVE_IT_HASH || "",
+    ".agents/skills/sdlc/SKILL.md": process.env.SDLC_SKILL_HASH || "",
     ".codex/config.toml": process.env.CONFIG_HASH || "",
     ".codex/hooks.json": process.env.HOOKS_JSON_HASH || "",
     ".codex-sdlc/model-profile.json": process.env.MODEL_PROFILE_HASH || "",

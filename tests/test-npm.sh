@@ -214,11 +214,11 @@ test_local_npx_setup_honors_model_profile_flag() {
         if [ ! -f "$target_repo/.codex-sdlc/model-profile.json" ] ||
            ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.selected_profile === "maximum"'; then
             configured=false
-        elif ! grep -q '^model = "gpt-5.5"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        elif ! grep -q '^model = "gpt-5.6-sol"' "$target_repo/.codex/config.toml" 2>/dev/null; then
             configured=false
-        elif ! grep -q '^model_reasoning_effort = "xhigh"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        elif ! grep -q '^model_reasoning_effort = "high"' "$target_repo/.codex/config.toml" 2>/dev/null; then
             configured=false
-        elif grep -q '^review_model =' "$target_repo/.codex/config.toml" 2>/dev/null; then
+        elif ! grep -q '^review_model = "gpt-5.6-sol"' "$target_repo/.codex/config.toml" 2>/dev/null; then
             configured=false
         elif ! grep -q '^hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
             configured=false
@@ -330,8 +330,8 @@ test_packed_tarball_scratch_smoke() {
     json_has_truthy_file "$target_repo/.codex-sdlc/manifest.json" 'typeof data.managed_files?.["AGENTS.md"] === "string" && /^sha256:[0-9a-f]{64}$/.test(data.managed_files["AGENTS.md"])' || valid=false
     echo "$setup_output" | grep -q 'Setup complete' || valid=false
     echo "$setup_output" | grep -Eqi 'exit and reopen Codex|restart Codex' || valid=false
-    echo "$setup_output" | grep -q 'codex resume -m gpt-5.5' || valid=false
-    echo "$setup_output" | grep -Fq 'model_reasoning_effort="xhigh"' || valid=false
+    echo "$setup_output" | grep -q 'codex resume -m gpt-5.6-sol' || valid=false
+    echo "$setup_output" | grep -Fq 'model_reasoning_effort="high"' || valid=false
     echo "$setup_output" | grep -q 'shasum: command not found' && valid=false
     echo "$check_output" | grep -q '"status": "match"' || valid=false
     echo "$update_output" | grep -Eq 'No managed files need updates|"status": "match"|match' || valid=false
@@ -360,6 +360,10 @@ test_default_interactive_hands_off_to_codex() {
 
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
+  exit 0
+fi
 if [ -n "${FAKE_CODEX_ARGS_FILE:-}" ]; then
   for arg in "$@"; do
     printf '%s\n' "$arg" >> "$FAKE_CODEX_ARGS_FILE"
@@ -371,6 +375,10 @@ EOF
 
     cat > "$fakebin/codex.cmd" <<'EOF'
 @echo off
+if "%~1"=="--version" (
+  echo codex-cli 0.144.0
+  exit /b 0
+)
 if not "%FAKE_CODEX_ARGS_FILE%"=="" (
   >>"%FAKE_CODEX_ARGS_FILE%" echo %*
 )
@@ -403,13 +411,13 @@ EOF
     grep -Fq -- '--full-auto' "$args_file" 2>/dev/null && valid=false
     grep -Fq -- '-C' "$args_file" 2>/dev/null || valid=false
     grep -Fq -- '-m' "$args_file" 2>/dev/null || valid=false
-    grep -Fq 'gpt-5.5' "$args_file" 2>/dev/null || valid=false
-    grep -Fq 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'gpt-5.6-sol' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'model_reasoning_effort="high"' "$args_file" 2>/dev/null || valid=false
     grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
     echo "$output" | grep -Fq 'Choose first-run Codex handoff mode' || valid=false
     echo "$output" | grep -Fq 'Press Enter: plain codex (recommended)' || valid=false
     echo "$output" | grep -Fq 'Type "full-trust": codex --dangerously-bypass-approvals-and-sandbox' || valid=false
-    echo "$output" | grep -Fq 'codex resume -m gpt-5.5' || valid=false
+    echo "$output" | grep -Fq 'codex resume -m gpt-5.6-sol' || valid=false
     echo "$output" | grep -Fq 'codex resume --dangerously-bypass-approvals-and-sandbox' || valid=false
     echo "$output" | grep -Fq 'Handing off into Codex for live setup using plain codex' || valid=false
     ! echo "$output" | grep -Fq 'DEP0190' || valid=false
@@ -421,6 +429,104 @@ EOF
         pass "default interactive CLI bootstraps then hands off into plain Codex"
     else
         fail "default interactive CLI did not hand off into plain Codex correctly"
+    fi
+}
+
+test_unsupported_codex_version_blocks_handoff_before_mutation() {
+    local ws fakebin codex_home output status valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+
+    printf '%s' '{"name":"old-codex","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/tests"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "launcher 9.9.9 warning"
+  echo "codex-cli 0.143.9"
+  exit 0
+fi
+exit 99
+EOF
+    chmod +x "$fakebin/codex"
+
+    set +e
+    output=$(
+        cd "$ws" && \
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+        PATH="$fakebin:$PATH" \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" 2>&1
+    )
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || valid=false
+    echo "$output" | grep -Fq 'Codex CLI 0.144.0 or newer' || valid=false
+    echo "$output" | grep -Fq 'npm install -g @openai/codex@latest' || valid=false
+    [ ! -e "$ws/.codex/config.toml" ] || valid=false
+    [ ! -e "$ws/.codex-sdlc/model-profile.json" ] || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "unsupported Codex versions block GPT-5.6 handoff before mutation"
+    else
+        fail "unsupported Codex version did not block GPT-5.6 handoff before mutation"
+    fi
+}
+
+test_configured_codex_binary_drives_installer_version_gate() {
+    local ws oldbin currentbin codex_home output status valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    oldbin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-old-bin.XXXXXX")
+    currentbin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-current-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+
+    printf '%s' '{"name":"configured-codex","scripts":{"test":"npm test"}}' > "$ws/package.json"
+
+    cat > "$oldbin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.143.9"
+  exit 0
+fi
+exit 99
+EOF
+    cat > "$currentbin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
+fi
+exit 0
+EOF
+    chmod +x "$oldbin/codex" "$currentbin/codex"
+
+    set +e
+    output=$(
+        cd "$ws" && \
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$currentbin/codex" \
+        CODEX_SDLC_HANDOFF_MODE=plain \
+        PATH="$oldbin:$PATH" \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" </dev/null 2>&1
+    )
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    [ -f "$ws/.codex/config.toml" ] || valid=false
+    grep -q '^model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    echo "$output" | grep -Fq 'found 0.143.9' && valid=false
+
+    rm -rf "$ws" "$oldbin" "$currentbin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "configured Codex binary is used consistently by launcher and installer version gates"
+    else
+        fail "installer ignored CODEX_SDLC_CODEX_BIN after the launcher accepted it"
     fi
 }
 
@@ -439,6 +545,10 @@ test_interactive_handoff_preserves_goals_request() {
 
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
+  exit 0
+fi
 if [ -n "${FAKE_CODEX_ARGS_FILE:-}" ]; then
   for arg in "$@"; do
     printf '%s\n' "$arg" >> "$FAKE_CODEX_ARGS_FILE"
@@ -450,6 +560,10 @@ EOF
 
     cat > "$fakebin/codex.cmd" <<'EOF'
 @echo off
+if "%~1"=="--version" (
+  echo codex-cli 0.144.0
+  exit /b 0
+)
 if not "%FAKE_CODEX_ARGS_FILE%"=="" (
   >>"%FAKE_CODEX_ARGS_FILE%" echo %*
 )
@@ -508,6 +622,10 @@ test_full_trust_handoff_choice_is_explicit() {
 
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
+  exit 0
+fi
 if [ -n "${FAKE_CODEX_ARGS_FILE:-}" ]; then
   for arg in "$@"; do
     printf '%s\n' "$arg" >> "$FAKE_CODEX_ARGS_FILE"
@@ -519,6 +637,10 @@ EOF
 
     cat > "$fakebin/codex.cmd" <<'EOF'
 @echo off
+if "%~1"=="--version" (
+  echo codex-cli 0.144.0
+  exit /b 0
+)
 if not "%FAKE_CODEX_ARGS_FILE%"=="" (
   >>"%FAKE_CODEX_ARGS_FILE%" echo %*
 )
@@ -546,8 +668,8 @@ EOF
     local valid=true
     grep -Fq -- '--dangerously-bypass-approvals-and-sandbox' "$args_file" 2>/dev/null || valid=false
     grep -Fq -- '--full-auto' "$args_file" 2>/dev/null && valid=false
-    grep -Fq 'gpt-5.5' "$args_file" 2>/dev/null || valid=false
-    grep -Fq 'model_reasoning_effort="xhigh"' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'gpt-5.6-sol' "$args_file" 2>/dev/null || valid=false
+    grep -Fq 'model_reasoning_effort="high"' "$args_file" 2>/dev/null || valid=false
     grep -Fq '$setup-wizard' "$args_file" 2>/dev/null || valid=false
     echo "$output" | grep -Fq 'Handing off into Codex for live setup using codex --dangerously-bypass-approvals-and-sandbox' || valid=false
     ! echo "$output" | grep -Fq 'Scanning project...' || valid=false
@@ -592,6 +714,7 @@ test_codex_handoff_watchdog_times_out_and_terminates_child() {
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
   exit 0
 fi
 printf started > "$FAKE_CODEX_STARTED_FILE"
@@ -604,7 +727,10 @@ EOF
 
     cat > "$fakebin/codex.cmd" <<'EOF'
 @echo off
-if "%~1"=="--version" exit /b 0
+if "%~1"=="--version" (
+  echo codex-cli 0.144.0
+  exit /b 0
+)
 >"%FAKE_CODEX_STARTED_FILE%" echo started
 ping -n 3 127.0.0.1 >nul
 >"%FAKE_CODEX_COMPLETED_FILE%" echo completed
@@ -650,7 +776,7 @@ EOF
     [ ! -f "$completed_file" ] || valid=false
     echo "$output" | grep -Eqi 'timeout|timed out|watchdog' || valid=false
     echo "$output" | grep -Eqi 'terminat|kill' || valid=false
-    echo "$output" | grep -Fq 'codex resume -m gpt-5.5' || valid=false
+    echo "$output" | grep -Fq 'codex resume -m gpt-5.6-sol' || valid=false
 
     rm -rf "$ws" "$fakebin" "$codex_home"
 
@@ -685,6 +811,7 @@ test_codex_handoff_timeout_force_kills_signal_ignoring_descendant() {
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/bash
 if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
   exit 0
 fi
 printf started > "$FAKE_CODEX_STARTED_FILE"
@@ -764,6 +891,7 @@ test_codex_handoff_sighup_terminates_detached_child() {
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
   exit 0
 fi
 printf '%s' "$$" > "$FAKE_CODEX_PID_FILE"
@@ -855,6 +983,7 @@ test_codex_handoff_sigint_forwards_interrupt_to_child() {
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
   exit 0
 fi
 printf '%s' "$$" > "$FAKE_CODEX_PID_FILE"
@@ -946,6 +1075,7 @@ test_codex_handoff_repeated_sigint_does_not_orphan_child() {
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
   exit 0
 fi
 printf '%s' "$$" > "$FAKE_CODEX_PID_FILE"
@@ -1034,6 +1164,7 @@ test_codex_handoff_sigquit_terminates_detached_child() {
     cat > "$fakebin/codex" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
   exit 0
 fi
 printf '%s' "$$" > "$FAKE_CODEX_PID_FILE"
@@ -1104,7 +1235,7 @@ EOF
 }
 
 test_ci_mode_keeps_shell_setup_path() {
-    local ws fakebin fakebin_win codex_home args_file prompts_file output
+    local ws fakebin fakebin_win codex_bin codex_path_entry codex_home args_file prompts_file output
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -1125,28 +1256,40 @@ if [ -n "$args_file" ]; then
     printf '%s\n' "$arg" >> "$args_file"
   done
 fi
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
+fi
 exit 0
 EOF
     chmod +x "$fakebin/codex"
 
     cat > "$fakebin/codex.cmd" <<'EOF'
 @echo off
+if "%~1"=="--version" (
+  echo codex-cli 0.144.0
+)
 if not "%FAKE_CODEX_ARGS_FILE%"=="" (
   >>"%FAKE_CODEX_ARGS_FILE%" echo %*
 )
 exit /b 0
 EOF
 
-    fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null || printf '%s' "$fakebin")
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+        codex_bin="$fakebin_win\\codex.cmd"
+        codex_path_entry="$fakebin_win;$PATH"
+    else
+        codex_bin="$fakebin/codex"
+        codex_path_entry="$fakebin:$PATH"
+    fi
 
     output=$(
         cd "$ws" && \
         env CI=1 \
         CODEX_HOME="$codex_home" \
-        CODEX_SDLC_CODEX_BIN="$fakebin_win\\codex.cmd" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
         FAKE_CODEX_ARGS_FILE="$args_file" \
-        PATH="$fakebin_win;$PATH" \
+        PATH="$codex_path_entry" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$prompts_file" 2>&1
     ) || true
 
@@ -1154,7 +1297,8 @@ EOF
     [ -f "$ws/.codex-sdlc/manifest.json" ] || valid=false
     echo "$output" | grep -Fq 'Scanning project...' || valid=false
     ! echo "$output" | grep -Fq 'Handing off into Codex for live setup' || valid=false
-    [ ! -s "$args_file" ] || valid=false
+    [ -s "$args_file" ] || valid=false
+    grep -Fvx -- '--version' "$args_file" >/dev/null 2>&1 && valid=false
 
     rm -rf "$ws" "$fakebin" "$codex_home"
 
@@ -1174,13 +1318,16 @@ test_cli_help_documents_bootstrap_profile_policy() {
     echo "$output" | grep -qi 'mixed' || valid=false
     echo "$output" | grep -qi 'maximum' || valid=false
     echo "$output" | grep -Eqi 'setup.*maximum|bootstrap.*maximum' || valid=false
-    echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' || valid=false
+    echo "$output" | grep -Eqi 'normal.*(driver|work).*Sol high|Sol high.*normal.*(driver|work)' || valid=false
+    echo "$output" | grep -Eqi 'mixed.*experimental.*explicit opt-in|experimental.*mixed.*explicit opt-in' || valid=false
+    echo "$output" | grep -Eqi 'mixed.*(explicit.*high.*review|review.*explicit.*high)' || valid=false
+    echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' && valid=false
     echo "$output" | grep -Eqi 'default.*adaptive setup|adaptive setup.*default' || valid=false
 
     if [ "$valid" = "true" ]; then
-        pass "CLI help documents adaptive setup as the default plus the bootstrap profile policy"
+        pass "CLI help documents adaptive setup, the Sol-high driver default, and experimental mixed opt-in"
     else
-        fail "CLI help does not document the adaptive default and bootstrap-versus-routine profile policy clearly enough"
+        fail "CLI help does not document the adaptive default and Sol-high model policy clearly enough"
     fi
 }
 
@@ -1207,6 +1354,8 @@ test_local_npx_setup_honors_model_profile_flag
 test_default_cli_updates_initialized_repo_without_explicit_subcommand
 test_packed_tarball_scratch_smoke
 test_default_interactive_hands_off_to_codex
+test_unsupported_codex_version_blocks_handoff_before_mutation
+test_configured_codex_binary_drives_installer_version_gate
 test_interactive_handoff_preserves_goals_request
 test_full_trust_handoff_choice_is_explicit
 test_codex_handoff_watchdog_timeout_is_opt_in

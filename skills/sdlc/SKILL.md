@@ -90,8 +90,11 @@ Use native Codex review for a second pass when the slice warrants it:
 - `codex review --uncommitted` before commit
 - `codex review --base <branch>` for branch or PR-sized diffs
 - `codex review --commit <sha>` for a specific commit
+- `codex -c 'model_reasoning_effort="high"' review --uncommitted` when enforcing a Sol-high gate, especially from the experimental mixed profile
 
-`review_model` controls native Codex review model selection. `auto_review` is for eligible approval prompts, not code-diff review. Do not require `/autoreview` unless the current Codex host exposes it as a verified feature.
+`review_model` controls native Codex review model selection but does not set review reasoning independently. Mixed mode must use the explicit `high` command override above; apply the same prefix to `--base` or `--commit` reviews. This is a CLI review path, not a slash-command contract.
+
+`auto_review` is for eligible approval prompts, not code-diff review. Do not require `/autoreview` unless the current Codex host exposes it as a verified feature.
 
 ### 5. CI and Merge Guard
 
@@ -120,9 +123,12 @@ If the session uncovered reusable lessons, capture learnings in the right local 
 
 ## Confidence policy
 
-- default: `xhigh`
-- this repo uses `xhigh` as the normal path
-- only drop lower when the user explicitly asks for it
+- default: `high`
+- keep `gpt-5.6-sol` as the normal standing root driver for meaningful SDLC work; Terra/Luna are bounded support options, not automatic downgrades
+- escalate security review, migrations, destructive operations, long-running research, and difficult coding to `xhigh` when `high` leaves unresolved risk
+- repo-local guidance may define a measured `xhigh` exception for unusually high-blast-radius maintenance
+- Max is a single-task escalation; Ultra is a subagent-backed parallel-work escalation, and neither is a default profile
+- use lower effort only when the task is straightforward and the speed/cost tradeoff is intentional
 
 ## Hooks vs skill
 

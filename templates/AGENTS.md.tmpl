@@ -55,9 +55,15 @@ If any command above shows N/A, figure out the right command for this project an
 ## Model Profile
 
 - Selected profile: {{MODEL_PROFILE}}
-- `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.5` at `xhigh` for review. Use this when you want better speed, lower latency, and lower token usage on routine work.
-- `maximum`: `gpt-5.5` at `xhigh` for the whole slice. Use this as the stability-first "ultimate mode" for abstract, complex, or high-blast-radius work.
-- If confidence is below `95%`, research more first. If it still stays below `95%`, escalate review to `xhigh`.
+- Baseline reasoning: `{{REASONING_BASELINE}}`
+- Detected repo risk signals: {{REASONING_RISK_SIGNALS}}
+- Adaptive xhigh scopes: {{REASONING_ESCALATION_SCOPES}}
+- `maximum`: `gpt-5.6-sol` at `high` for the whole slice. This is the default and normal standing root driver; the profile name selects the maximum model tier, not Max reasoning.
+- `mixed`: experimental explicit opt-in using `gpt-5.6-terra` at `medium` plus `gpt-5.6-sol` review. Because `review_model` does not set effort independently, use `codex -c 'model_reasoning_effort="high"' review ...` for its high review gate. Preserve it when explicitly selected, but do not switch to it automatically.
+- Terra and Luna are bounded support options, not normal SDLC drivers. Keep integration and acceptance with the Sol root.
+- Start work at the selected `{{REASONING_BASELINE}}` baseline. Escalate a difficult or high-risk slice to `{{REASONING_ESCALATION}}`; do not force the entire repo to pay the xhigh cost when the task does not need it.
+- Max is a single-task reasoning escalation; Ultra is a subagent-backed parallel-work escalation. Most tasks do not need Max or Ultra, and neither belongs in default wizard profiles.
+- If confidence is below `95%`, research more first. If it still stays below `95%`, escalate the difficult slice or review to `xhigh`.
 
 ## Capability Detectors
 

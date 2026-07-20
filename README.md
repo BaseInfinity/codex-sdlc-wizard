@@ -11,10 +11,10 @@ This adapter brings the [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai
 npx codex-sdlc-wizard@latest
 
 # Start coding with SDLC enforcement and an explicit model profile
-codex -m gpt-5.5 -c 'model_reasoning_effort="xhigh"'
+codex -m gpt-5.6-sol -c 'model_reasoning_effort="high"'
 ```
 
-`codex -m gpt-5.5 -c 'model_reasoning_effort="xhigh"'` is the safest explicit start once this wizard is installed. Use plain `codex` instead if you want to rely on trusted repo-local config. If a handoff is interrupted and Codex prints a resume id, continue with `codex resume -m gpt-5.5 -c 'model_reasoning_effort="xhigh"' <session-id>` so resume does not fall back to an older model.
+`codex -m gpt-5.6-sol -c 'model_reasoning_effort="high"'` is the recommended explicit consumer start once this wizard is installed. Use plain `codex` instead if you want to rely on trusted repo-local config. If a handoff is interrupted and Codex prints a resume id, continue with `codex resume -m gpt-5.6-sol -c 'model_reasoning_effort="high"' <session-id>` so resume does not fall back to an older model.
 
 If you normally use yolo-style sessions, use Codex's canonical full-trust flag: `--dangerously-bypass-approvals-and-sandbox`. Current Codex may accept `--yolo` as shorthand, but this wizard prints the canonical flag. Full-auto is not full-trust: full-trust bypasses sandbox and approval prompts. Only use that variant in repos you fully trust.
 
@@ -34,8 +34,8 @@ After either path changes skills, hooks, hook config, or helper scripts, restart
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.31 check
-npx codex-sdlc-wizard@0.7.31 update
+npx codex-sdlc-wizard@0.7.32 check
+npx codex-sdlc-wizard@0.7.32 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -177,7 +177,7 @@ Layer 1: LOCAL TRUTH
 | Capability | Codex-specific shape |
 |------------|----------------------|
 | **Proof-aware git gates** | `git commit` and `git push` stay blocked until a fresh reviewed SDLC proof stamp is tied to the current repo content |
-| **Codex-native review** | Uses `codex review --uncommitted`, `--base`, or `--commit`; `review_model = "gpt-5.5"` provides the intended review pass |
+| **Codex-native review** | Uses `codex review --uncommitted`, `--base`, or `--commit`; mixed mode explicitly overrides review effort to keep its Sol review at `high` |
 | **Adaptive setup/update** | Default `npx` setup bootstraps first, then hands off into Codex for unresolved questions; update repairs drift without blind overwrites |
 | **Honest skill model** | `$sdlc` is the public repo-scoped workflow; helper skills stay support tooling instead of pretending Codex has slash commands |
 | **Cross-platform hook shape** | Universal Node hook entrypoints avoid Bash/PowerShell hook-config churn across macOS, Linux, Windows, and `type: module` repos |
@@ -212,31 +212,35 @@ must be run from the target repo root and stamped there.
 
 The wizard supports two wizard-owned model profiles:
 
-- `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.5` at `xhigh` for review.
-  Tradeoff: better speed, lower latency, and lower token usage on routine work after bootstrap.
-- `maximum`: `gpt-5.5` at `xhigh` throughout.
-  Tradeoff: higher latency and token usage in exchange for the most stable and thorough "ultimate mode."
+- `maximum`: `gpt-5.6-sol` at `high` throughout. Sol `high` is the quality-first default and normal standing root driver for meaningful SDLC work, with flagship stability and depth. `maximum` selects the maximum model tier; it does not select Max reasoning.
+- `mixed`: experimental explicit opt-in using `gpt-5.6-terra` at `medium` for the main pass plus a `gpt-5.6-sol` review that must explicitly override reasoning to `high`. It exists for measured speed, lower latency, or lower token-usage trials; it is not the routine-work recommendation.
 
 How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.31 --model-profile maximum
+npx codex-sdlc-wizard@0.7.32 --model-profile maximum
 
-# interactive bootstrap with the efficiency-first profile if you already know you want it
-npx codex-sdlc-wizard@0.7.31 --model-profile mixed
+# experimental efficiency trial when you explicitly choose it
+npx codex-sdlc-wizard@0.7.32 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
 ```
 
-Interactive setup should ask which profile you want when you do not pass `--model-profile`, and it should recommend `maximum` as the safer bootstrap default.
+Interactive setup asks which profile you want when you do not pass `--model-profile`, and recommends `maximum` as the normal Sol-high default.
 
-Low-confidence rule:
-- Default to `xhigh` in this repo when the work is meta, setup-heavy, or otherwise high-blast-radius.
+Adaptive reasoning rule:
+- the consumer default for meaningful SDLC and agentic coding is Sol `high`; keep the Sol root as the standing driver
+- use Terra or Luna only for bounded support tasks, or select `mixed` explicitly for a measured experiment with strong verification
+- setup records detected deployment, database, CI, and firmware surfaces so generated guidance can name repo-specific escalation scopes
+- use `xhigh` for security review, migrations, destructive operations, long-running research, or difficult coding where `high` leaves unresolved risk
 - if confidence is below `95%`, research more first
-- if it still stays below `95%`, escalate review to `xhigh`
+- if it still stays below `95%`, escalate the difficult slice or review to `xhigh`
 - prefer `maximum` for abstract, complex, or high-blast-radius work
+- use `max` only as a single-task reasoning escalation when `xhigh` evidence is insufficient
+- use `ultra` only as a subagent-backed parallel-work escalation when the task divides cleanly into independent workstreams
+- most tasks do not need Max or Ultra, and neither belongs in default wizard profiles
 
 The wizard stores the selected profile in `.codex-sdlc/model-profile.json` so the repo can keep that choice explicit.
 It also writes the matching repo-local Codex config to `.codex/config.toml` so trusted Codex sessions use the selected profile instead of silently inheriting stronger user-level defaults.
@@ -244,9 +248,9 @@ It also writes the matching repo-local Codex config to `.codex/config.toml` so t
 `mixed` is wizard policy, not a native Codex mode. The wizard maps it to:
 
 ```toml
-model = "gpt-5.4-mini"
-model_reasoning_effort = "xhigh"
-review_model = "gpt-5.5"
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+review_model = "gpt-5.6-sol"
 
 [features]
 hooks = true
@@ -255,8 +259,9 @@ hooks = true
 `maximum` maps to:
 
 ```toml
-model = "gpt-5.5"
-model_reasoning_effort = "xhigh"
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+review_model = "gpt-5.6-sol"
 
 [features]
 hooks = true
@@ -265,13 +270,15 @@ hooks = true
 Codex only loads project-local `.codex/config.toml` for trusted projects. Once trusted, project config overrides user config in `~/.codex/config.toml`; the wizard does not edit your global config. Current Codex CLI builds warn that `[features].codex_hooks` is deprecated, so setup/update write `[features].hooks = true` and migrate active `codex_hooks` entries when repairing config.
 
 Bootstrap recommendation:
-- setup/update should use `maximum`; routine work after bootstrap should use `mixed`
-- use `maximum` for setup/update because bootstrap work has higher blast radius
-- switch back to `mixed` for routine day-to-day work after the repo is stable
+- install/setup/update default to `maximum`, and normal agentic work stays on its Sol `high` driver
+- profile-less updates restore `maximum`; updates preserve an existing explicit `mixed` selection instead of silently overriding it
+- `mixed` remains experimental and explicit opt-in until representative local measurements prove it preserves quality
+- use `gpt-5.6-terra` or `gpt-5.6-luna` manually only for bounded low-risk support work with an explicit verification boundary
 
 Repo-specific maintainer rule:
 - consumer repos can choose `mixed` or `maximum`
-- this repo always stays on `maximum` (`gpt-5.5` at `xhigh` throughout); do not switch `codex-sdlc-wizard` maintenance to `mixed`, mini-only, or lower-reasoning profiles because it is unusually meta and high-blast-radius
+- this repo always stays on `maximum` (`gpt-5.6-sol` at `xhigh` throughout); do not switch `codex-sdlc-wizard` maintenance to `mixed`, Terra, Luna, or lower-reasoning profiles because it is unusually meta and high-blast-radius
+- Sol `high` is the consumer default but remains a measured candidate for this repo's narrow `xhigh` maintainer exception; require at least 20 representative slices, at least 95% end-to-end success, follow-up rate <= 10%, and at least 15% cycle-time or cost improvement versus Sol `xhigh` before changing this repo's exception
 
 ## Native Codex Review
 
@@ -281,6 +288,9 @@ Review behavior is required by the SDLC contract. The portable Codex-native revi
 # Review staged, unstaged, and untracked local changes before commit
 codex review --uncommitted
 
+# Enforce the advertised Sol-high review gate, including from mixed mode
+codex -c 'model_reasoning_effort="high"' review --uncommitted
+
 # Review a branch or PR-sized diff against a base branch
 codex review --base main
 
@@ -288,7 +298,7 @@ codex review --base main
 codex review --commit <sha>
 ```
 
-When `review_model = "gpt-5.5"` is present, native Codex review uses that model for the review pass. In `mixed`, this gives the intended cross-model shape: faster main work, `gpt-5.5` review.
+When `review_model = "gpt-5.6-sol"` is present, native Codex review uses Sol for the review pass. `review_model` does not set review reasoning independently: effort otherwise inherits the profile's global `model_reasoning_effort`. Mixed-mode agents must therefore use the explicit `high` override above (and the same prefix with `--base` or `--commit`) to provide the advertised Sol-high gate.
 
 Do not treat `/autoreview` as a required SDLC command. `auto_review` is a Codex approval-review setting for eligible tool approval prompts; it is not the code-diff review path. In yolo/full-bypass sessions, approval review usually does not apply because approvals are already bypassed.
 
@@ -317,7 +327,7 @@ The current recommended Codex-native architecture is explicit:
 - `hooks = silent event enforcement`
 - `repo docs = source of local truth`
 
-Current Codex CLI `0.130.0` supports eight hook events: `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SessionStart`, `UserPromptSubmit`, and `Stop`.
+Codex CLI `0.144.0+`, required for these GPT-5.6 profiles, supports eight hook events: `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SessionStart`, `UserPromptSubmit`, and `Stop`.
 
 This wizard actively installs `SessionStart`, `PreToolUse`, `PreCompact`, and `PostCompact`. The remaining hook events are intentionally left unused until there is a proven SDLC need: `PermissionRequest` can change approval behavior, `PostToolUse` can create noisy post-command gates, `UserPromptSubmit` can over-police prompts, and `Stop` can interfere with normal session shutdown.
 
@@ -351,7 +361,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.31
+npx codex-sdlc-wizard@0.7.32
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -361,7 +371,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.31 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.32 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow
@@ -408,7 +418,7 @@ After restart, hook install is not complete until Codex trusts the repo and any 
 
 ### Requirements
 
-- Codex CLI (`npm i -g @openai/codex`)
+- Codex CLI `0.144.0+` (`npm install -g @openai/codex@latest`)
 - `bash` (3.x+ macOS, 4.x+ Linux, Git Bash on Windows for the shell path)
 - Node.js 18+; active Codex hooks use Node entrypoints so the same checked-in hook config works across macOS, Linux, and Windows
 
@@ -486,12 +496,12 @@ MIT
 
 ## AI Setup Lanes
 
-Three recommended setups in [`AI_SETUP_LANES.md`](AI_SETUP_LANES.md):
+One default driver plus two bounded alternatives in [`AI_SETUP_LANES.md`](AI_SETUP_LANES.md):
 
-| Lane | Planner | Driver | Reviewer | When |
-|------|---------|--------|----------|------|
-| **A — Codex Premium** | GPT-5.5 xhigh | GPT-5.5 xhigh | GPT-5.5 xhigh | Architecture, releases, security, high-stakes |
-| **B — Codex Saver** | GPT-5.5 xhigh | GPT-5.3 Spark max (fallback: 5.4 mini) | GPT-5.5 xhigh | Routine impl, docs, tests |
-| **C — Codex Lite** | You | GPT-5.4 mini standard | None | Scripts, deploys to staging, config, grunt work |
+| Lane | Main work | Review/escalation | When |
+|------|-----------|-------------------|------|
+| **A - Sol Quality-First** | GPT-5.6 Sol high | Sol high; xhigh for difficult/high-risk slices | Normal meaningful SDLC work, architecture, releases, security |
+| **B - Experimental Mixed** | GPT-5.6 Terra medium | Sol high via explicit override; xhigh when risk remains | Explicit measured efficiency trials only |
+| **C - Lightweight Support** | GPT-5.6 Terra/Luna at the lowest reliable effort | Sol root integrates and accepts | Clear, repeatable, low-risk support tasks |
 
-Setup C is the discipline of knowing when NOT to use discipline.
+The root agent normally owns planning. Explorer, reviewer, or planner agents are optional specializations, and Ultra is reserved for work that benefits from real parallel subagents.

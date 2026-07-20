@@ -2,20 +2,21 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.31` and `v0.7.31` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.32` and `v0.7.32` are the current release target for the SDLC-only default repo skill surface
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
-- setup now layers deterministic scan plus live Codex `gpt-5.5` / `xhigh` refinement when available
+- setup now layers deterministic scan plus live Codex `gpt-5.6-sol` / `high` refinement when available
 - setup now keeps detected values automatically, asks inferred values conversationally, and asks only missing core repo facts directly
 - the repo-scoped Codex discovery bridge for `$sdlc` is now part of the shipping path
 - consumer-path hardening for auth-heavy boundaries, capability detectors, and docs-strong scaffold repos is shipped
 - honest Codex architecture guidance, confidence/reporting guidance, direct-issue capture, and repo-focus rules are now part of the shipped path
 - the model-profile toggle is now shipped as a user choice:
-  - `mixed`: `gpt-5.4-mini` main pass + `gpt-5.5` `xhigh` review
-  - `maximum`: `gpt-5.5` / `xhigh` throughout
+  - `mixed`: `gpt-5.6-terra` `medium` main pass + `gpt-5.6-sol` review with an explicit `high` effort override
+  - `maximum`: `gpt-5.6-sol` / `high` throughout
+- researched GPT-5.6 reasoning policy now uses `high` as the consumer agentic-coding default, adapts `xhigh` escalation scopes to detected repo risks, preserves this repo's measured Sol `xhigh` maintainer exception, and keeps Max/Ultra as explicit escalations instead of defaults
 - setup/install now offer issue-ready feedback for obvious wizard-level failures instead of only failing vaguely
-- setup/update guidance now biases bootstrap work toward `maximum` while routine work can switch back to `mixed`
+- install/setup/update now use `maximum` as the standing Sol `high` default; `mixed` is an experimental explicit opt-in that update preserves only when already selected
 - setup/update guidance now treats verification as diagnostic for product failures and stops before editing application code or application tests without explicit user consent
 - setup/update guidance now tells users to exit and reopen Codex after hook/skill repairs, without rerunning setup/update just for that restart
 - install/setup/update now write and repair repo-local `.codex/config.toml` model keys for the selected profile, while preserving unrelated MCP, sandbox, approval, and custom config
@@ -35,7 +36,7 @@
 - setup/update now repair stale platform-specific hook wiring and install universal Node hook entrypoints so a checked-in `.codex/hooks.json` does not flip between macOS Bash and Windows PowerShell commands
 - setup/update now write `[features].hooks = true`, migrate deprecated `[features].codex_hooks` config, and remind users to review pending repo hooks through `/hooks`
 - generated Node hooks now use `.cjs` entrypoints so consumer repos with `"type": "module"` do not break on CommonJS `require`
-- Codex CLI `0.130.0` hook surface is recognized: the wizard intentionally installs `SessionStart`, `PreToolUse`, `PreCompact`, and `PostCompact`, while leaving `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, and `Stop` unwired until a proven SDLC need exists
+- Codex CLI `0.144.0+` is required for GPT-5.6 profiles; its hook surface is recognized, and the wizard intentionally installs `SessionStart`, `PreToolUse`, `PreCompact`, and `PostCompact` while leaving `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, and `Stop` unwired until a proven SDLC need exists
 - compact lifecycle hooks now preserve SDLC carry-forward context around Codex compaction without blocking normal compaction
 - update now repairs legacy `.js` hook commands and stale `.js` hook manifest entries, including old matching files
 - the git guard is now proof-aware: fresh reviewed SDLC proof allows commit/push, while missing, stale, cross-repo, or mismatched-workdir proof still blocks
@@ -55,12 +56,12 @@
 
 ## Next Release Cycle
 
-### 0.7.32
+### 0.7.33
 
-Purpose: continue pilot rollout after the `0.7.31` Codex compact lifecycle hook release while keeping new patches tied to proven reusable wizard bugs or verified Codex-native workflow behavior.
+Purpose: continue pilot rollout after the `0.7.32` GPT-5.6 model-policy release while keeping new patches tied to proven reusable wizard bugs or verified Codex-native workflow behavior.
 
 Scope:
-- keep `0.7.31` as the initialized-clone default-update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag and compact lifecycle baseline, optional `GOALS.md` active-scope contract, manual `/goal` guidance baseline, and fail-fast unknown-argument baseline for pilot consumption
+- keep `0.7.32` as the Sol-high consumer default, explicit mixed-profile experiment, initialized-clone update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag and compact lifecycle baseline, optional `GOALS.md` active-scope contract, manual `/goal` guidance baseline, and fail-fast unknown-argument baseline for pilot consumption
 - keep programmatic `/goal` automation unassumed unless Codex exposes a stable CLI/API path for it
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
@@ -68,14 +69,14 @@ Scope:
 
 ## Tracker Cleanup
 
-The stabilization tracker is currently clear after the `0.7.31` compact lifecycle hook release. Remaining open docs/research issues stay outside the stabilization lane.
+The stabilization tracker is currently clear after the `0.7.32` GPT-5.6 model-policy release. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.31` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.32` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.31`, the main backlog is:
+After `0.7.32`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
@@ -116,11 +117,13 @@ After the current backlog is under control, investigate whether Codex's built-in
 - investigate programmatic `/goal` automation only if Codex exposes a stable CLI/API path; keep manual `/goal` guidance anchored to `$sdlc`
 - evaluate `Skill Creator` as a possible future aid for skill-structure maintenance
 - evaluate `Plugin Creator` only as later research, since plugins are not part of the current shipping path
-- measure `gpt-5.4-mini` for the main working pass while keeping `gpt-5.5` `xhigh` for review or cross-model review, and compare that against simply running the whole slice at `xhigh`
-- if the mixed mode proves out, add an easy toggle between two explicit profiles:
-  - `mixed`: `gpt-5.4-mini` for the main pass plus `gpt-5.5` `xhigh` review
-  - `maximum`: `gpt-5.5` / `xhigh` for the whole slice as the "ultimate mode"
-- do not change the default based on anecdotes: require a sample of 20 slices before recommending `gpt-5.4-mini` + `gpt-5.5` `xhigh` review as the normal mode
-- numeric target for recommending the mixed mode: at least 95% end-to-end success, follow-up rate <= 10%, and at least a 15% improvement in cycle time versus all-`xhigh`
-- keep abstract, complex, or high-blast-radius work on `high`/`xhigh` by default until separate numbers say otherwise
+- run an experimental explicit opt-in measurement of `gpt-5.6-terra` `medium` for the main working pass with a `gpt-5.6-sol` review explicitly overridden to `high`, and compare that against the Sol `high` `maximum` profile
+- keep an easy toggle between the two explicit profiles:
+  - `mixed`: `gpt-5.6-terra` `medium` main pass plus `gpt-5.6-sol` review with an explicit `high` effort override
+  - `maximum`: `gpt-5.6-sol` / `high` for the whole slice
+- require a sample of 20 slices before considering whether `mixed` should stop being experimental and become a normal-work recommendation
+- numeric target for recommending the mixed mode: at least 95% end-to-end success, follow-up rate <= 10%, and at least a 15% improvement in cycle time versus `maximum`
+- separately measure Sol `high` vs Sol `xhigh` before lowering this repo's maintainer exception; preserve this repo's current `xhigh` baseline until Sol `high` meets the same sample, success, follow-up, and improvement gate
+- keep Max as a single-task reasoning escalation and Ultra as a subagent-backed parallel-work escalation; most tasks do not need Max or Ultra, and neither becomes a default wizard profile without separate evidence
+- escalate abstract, complex, security-sensitive, or high-blast-radius slices to `xhigh` when `high` leaves unresolved risk; do not make every consumer task pay that cost
 - keep this behind the active workload so it does not compete with the active pilot-rollout and stabilization backlog

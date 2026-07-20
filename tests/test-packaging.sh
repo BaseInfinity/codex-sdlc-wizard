@@ -121,34 +121,200 @@ test_installer_writes_default_model_profile() {
     local has_profile=true
     if [ ! -f "$target_repo/.codex-sdlc/model-profile.json" ]; then
         has_profile=false
-    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.selected_profile === "mixed"'; then
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.selected_profile === "maximum"'; then
         has_profile=false
-    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.maximum && data.profiles.maximum.main_model === "gpt-5.5"'; then
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.maximum && data.profiles.maximum.main_model === "gpt-5.6-sol"'; then
         has_profile=false
-    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.maximum && data.profiles.maximum.review_model === "gpt-5.5"'; then
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.maximum && data.profiles.maximum.review_model === "gpt-5.6-sol"'; then
         has_profile=false
-    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.mixed && data.profiles.mixed.review_model === "gpt-5.5"'; then
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.mixed && data.profiles.mixed.main_model === "gpt-5.6-terra"'; then
+        has_profile=false
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles && data.profiles.mixed && data.profiles.mixed.review_model === "gpt-5.6-sol"'; then
+        has_profile=false
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles.maximum.main_reasoning === "high" && data.profiles.maximum.review_reasoning === "high"'; then
+        has_profile=false
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.profiles.mixed.main_reasoning === "medium" && data.profiles.mixed.review_reasoning === "high"'; then
+        has_profile=false
+    elif ! json_has_truthy_file "$target_repo/.codex-sdlc/model-profile.json" 'data.schema_version === 2 && data.profiles.mixed.review_effort_source === "explicit command override"'; then
         has_profile=false
     fi
 
-    if ! grep -q '^model = "gpt-5.4-mini"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+    if ! grep -q '^model = "gpt-5.6-sol"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
-    elif ! grep -q '^model_reasoning_effort = "xhigh"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+    elif ! grep -q '^model_reasoning_effort = "high"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
-    elif ! grep -q '^review_model = "gpt-5.5"' "$target_repo/.codex/config.toml" 2>/dev/null; then
+    elif ! grep -q '^review_model = "gpt-5.6-sol"' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
     elif ! grep -q '^hooks = true' "$target_repo/.codex/config.toml" 2>/dev/null; then
         has_profile=false
     elif grep -v '^[[:space:]]*#' "$target_repo/.codex/config.toml" | grep -q '^codex_hooks\s*=' 2>/dev/null; then
+        has_profile=false
+    elif ! grep -Fq 'Baseline reasoning: `high`' "$target_repo/AGENTS.md" 2>/dev/null; then
+        has_profile=false
+    elif ! grep -Eqi 'xhigh.*(security|migration|destructive|long-running|difficult)' "$target_repo/AGENTS.md" 2>/dev/null; then
+        has_profile=false
+    elif grep -Eqi 'codex-sdlc-wizard itself|always keep this repo.*xhigh|wizard-repo' "$target_repo/AGENTS.md" 2>/dev/null; then
         has_profile=false
     fi
 
     rm -rf "$adapter_clone" "$target_repo"
 
     if [ "$has_profile" = "true" ]; then
-        pass "Installer writes the default mixed model profile with xhigh reasoning into metadata and repo-local Codex config"
+        pass "Installer writes the default maximum Sol model profile with high reasoning into metadata and repo-local Codex config"
     else
-        fail "Installer did not write the expected xhigh default mixed model profile into metadata and .codex/config.toml"
+        fail "Installer did not write the expected high default maximum Sol model profile into metadata and .codex/config.toml"
+    fi
+}
+
+test_installer_renders_explicit_mixed_baseline() {
+    local adapter_clone target_repo valid=true
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+
+    (
+        cd "$target_repo"
+        CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 \
+            bash "$adapter_clone/install.sh" --model-profile mixed >/dev/null 2>&1
+    ) || valid=false
+
+    grep -Fq 'Selected profile: `mixed`' "$target_repo/AGENTS.md" 2>/dev/null || valid=false
+    grep -Fq 'Baseline reasoning: `medium`' "$target_repo/AGENTS.md" 2>/dev/null || valid=false
+    grep -q '^model = "gpt-5.6-terra"' "$target_repo/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model_reasoning_effort = "medium"' "$target_repo/.codex/config.toml" 2>/dev/null || valid=false
+    grep -Eq '\{\{(MODEL_PROFILE|REASONING_BASELINE)\}\}' "$target_repo/AGENTS.md" 2>/dev/null && valid=false
+
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if [ "$valid" = "true" ]; then
+        pass "Direct installer renders AGENTS baseline from the explicit mixed profile"
+    else
+        fail "Direct installer wrote contradictory AGENTS guidance for the explicit mixed profile"
+    fi
+}
+
+test_installer_rejects_unsupported_codex_before_mutation() {
+    local target_repo fakebin output status valid=true
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-fake-bin.XXXXXX")
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+    echo "launcher 9.9.9 warning"
+    echo "codex-cli 0.143.9"
+    exit 0
+fi
+exit 99
+EOF
+    chmod +x "$fakebin/codex"
+
+    set +e
+    output=$(
+        cd "$target_repo"
+        CODEX_HOME="$target_repo/.codex-home" PATH="$fakebin:$PATH" bash "$REPO_DIR/install.sh" 2>&1
+    )
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || valid=false
+    echo "$output" | grep -Fq 'Codex CLI 0.144.0 or newer' || valid=false
+    echo "$output" | grep -Fq 'npm install -g @openai/codex@latest' || valid=false
+    [ ! -e "$target_repo/AGENTS.md" ] || valid=false
+    [ ! -e "$target_repo/.codex" ] || valid=false
+    [ ! -e "$target_repo/.codex-sdlc" ] || valid=false
+    [ ! -e "$target_repo/.codex-home" ] || valid=false
+
+    rm -rf "$target_repo" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "Direct installer rejects unsupported Codex versions before mutating the target repo"
+    else
+        fail "Direct installer did not reject an unsupported Codex version before mutation"
+    fi
+}
+
+test_installer_rejects_missing_or_unqueryable_configured_codex_before_mutation() {
+    local mode target_repo fakebin configured_bin output status valid=true
+
+    for mode in missing unqueryable reasoning-disabled; do
+        target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+        fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-fake-bin.XXXXXX")
+        configured_bin="$fakebin/codex"
+
+        if [ "$mode" = "unqueryable" ]; then
+            cat > "$configured_bin" <<'EOF'
+#!/bin/sh
+exit 42
+EOF
+            chmod +x "$configured_bin"
+        fi
+
+        local disable_reasoning=0
+        if [ "$mode" = "reasoning-disabled" ]; then
+            disable_reasoning=1
+        fi
+
+        set +e
+        output=$(
+            cd "$target_repo"
+            CODEX_HOME="$target_repo/.codex-home" \
+                CODEX_SDLC_CODEX_BIN="$configured_bin" \
+                CODEX_SDLC_DISABLE_REASONING="$disable_reasoning" \
+                bash "$REPO_DIR/install.sh" 2>&1
+        )
+        status=$?
+        set -e
+
+        [ "$status" -ne 0 ] || valid=false
+        echo "$output" | grep -Fq 'Codex CLI 0.144.0 or newer' || valid=false
+        echo "$output" | grep -Fq 'npm install -g @openai/codex@latest' || valid=false
+        [ ! -e "$target_repo/AGENTS.md" ] || valid=false
+        [ ! -e "$target_repo/.codex" ] || valid=false
+        [ ! -e "$target_repo/.codex-sdlc" ] || valid=false
+        [ ! -e "$target_repo/.codex-home" ] || valid=false
+
+        rm -rf "$target_repo" "$fakebin"
+    done
+
+    if [ "$valid" = "true" ]; then
+        pass "Direct installer rejects missing or unqueryable configured Codex binaries before mutation"
+    else
+        fail "Direct installer accepted a missing or unqueryable configured Codex binary"
+    fi
+}
+
+test_installer_rejects_minimum_version_prerelease_before_mutation() {
+    local target_repo fakebin output status valid=true
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-fake-bin.XXXXXX")
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+echo "codex-cli 0.144.0-beta.1"
+EOF
+    chmod +x "$fakebin/codex"
+
+    set +e
+    output=$(
+        cd "$target_repo"
+        CODEX_HOME="$target_repo/.codex-home" PATH="$fakebin:$PATH" bash "$REPO_DIR/install.sh" 2>&1
+    )
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || valid=false
+    echo "$output" | grep -Fq 'Codex CLI 0.144.0 or newer' || valid=false
+    [ ! -e "$target_repo/AGENTS.md" ] || valid=false
+    [ ! -e "$target_repo/.codex" ] || valid=false
+
+    rm -rf "$target_repo" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "Direct installer rejects a prerelease of the minimum supported Codex version"
+    else
+        fail "Direct installer accepted a prerelease below the minimum stable Codex version"
     fi
 }
 
@@ -201,11 +367,11 @@ test_installer_recommends_current_codex_restart_resume() {
 
     rm -rf "$adapter_clone" "$target_repo"
 
-    if echo "$output" | grep -q "codex -m gpt-5.4-mini -c 'model_reasoning_effort=\"xhigh\"'" &&
+    if echo "$output" | grep -q "codex -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"'" &&
        echo "$output" | grep -Eqi 'exit and reopen Codex|restart Codex' &&
        echo "$output" | grep -Eqi '/hooks.*review|review.*\/hooks' &&
-       echo "$output" | grep -q "codex resume -m gpt-5.5" &&
-       echo "$output" | grep -Fq 'model_reasoning_effort="xhigh"' &&
+       echo "$output" | grep -q "codex resume -m gpt-5.6-sol" &&
+       echo "$output" | grep -Fq 'model_reasoning_effort="high"' &&
        ! echo "$output" | grep -q -- '--full-auto'; then
         pass "Installer output recommends current Codex restart/resume after setup"
     else
@@ -231,8 +397,8 @@ test_installer_prints_explicit_yolo_style_flags() {
 
     if echo "$output" | grep -qi 'yolo-style sessions' &&
        echo "$output" | grep -q -- '--dangerously-bypass-approvals-and-sandbox' &&
-       echo "$output" | grep -Fq "codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'" &&
-       echo "$output" | grep -Fq "codex resume --dangerously-bypass-approvals-and-sandbox -m gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"'" &&
+       echo "$output" | grep -Fq "codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"'" &&
+       echo "$output" | grep -Fq "codex resume --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"'" &&
        echo "$output" | grep -Eqi 'yolo.*shorthand|shorthand.*yolo' &&
        echo "$output" | grep -Eqi 'fully trust|full-trust' &&
        echo "$output" | grep -Eqi 'full-auto.*not.*full-trust|full-trust.*not.*full-auto'; then
@@ -261,10 +427,12 @@ test_installer_mentions_model_profile_tradeoff() {
     if echo "$output" | grep -qi 'mixed' &&
        echo "$output" | grep -qi 'maximum' &&
        echo "$output" | grep -Eqi 'speed|token|latency' &&
-       echo "$output" | grep -qi 'stability'; then
-        pass "Installer output explains the mixed versus maximum model-profile tradeoff"
+       echo "$output" | grep -qi 'stability' &&
+       echo "$output" | grep -Eqi 'Sol high.*(default|normal).*(driver|work)|default.*Sol high.*(driver|work)' &&
+       echo "$output" | grep -Eqi 'mixed.*experimental.*explicit opt-in|experimental.*mixed.*explicit opt-in'; then
+        pass "Installer output recommends Sol high and marks mixed as experimental opt-in"
     else
-        fail "Installer output does not explain the mixed versus maximum profile tradeoff"
+        fail "Installer output does not explain the Sol-high default and experimental mixed tradeoff"
     fi
 }
 
@@ -479,7 +647,7 @@ test_readme_recommends_full_auto() {
     local has_manual_fallback=true
     local explains_full_trust=true
 
-    grep -q 'codex -m gpt-5.5' "$README" || has_current_start=false
+    grep -q 'codex -m gpt-5.6-sol' "$README" || has_current_start=false
     grep -q 'plain `codex`' "$README" || has_manual_fallback=false
     grep -q -- '--dangerously-bypass-approvals-and-sandbox' "$README" || explains_full_trust=false
     grep -Eqi 'full-auto.*not.*full-trust|full-trust.*not.*full-auto' "$README" || explains_full_trust=false
@@ -560,7 +728,7 @@ test_readme_documents_current_codex_hook_surface() {
     local has_active_subset=true
     local has_all_event_names=true
 
-    grep -q 'Codex CLI `0.130.0`' "$README" || has_current_version=false
+    grep -q 'Codex CLI `0.144.0+`' "$README" || has_current_version=false
     grep -q 'eight hook events' "$README" || has_eight_hooks=false
     grep -q 'actively installs `SessionStart`, `PreToolUse`, `PreCompact`, and `PostCompact`' "$README" || has_active_subset=false
 
@@ -572,9 +740,9 @@ test_readme_documents_current_codex_hook_surface() {
        [ "$has_eight_hooks" = "true" ] &&
        [ "$has_active_subset" = "true" ] &&
        [ "$has_all_event_names" = "true" ]; then
-        pass "README documents the current Codex 0.130.0 hook surface and active subset"
+        pass "README documents the minimum GPT-5.6 Codex version, hook surface, and active subset"
     else
-        fail "README does not document the current Codex hook surface and active subset"
+        fail "README does not document the minimum GPT-5.6 Codex version and current hook surface"
     fi
 }
 
@@ -614,35 +782,47 @@ test_readme_documents_model_profiles() {
     local has_mixed=true
     local has_maximum=true
     local has_tradeoff=true
-    local has_gpt55=true
+    local has_gpt56=true
     local has_confidence_rule=true
     local has_repo_maximum_rule=true
     local has_bootstrap_maximum_rule=true
-    local has_routine_mixed_rule=true
+    local has_sol_driver_default=true
+    local has_experimental_mixed_rule=true
+    local avoids_routine_mixed_recommendation=true
+    local has_adaptive_reasoning_policy=true
 
     grep -q '^## Model Profiles$' "$README" || has_heading=false
     grep -q '`mixed`' "$README" || has_mixed=false
     grep -q '`maximum`' "$README" || has_maximum=false
-    grep -q 'gpt-5.5' "$README" || has_gpt55=false
+    grep -q 'gpt-5.6-sol' "$README" || has_gpt56=false
+    grep -q 'gpt-5.6-terra' "$README" || has_gpt56=false
+    grep -q 'gpt-5.6-luna' "$README" || has_gpt56=false
     grep -Eqi 'speed|latency|token' "$README" || has_tradeoff=false
     grep -Eqi 'stability|ultimate' "$README" || has_tradeoff=false
     grep -Eqi '95%|xhigh review|research more first' "$README" || has_confidence_rule=false
     grep -Eqi 'this repo.*maximum|wizard repo.*maximum|codex-sdlc-wizard itself.*maximum' "$README" || has_repo_maximum_rule=false
     grep -Eqi 'setup/update.*maximum|bootstrap.*maximum' "$README" || has_bootstrap_maximum_rule=false
-    grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' "$README" || has_routine_mixed_rule=false
+    grep -Eqi 'Sol `high`.*(normal|default|standing).*(driver|root|work)|normal.*(driver|root|work).*Sol `high`' "$README" || has_sol_driver_default=false
+    grep -Eqi '`mixed`.*experimental.*explicit opt-in|experimental.*`mixed`.*explicit opt-in' "$README" || has_experimental_mixed_rule=false
+    grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed' "$README" && avoids_routine_mixed_recommendation=false
+    grep -Eqi 'consumer.*default.*`high`|agentic coding.*default.*`high`|default.*`high`.*agentic' "$README" || has_adaptive_reasoning_policy=false
+    grep -Eqi 'xhigh.*(security|migration|destructive|long-running|difficult)|security.*xhigh|migration.*xhigh' "$README" || has_adaptive_reasoning_policy=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$has_mixed" = "true" ] &&
        [ "$has_maximum" = "true" ] &&
-       [ "$has_gpt55" = "true" ] &&
+       [ "$has_gpt56" = "true" ] &&
        [ "$has_tradeoff" = "true" ] &&
        [ "$has_confidence_rule" = "true" ] &&
        [ "$has_repo_maximum_rule" = "true" ] &&
        [ "$has_bootstrap_maximum_rule" = "true" ] &&
-       [ "$has_routine_mixed_rule" = "true" ]; then
-        pass "README documents the bootstrap maximum rule, routine mixed guidance, and this repo's maximum-only policy"
+       [ "$has_sol_driver_default" = "true" ] &&
+       [ "$has_experimental_mixed_rule" = "true" ] &&
+       [ "$avoids_routine_mixed_recommendation" = "true" ] &&
+       [ "$has_adaptive_reasoning_policy" = "true" ]; then
+        pass "README documents Sol high as the normal driver, mixed as experimental opt-in, and this repo's maximum-only policy"
     else
-        fail "README does not document the bootstrap maximum rule, routine mixed guidance, and this repo's maximum-only policy clearly enough"
+        fail "README does not document the Sol-high default, experimental mixed policy, and this repo's maximum-only policy clearly enough"
     fi
 }
 
@@ -652,6 +832,8 @@ test_readme_documents_native_codex_review() {
     local has_base=true
     local has_commit=true
     local has_review_model=true
+    local has_explicit_high_review=true
+    local explains_review_effort_boundary=true
     local explains_auto_review_boundary=true
     local avoids_autoreview_requirement=true
 
@@ -659,7 +841,9 @@ test_readme_documents_native_codex_review() {
     grep -q 'codex review --uncommitted' "$README" || has_uncommitted=false
     grep -q 'codex review --base' "$README" || has_base=false
     grep -q 'codex review --commit' "$README" || has_commit=false
-    grep -q 'review_model = "gpt-5.5"' "$README" || has_review_model=false
+    grep -q 'review_model = "gpt-5.6-sol"' "$README" || has_review_model=false
+    grep -Fq "codex -c 'model_reasoning_effort=\"high\"' review --uncommitted" "$README" || has_explicit_high_review=false
+    grep -Eqi 'review_model.*(does not|doesn.t).*reasoning|reasoning.*(does not|doesn.t).*review_model' "$README" || explains_review_effort_boundary=false
     grep -Eqi 'auto_review.*approval|approval.*auto_review' "$README" || explains_auto_review_boundary=false
     grep -Eqi '(must|always|requires).*/autoreview|/autoreview.*(must|always)' "$README" && avoids_autoreview_requirement=false
 
@@ -668,6 +852,8 @@ test_readme_documents_native_codex_review() {
        [ "$has_base" = "true" ] &&
        [ "$has_commit" = "true" ] &&
        [ "$has_review_model" = "true" ] &&
+       [ "$has_explicit_high_review" = "true" ] &&
+       [ "$explains_review_effort_boundary" = "true" ] &&
        [ "$explains_auto_review_boundary" = "true" ] &&
        [ "$avoids_autoreview_requirement" = "true" ]; then
         pass "README documents native Codex review without requiring unsupported autoreview slash commands"
@@ -883,6 +1069,10 @@ test_installer_smoke_test_clean_project
 test_installer_scaffolds_only_default_repo_scope_sdlc_skill
 test_installer_uses_canonical_sdlc_skill_name
 test_installer_writes_default_model_profile
+test_installer_renders_explicit_mixed_baseline
+test_installer_rejects_unsupported_codex_before_mutation
+test_installer_rejects_missing_or_unqueryable_configured_codex_before_mutation
+test_installer_rejects_minimum_version_prerelease_before_mutation
 test_installer_recommends_current_codex_restart_resume
 test_installer_prints_explicit_yolo_style_flags
 test_installer_mentions_model_profile_tradeoff

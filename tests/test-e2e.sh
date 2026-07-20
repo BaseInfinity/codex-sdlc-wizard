@@ -11,7 +11,7 @@ PASSED=0
 FAILED=0
 SKIPPED=0
 CODEX_E2E="${CODEX_E2E:-0}"
-CODEX_E2E_MODEL="${CODEX_E2E_MODEL:-gpt-5.5}"
+CODEX_E2E_MODEL="${CODEX_E2E_MODEL:-gpt-5.6-sol}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -88,6 +88,7 @@ test_e2e_hooks_load() {
 
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
+        --dangerously-bypass-hook-trust \
         -s danger-full-access \
         -m "$CODEX_E2E_MODEL" \
         -c 'model_reasoning_effort="xhigh"' \
@@ -117,6 +118,7 @@ test_e2e_bash_guard_blocks_commit() {
 
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
+        --dangerously-bypass-hook-trust \
         -s danger-full-access \
         -m "$CODEX_E2E_MODEL" \
         -c 'model_reasoning_effort="xhigh"' \
@@ -142,6 +144,7 @@ test_e2e_bash_guard_blocks_push() {
 
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
+        --dangerously-bypass-hook-trust \
         -s danger-full-access \
         -m "$CODEX_E2E_MODEL" \
         -c 'model_reasoning_effort="xhigh"' \
@@ -170,6 +173,7 @@ test_e2e_normal_commands_allowed() {
 
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
+        --dangerously-bypass-hook-trust \
         -s danger-full-access \
         -m "$CODEX_E2E_MODEL" \
         -c 'model_reasoning_effort="xhigh"' \
@@ -193,6 +197,7 @@ test_e2e_session_without_agents_md() {
 
     local output exit_code=0
     output=$(cd "$ws" && codex exec \
+        --dangerously-bypass-hook-trust \
         -s danger-full-access \
         -m "$CODEX_E2E_MODEL" \
         -c 'model_reasoning_effort="xhigh"' \

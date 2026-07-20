@@ -11,9 +11,10 @@ Before editing:
 1. Restate the task in one sentence.
 2. Set a scope guard.
 3. State confidence as HIGH, MEDIUM, or LOW.
-4. Use xhigh reasoning by default for this repo. Only drop lower if the user explicitly asks for it.
-5. Define the red check first.
-6. Define the prove-it gate before coding.
+4. Use high reasoning by default. Escalate security review, migrations, destructive operations, long-running research, or unusually difficult coding to xhigh when high leaves unresolved risk. Follow any measured repo-local exception.
+5. Treat Max as a single-task escalation and Ultra as subagent-backed parallel-work escalation; most tasks do not need Max or Ultra.
+6. Define the red check first.
+7. Define the prove-it gate before coding.
 
 During implementation:
 - Make the smallest useful change.
