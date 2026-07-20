@@ -93,9 +93,10 @@ test_roadmap_lists_next_release_cycle() {
     fi
 }
 
-test_roadmap_calls_out_stale_issue_cleanup() {
+test_roadmap_records_resolved_packaging_issue() {
     local has_heading=true
-    local has_active_packaging_issue=true
+    local has_resolved_packaging_issue=true
+    local has_no_active_stabilization_fix=true
     local has_new_issue_rule=true
     local avoids_active_issue_refs=true
     local cleanup_section
@@ -107,17 +108,19 @@ test_roadmap_calls_out_stale_issue_cleanup() {
     ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    echo "$cleanup_section" | grep -Eqi '#61.*(packaging|duplicate skills)|packaging.*#61' || has_active_packaging_issue=false
+    echo "$cleanup_section" | grep -Eqi '#61.*(fixed|resolved|closed|released)|(fixed|resolved|closed|released).*#61' || has_resolved_packaging_issue=false
+    echo "$cleanup_section" | grep -Eqi 'no active (packaging|stabilization) fix|stabilization tracker.*clear' || has_no_active_stabilization_fix=false
     echo "$cleanup_section" | grep -Eqi 'open a new issue|pilot consumption exposes' || has_new_issue_rule=false
     echo "$cleanup_section" | grep -Eq '#15|#16|#17|#21|#22' && avoids_active_issue_refs=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_active_packaging_issue" = "true" ] &&
+       [ "$has_resolved_packaging_issue" = "true" ] &&
+       [ "$has_no_active_stabilization_fix" = "true" ] &&
        [ "$has_new_issue_rule" = "true" ] &&
        [ "$avoids_active_issue_refs" = "true" ]; then
-        pass "Roadmap tracks the active packaging fix and the rule for opening new issues from real consumption"
+        pass "Roadmap records the resolved packaging fix and the rule for opening new issues from real consumption"
     else
-        fail "Roadmap does not call out the active packaging fix and tracker cleanup policy"
+        fail "Roadmap does not record the resolved packaging fix and clear stabilization state"
     fi
 }
 
@@ -296,7 +299,7 @@ test_roadmap_prioritizes_pilot_rollout_before_creator_investigation() {
 test_roadmap_exists
 test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
-test_roadmap_calls_out_stale_issue_cleanup
+test_roadmap_records_resolved_packaging_issue
 test_roadmap_tracks_late_creator_investigation
 test_roadmap_tracks_goal_mode_guidance
 test_roadmap_tracks_official_codex_plugin_distribution_plan
