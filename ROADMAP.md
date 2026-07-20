@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.32` and `v0.7.32` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.33` and `v0.7.33` are the current release target for the SDLC-only default repo skill surface
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
@@ -32,6 +32,7 @@
 - sponsor metadata is now shipped for GitHub Sponsors and npm funding surfaces
 - the package now treats `$sdlc` as the single canonical public workflow entrypoint, keeps the Codex display name lowercase, and blocks legacy `$codex-sdlc` or imperative `/sdlc` wording from returning
 - setup/install now keep `$sdlc` repo-scoped, install no extra repo-scoped lifecycle skills by default, and install only global helper skills, avoiding same-name global/repo skill collisions
+- repo-root skill installs now keep bundled helper definitions under non-discoverable `SKILL.template.md` names and materialize `SKILL.md` only in intended destinations, preventing recursive duplicate skill discovery
 - setup now detects Playwright MCP browser tooling/profile policy and documents explicit opt-in isolation versus shared persistent auth-heavy flows without rewriting `.mcp.json`
 - setup/update now repair stale platform-specific hook wiring and install universal Node hook entrypoints so a checked-in `.codex/hooks.json` does not flip between macOS Bash and Windows PowerShell commands
 - setup/update now write `[features].hooks = true`, migrate deprecated `[features].codex_hooks` config, and remind users to review pending repo hooks through `/hooks`
@@ -56,13 +57,12 @@
 
 ## Next Release Cycle
 
-### 0.7.33
+### 0.7.34
 
-Purpose: continue pilot rollout after the `0.7.32` GPT-5.6 model-policy release while keeping new patches tied to proven reusable wizard bugs or verified Codex-native workflow behavior.
+Purpose: continue pilot rollout after the `0.7.33` skill-packaging stabilization release while keeping new patches tied to proven reusable wizard bugs or verified Codex-native workflow behavior.
 
 Scope:
-- keep `0.7.32` as the Sol-high consumer default, explicit mixed-profile experiment, initialized-clone update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag and compact lifecycle baseline, optional `GOALS.md` active-scope contract, manual `/goal` guidance baseline, and fail-fast unknown-argument baseline for pilot consumption
-- close [#61](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/61) by storing bundled helper definitions under non-discoverable `SKILL.template.md` names and materializing `SKILL.md` only in intended destination skill directories
+- keep `0.7.33` as the Sol-high consumer default, explicit mixed-profile experiment, initialized-clone update, current-Codex handoff/full-trust guidance, duplicate-free root skill packaging, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag and compact lifecycle baseline, optional `GOALS.md` active-scope contract, manual `/goal` guidance baseline, and fail-fast unknown-argument baseline for pilot consumption
 - keep programmatic `/goal` automation unassumed unless Codex exposes a stable CLI/API path for it
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
@@ -70,14 +70,14 @@ Scope:
 
 ## Tracker Cleanup
 
-The stabilization tracker has one active packaging fix after the `0.7.32` GPT-5.6 model-policy release: #61 prevents a repo-root skill install from recursively exposing bundled helper definitions as duplicate skills. Remaining open docs/research issues stay outside the stabilization lane.
+The stabilization tracker is clear after `0.7.33`: #61 is resolved by preventing a repo-root skill install from recursively exposing bundled helper definitions as duplicate skills. There is no active packaging or stabilization fix; remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.32` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.33` is being consumed on real repos
 
 ## Remaining Backlog
 
-After `0.7.32`, the main backlog is:
+After `0.7.33`, the main backlog is:
 
 - README/discovery cleanup for the open docs issues
 - any new reusable wizard fixes discovered during the pilot set
