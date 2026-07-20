@@ -95,7 +95,7 @@ test_roadmap_lists_next_release_cycle() {
 
 test_roadmap_calls_out_stale_issue_cleanup() {
     local has_heading=true
-    local has_clear_tracker=true
+    local has_active_packaging_issue=true
     local has_new_issue_rule=true
     local avoids_active_issue_refs=true
     local cleanup_section
@@ -107,17 +107,17 @@ test_roadmap_calls_out_stale_issue_cleanup() {
     ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    echo "$cleanup_section" | grep -Eqi 'currently clear|tracker is clear|no open issues' || has_clear_tracker=false
+    echo "$cleanup_section" | grep -Eqi '#61.*(packaging|duplicate skills)|packaging.*#61' || has_active_packaging_issue=false
     echo "$cleanup_section" | grep -Eqi 'open a new issue|pilot consumption exposes' || has_new_issue_rule=false
     echo "$cleanup_section" | grep -Eq '#15|#16|#17|#21|#22' && avoids_active_issue_refs=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_clear_tracker" = "true" ] &&
+       [ "$has_active_packaging_issue" = "true" ] &&
        [ "$has_new_issue_rule" = "true" ] &&
        [ "$avoids_active_issue_refs" = "true" ]; then
-        pass "Roadmap reflects a clear tracker and the rule for opening new issues from real consumption"
+        pass "Roadmap tracks the active packaging fix and the rule for opening new issues from real consumption"
     else
-        fail "Roadmap does not call out a clear tracker cleanup policy"
+        fail "Roadmap does not call out the active packaging fix and tracker cleanup policy"
     fi
 }
 

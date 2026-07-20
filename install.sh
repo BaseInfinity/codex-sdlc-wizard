@@ -124,28 +124,65 @@ install_repo_skill() {
 install_global_skill() {
   local skill_path="$1"
   local skill_name
+  local source_template
+  local target_path
 
   [ -d "$skill_path" ] || return 0
 
   skill_name="$(basename "$skill_path")"
-  if [ -d "$SKILLS_ROOT/$skill_name" ]; then
-    cp -R "$SKILLS_ROOT/$skill_name" "$SKILLS_BACKUP_ROOT/$skill_name.bak.$(date +%s)"
-    rm -rf "$SKILLS_ROOT/$skill_name"
+  source_template="$skill_path/SKILL.template.md"
+  target_path="$SKILLS_ROOT/$skill_name"
+  if [ ! -f "$source_template" ]; then
+    echo "Error: expected wizard skill template is missing: skill-sources/$skill_name/SKILL.template.md" >&2
+    exit 1
+  fi
+  if [ -d "$target_path" ]; then
+    cp -R "$target_path" "$SKILLS_BACKUP_ROOT/$skill_name.bak.$(date +%s)"
+    rm -rf "$target_path"
     echo "Backed up existing Codex skill: $skill_name"
   fi
   cp -R "$skill_path" "$SKILLS_ROOT/"
+  mv "$target_path/SKILL.template.md" "$target_path/SKILL.md"
   echo "Installed Codex skill: $skill_name"
 }
 
 global_skill_matches_bundle() {
   local skill_name="$1"
-  local bundled_path="$SCRIPT_DIR/skills/$skill_name"
+  local bundled_path="$SCRIPT_DIR/skill-sources/$skill_name"
   local target_path="$SKILLS_ROOT/$skill_name"
 
   [ -d "$bundled_path" ] || return 1
   [ -d "$target_path" ] || return 1
 
-  diff -qr "$bundled_path" "$target_path" >/dev/null 2>&1
+  SOURCE_PATH="$bundled_path" TARGET_PATH="$target_path" node <<'NODE'
+const fs = require("fs");
+const path = require("path");
+
+function files(root, relative = "") {
+  const current = path.join(root, relative);
+  const entries = fs.readdirSync(current, { withFileTypes: true });
+  return entries.flatMap((entry) => {
+    const child = path.join(relative, entry.name);
+    return entry.isDirectory() ? files(root, child) : [child.split(path.sep).join("/")];
+  });
+}
+
+const sourceRoot = process.env.SOURCE_PATH;
+const targetRoot = process.env.TARGET_PATH;
+const sourceFiles = files(sourceRoot).sort();
+const expectedFiles = sourceFiles
+  .map((file) => file === "SKILL.template.md" ? "SKILL.md" : file)
+  .sort();
+const targetFiles = files(targetRoot).sort();
+
+if (JSON.stringify(expectedFiles) !== JSON.stringify(targetFiles)) process.exit(1);
+for (const sourceRelative of sourceFiles) {
+  const targetRelative = sourceRelative === "SKILL.template.md" ? "SKILL.md" : sourceRelative;
+  const source = fs.readFileSync(path.join(sourceRoot, sourceRelative));
+  const target = fs.readFileSync(path.join(targetRoot, targetRelative));
+  if (!source.equals(target)) process.exit(1);
+}
+NODE
 }
 
 remove_wizard_managed_global_skill() {
@@ -211,7 +248,7 @@ copy_if_missing "$SCRIPT_DIR/PROVE-IT.md" "PROVE-IT.md" "PROVE-IT.md"
 
 mkdir -p "$SKILLS_ROOT" "$SKILLS_BACKUP_ROOT"
 for skill_name in "${GLOBAL_HELPER_SKILLS[@]}"; do
-  install_global_skill "$SCRIPT_DIR/skills/$skill_name"
+  install_global_skill "$SCRIPT_DIR/skill-sources/$skill_name"
 done
 remove_wizard_managed_global_skill "sdlc" "repo-scoped .agents/skills/sdlc is the canonical \$sdlc entrypoint"
 prune_legacy_global_skill "codex-sdlc" "sdlc"

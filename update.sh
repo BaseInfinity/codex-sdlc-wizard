@@ -167,7 +167,7 @@ legacy_core_skill_hash() {
 
 skill_support_files_match_bundle() {
     local skill_name="$1"
-    local source_path="$SCRIPT_DIR/skills/$skill_name"
+    local source_path="$SCRIPT_DIR/skill-sources/$skill_name"
     local target_path="$SKILLS_ROOT/$skill_name"
 
     SOURCE_PATH="$source_path" TARGET_PATH="$target_path" node <<'NODE'
@@ -185,7 +185,7 @@ function files(root, relative = "") {
 
 const sourceRoot = process.env.SOURCE_PATH;
 const targetRoot = process.env.TARGET_PATH;
-const sourceFiles = files(sourceRoot).filter((file) => file !== "SKILL.md").sort();
+const sourceFiles = files(sourceRoot).filter((file) => file !== "SKILL.template.md").sort();
 const targetFiles = files(targetRoot).filter((file) => file !== "SKILL.md").sort();
 
 if (JSON.stringify(sourceFiles) !== JSON.stringify(targetFiles)) process.exit(1);
@@ -224,11 +224,12 @@ is_model_policy_static_surface() {
 
 repair_skill() {
     local skill_name="$1"
-    local source_path="$SCRIPT_DIR/skills/$skill_name"
+    local source_path="$SCRIPT_DIR/skill-sources/$skill_name"
+    local source_template="$SCRIPT_DIR/skill-sources/$skill_name/SKILL.template.md"
     local target_path="$SKILLS_ROOT/$skill_name"
 
-    if [ ! -d "$source_path" ]; then
-        echo "Error: expected wizard skill is missing: skills/$skill_name" >&2
+    if [ ! -d "$source_path" ] || [ ! -f "$source_template" ]; then
+        echo "Error: expected wizard skill source is missing: skill-sources/$skill_name" >&2
         exit 1
     fi
 
@@ -240,6 +241,7 @@ repair_skill() {
     fi
 
     cp -R "$source_path" "$SKILLS_ROOT/"
+    mv "$target_path/SKILL.template.md" "$target_path/SKILL.md"
 }
 
 remove_legacy_skill() {
@@ -255,13 +257,16 @@ remove_legacy_skill() {
 
 global_skill_matches_bundle() {
     local skill_name="$1"
-    local bundled_path="$SCRIPT_DIR/skills/$skill_name"
+    local bundled_path="$SCRIPT_DIR/skill-sources/$skill_name"
     local target_path="$SKILLS_ROOT/$skill_name"
 
     [ -d "$bundled_path" ] || return 1
     [ -d "$target_path" ] || return 1
 
-    diff -qr "$bundled_path" "$target_path" >/dev/null 2>&1
+    [ -f "$bundled_path/SKILL.template.md" ] || return 1
+    [ -f "$target_path/SKILL.md" ] || return 1
+    diff -q "$bundled_path/SKILL.template.md" "$target_path/SKILL.md" >/dev/null 2>&1 \
+        && skill_support_files_match_bundle "$skill_name"
 }
 
 remove_colliding_global_skill() {

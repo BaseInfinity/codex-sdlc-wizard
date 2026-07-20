@@ -77,6 +77,65 @@ function Copy-IfMissing {
     }
 }
 
+function Install-RepoSkill {
+    param(
+        [string]$SourceRoot,
+        [string]$Name
+    )
+
+    $repoSkillSource = Join-Path $SourceRoot ".agents\skills\$Name\SKILL.md"
+    $repoSkillTarget = ".agents\skills\$Name\SKILL.md"
+
+    if (-not (Test-Path -LiteralPath $repoSkillSource -PathType Leaf)) {
+        throw "Expected repo skill is missing: .agents/skills/$Name/SKILL.md"
+    }
+
+    if (Test-Path -LiteralPath $repoSkillTarget) {
+        Write-Host "$repoSkillTarget already exists - skipping (review manually)"
+        return
+    }
+
+    New-Item -ItemType Directory -Path (Split-Path -Parent $repoSkillTarget) -Force | Out-Null
+    Copy-Item -LiteralPath $repoSkillSource -Destination $repoSkillTarget
+    Write-Host "Installed $repoSkillTarget"
+}
+
+function Test-WizardManagedSkill {
+    param(
+        [string]$SourceSkillPath,
+        [string]$InstalledSkillPath
+    )
+
+    if (-not (Test-Path -LiteralPath $SourceSkillPath -PathType Container) -or
+        -not (Test-Path -LiteralPath $InstalledSkillPath -PathType Container)) {
+        return $false
+    }
+
+    $sourceFiles = @(Get-ChildItem -LiteralPath $SourceSkillPath -File -Recurse)
+    $installedFiles = @(Get-ChildItem -LiteralPath $InstalledSkillPath -File -Recurse)
+    if ($sourceFiles.Count -ne $installedFiles.Count) {
+        return $false
+    }
+
+    foreach ($sourceFile in $sourceFiles) {
+        $relativePath = $sourceFile.FullName.Substring($SourceSkillPath.Length).TrimStart([char[]]@('\', '/'))
+        $installedRelativePath = if ($relativePath -eq "SKILL.template.md") { "SKILL.md" } else { $relativePath }
+        $installedFile = Join-Path $InstalledSkillPath $installedRelativePath
+
+        if (-not (Test-Path -LiteralPath $installedFile -PathType Leaf)) {
+            return $false
+        }
+
+        $sourceHash = (Get-FileHash -LiteralPath $sourceFile.FullName -Algorithm SHA256).Hash
+        $installedHash = (Get-FileHash -LiteralPath $installedFile -Algorithm SHA256).Hash
+        if ($sourceHash -ne $installedHash) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
 function Install-Skills {
     param(
         [string]$SourceRoot
@@ -85,13 +144,22 @@ function Install-Skills {
     $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
     $skillsRoot = Join-Path $codexHome "skills"
     $skillsBackupRoot = Join-Path $codexHome "backups\skills"
-    $sourceSkillsRoot = Join-Path $SourceRoot "skills"
+    $sourceSkillsRoot = Join-Path $SourceRoot "skill-sources"
+    $globalHelperSkills = @("feedback", "setup-wizard", "update-wizard")
     New-Item -ItemType Directory -Path $skillsRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $skillsBackupRoot -Force | Out-Null
 
-    Get-ChildItem -LiteralPath $sourceSkillsRoot -Directory | ForEach-Object {
-        $skillName = $_.Name
+    $globalHelperSkills | ForEach-Object {
+        $skillName = $_
+        $sourceSkillPath = Join-Path $sourceSkillsRoot $skillName
+        $sourceTemplatePath = Join-Path $sourceSkillPath "SKILL.template.md"
         $installedSkillPath = Join-Path $skillsRoot $skillName
+        $installedTemplatePath = Join-Path $installedSkillPath "SKILL.template.md"
+        $installedSkillFile = Join-Path $installedSkillPath "SKILL.md"
+
+        if (-not (Test-Path -LiteralPath $sourceTemplatePath -PathType Leaf)) {
+            throw "Expected wizard skill template is missing: skill-sources/$skillName/SKILL.template.md"
+        }
 
         if (Test-Path -LiteralPath $installedSkillPath) {
             $timestamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -101,8 +169,23 @@ function Install-Skills {
             Write-Host "Backed up existing Codex skill: $skillName"
         }
 
-        Copy-Item -LiteralPath $_.FullName -Destination $skillsRoot -Recurse
+        Copy-Item -LiteralPath $sourceSkillPath -Destination $skillsRoot -Recurse
+        Move-Item -LiteralPath $installedTemplatePath -Destination $installedSkillFile
         Write-Host "Installed Codex skill: $skillName"
+    }
+
+    $collidingSdlcSourcePath = Join-Path $sourceSkillsRoot "sdlc"
+    $collidingSdlcPath = Join-Path $skillsRoot "sdlc"
+    if (Test-Path -LiteralPath $collidingSdlcPath -PathType Container) {
+        if (Test-WizardManagedSkill -SourceSkillPath $collidingSdlcSourcePath -InstalledSkillPath $collidingSdlcPath) {
+            $timestamp = Get-Date -Format "yyyyMMddHHmmss"
+            $backupPath = Join-Path $skillsBackupRoot "sdlc.bak.$timestamp"
+            Copy-Item -LiteralPath $collidingSdlcPath -Destination $backupPath -Recurse
+            Remove-Item -LiteralPath $collidingSdlcPath -Recurse -Force
+            Write-Host "Removed wizard-managed global Codex skill: sdlc (repo-scoped .agents/skills/sdlc is canonical)"
+        } else {
+            Write-Host "Preserved user-owned global Codex skill: sdlc"
+        }
     }
 
     $legacySkillPath = Join-Path $skillsRoot "codex-sdlc"
@@ -320,6 +403,7 @@ Copy-IfMissing -Source (Join-Path $scriptDir "START-SDLC.md") -Destination "STAR
 Copy-IfMissing -Source (Join-Path $scriptDir "PROVE-IT.md") -Destination "PROVE-IT.md" -Label "PROVE-IT.md"
 Copy-IfMissing -Source (Join-Path $scriptDir "start-sdlc.ps1") -Destination "start-sdlc.ps1" -Label "start-sdlc.ps1"
 Install-Skills -SourceRoot $scriptDir
+Install-RepoSkill -SourceRoot $scriptDir -Name "sdlc"
 
 New-Item -ItemType Directory -Path ".codex" -Force | Out-Null
 New-Item -ItemType Directory -Path ".codex\hooks" -Force | Out-Null

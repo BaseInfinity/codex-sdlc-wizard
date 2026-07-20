@@ -1866,7 +1866,7 @@ test_agents_md_size() {
 }
 
 test_setup_skill_has_confidence_setup_contract() {
-    local skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/setup-wizard/SKILL.template.md"
 
     if grep -q 'resolved (detected)' "$skill" \
         && grep -q 'resolved (inferred)' "$skill" \
@@ -1879,7 +1879,7 @@ test_setup_skill_has_confidence_setup_contract() {
 }
 
 test_update_skill_has_idempotent_update_contract() {
-    local skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/update-wizard/SKILL.template.md"
 
     if grep -q 'match' "$skill" \
         && grep -q 'missing' "$skill" \
@@ -1893,7 +1893,7 @@ test_update_skill_has_idempotent_update_contract() {
 }
 
 test_update_skill_has_sol_high_default_contract() {
-    local skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/update-wizard/SKILL.template.md"
 
     if grep -Eqi 'Sol `high`.*(standing|default|normal).*(driver|root)|default.*(driver|root).*Sol `high`' "$skill" \
         && grep -Eqi '`mixed`.*experimental.*explicit opt-in|experimental.*`mixed`.*explicit opt-in' "$skill" \
@@ -1906,8 +1906,8 @@ test_update_skill_has_sol_high_default_contract() {
 }
 
 test_skills_document_hooks_feature_rename() {
-    local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
-    local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local setup_skill="$REPO_DIR/skill-sources/setup-wizard/SKILL.template.md"
+    local update_skill="$REPO_DIR/skill-sources/update-wizard/SKILL.template.md"
     local all_passed=true
 
     grep -Fq '[features].hooks' "$setup_skill" || all_passed=false
@@ -1925,7 +1925,7 @@ test_skills_document_hooks_feature_rename() {
 }
 
 test_update_skill_frontloads_package_upgrade_boundary() {
-    local skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/update-wizard/SKILL.template.md"
     local readme="$REPO_DIR/README.md"
 
     if grep -Fq 'Package upgrade preflight' "$skill" \
@@ -1945,10 +1945,10 @@ test_update_skill_frontloads_package_upgrade_boundary() {
 }
 
 test_helper_skill_metadata_uses_codex_sdlc_not_xdlc() {
-    local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
-    local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
-    local setup_openai="$REPO_DIR/skills/setup-wizard/agents/openai.yaml"
-    local update_openai="$REPO_DIR/skills/update-wizard/agents/openai.yaml"
+    local setup_skill="$REPO_DIR/skill-sources/setup-wizard/SKILL.template.md"
+    local update_skill="$REPO_DIR/skill-sources/update-wizard/SKILL.template.md"
+    local setup_openai="$REPO_DIR/skill-sources/setup-wizard/agents/openai.yaml"
+    local update_openai="$REPO_DIR/skill-sources/update-wizard/agents/openai.yaml"
     local all_passed=true
 
     if grep -REiq 'Codex[[:space:]]+XDLC|XDLC[[:space:]]+adapter|host adapter core|core metadata' \
@@ -1973,8 +1973,8 @@ test_helper_skill_metadata_uses_codex_sdlc_not_xdlc() {
 }
 
 test_setup_and_update_skills_stop_before_product_remediation() {
-    local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
-    local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+    local setup_skill="$REPO_DIR/skill-sources/setup-wizard/SKILL.template.md"
+    local update_skill="$REPO_DIR/skill-sources/update-wizard/SKILL.template.md"
     local all_passed=true
 
     for skill in "$setup_skill" "$update_skill"; do
@@ -2025,7 +2025,7 @@ test_setup_and_update_skills_stop_before_product_remediation() {
 }
 
 test_feedback_skill_has_privacy_prompt_and_dedupe() {
-    local skill="$REPO_DIR/skills/feedback/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/feedback/SKILL.template.md"
 
     if grep -q 'May I scan\?' "$skill" \
         && grep -q 'Check for duplicates' "$skill" \
@@ -2037,7 +2037,7 @@ test_feedback_skill_has_privacy_prompt_and_dedupe() {
 }
 
 test_setup_docs_include_codex_desktop_handoff() {
-    local skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/setup-wizard/SKILL.template.md"
     local loop="$REPO_DIR/SDLC-LOOP.md"
 
     if grep -q 'Codex Desktop handoff' "$loop" \
@@ -2053,7 +2053,7 @@ test_setup_docs_include_codex_desktop_handoff() {
 }
 
 test_setup_docs_include_m365_auth_lane_guidance() {
-    local skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/setup-wizard/SKILL.template.md"
     local loop="$REPO_DIR/SDLC-LOOP.md"
 
     if grep -q 'Microsoft 365 auth lane' "$loop" \
@@ -2073,9 +2073,9 @@ test_setup_docs_include_m365_auth_lane_guidance() {
 }
 
 test_setup_docs_include_task_routing_gate() {
-    local skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/setup-wizard/SKILL.template.md"
     local loop="$REPO_DIR/SDLC-LOOP.md"
-    local sdlc_skill="$REPO_DIR/skills/sdlc/SKILL.md"
+    local sdlc_skill="$REPO_DIR/skill-sources/sdlc/SKILL.template.md"
 
     if grep -q 'Task routing gate' "$loop" \
         && grep -q 'Identify the execution lane before giving instructions' "$loop" \
@@ -2095,7 +2095,7 @@ test_setup_docs_include_task_routing_gate() {
 }
 
 test_sdlc_skill_has_docsync_learning_and_merge_guard() {
-    local skill="$REPO_DIR/skills/sdlc/SKILL.md"
+    local skill="$REPO_DIR/skill-sources/sdlc/SKILL.template.md"
 
     if grep -q 'docs update' "$skill" \
         && grep -q 'capture learnings' "$skill" \
@@ -2129,7 +2129,7 @@ test_repo_separates_consumer_high_default_from_maintainer_xhigh_exception() {
         all_passed=false
     fi
 
-    if ! grep -q 'default: `high`' "$REPO_DIR/skills/sdlc/SKILL.md"; then
+    if ! grep -q 'default: `high`' "$REPO_DIR/skill-sources/sdlc/SKILL.template.md"; then
         fail "sdlc skill does not set high as the portable default reasoning policy"
         all_passed=false
     fi
@@ -2310,7 +2310,7 @@ test_package_has_npm_release_surface() {
         ".agents/" \
         "agents/" \
         "bin/" \
-        "skills/" \
+        "skill-sources/" \
         ".codex/config.toml" \
         ".codex/hooks.json" \
         ".codex/unix-hooks.json" \
@@ -2375,17 +2375,17 @@ test_package_uses_single_canonical_sdlc_skill_name() {
     local all_passed=true
     local bad_slash_sdlc
 
-    [ -f "$REPO_DIR/skills/sdlc/SKILL.md" ] || all_passed=false
-    [ ! -e "$REPO_DIR/skills/codex-sdlc" ] || all_passed=false
-    grep -q '^name: sdlc$' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
-    grep -q '^  display_name: sdlc$' "$REPO_DIR/skills/sdlc/agents/openai.yaml" || all_passed=false
+    [ -f "$REPO_DIR/skill-sources/sdlc/SKILL.template.md" ] || all_passed=false
+    [ ! -e "$REPO_DIR/skill-sources/codex-sdlc" ] || all_passed=false
+    grep -q '^name: sdlc$' "$REPO_DIR/skill-sources/sdlc/SKILL.template.md" || all_passed=false
+    grep -q '^  display_name: sdlc$' "$REPO_DIR/skill-sources/sdlc/agents/openai.yaml" || all_passed=false
     grep -Fq 'Canonical entrypoint: `$sdlc`' "$REPO_DIR/README.md" || all_passed=false
     grep -Fq 'Codex treats same-name skills from different scopes as distinct choices' "$REPO_DIR/README.md" || all_passed=false
     grep -Fq 'normal setup installs global helper skills only' "$REPO_DIR/README.md" || all_passed=false
-    grep -Fq 'Canonical entrypoint: `$sdlc`' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
-    grep -Fq 'do not pretend Codex has a native `/sdlc` command' "$REPO_DIR/skills/sdlc/SKILL.md" || all_passed=false
-    grep -RE '\$codex-sdlc([^A-Za-z0-9_-]|$)' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skills" 2>/dev/null && all_passed=false
-    bad_slash_sdlc=$(grep -REin '(invoke|run|use|type|call|start|enter|execute)[[:space:]]+(the[[:space:]]+)?`?/sdlc`?' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skills" "$REPO_DIR/START-SDLC.md" "$REPO_DIR/SDLC-LOOP.md" 2>/dev/null || true)
+    grep -Fq 'Canonical entrypoint: `$sdlc`' "$REPO_DIR/skill-sources/sdlc/SKILL.template.md" || all_passed=false
+    grep -Fq 'do not pretend Codex has a native `/sdlc` command' "$REPO_DIR/skill-sources/sdlc/SKILL.template.md" || all_passed=false
+    grep -RE '\$codex-sdlc([^A-Za-z0-9_-]|$)' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skill-sources" 2>/dev/null && all_passed=false
+    bad_slash_sdlc=$(grep -REin '(invoke|run|use|type|call|start|enter|execute)[[:space:]]+(the[[:space:]]+)?`?/sdlc`?' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skill-sources" "$REPO_DIR/START-SDLC.md" "$REPO_DIR/SDLC-LOOP.md" 2>/dev/null || true)
     [ -z "$bad_slash_sdlc" ] || all_passed=false
 
     if [ "$all_passed" = "true" ]; then

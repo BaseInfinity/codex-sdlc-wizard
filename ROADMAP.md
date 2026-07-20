@@ -62,6 +62,7 @@ Purpose: continue pilot rollout after the `0.7.32` GPT-5.6 model-policy release 
 
 Scope:
 - keep `0.7.32` as the Sol-high consumer default, explicit mixed-profile experiment, initialized-clone update, current-Codex handoff/full-trust guidance, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag and compact lifecycle baseline, optional `GOALS.md` active-scope contract, manual `/goal` guidance baseline, and fail-fast unknown-argument baseline for pilot consumption
+- close [#61](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/61) by storing bundled helper definitions under non-discoverable `SKILL.template.md` names and materializing `SKILL.md` only in intended destination skill directories
 - keep programmatic `/goal` automation unassumed unless Codex exposes a stable CLI/API path for it
 - address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
@@ -69,7 +70,7 @@ Scope:
 
 ## Tracker Cleanup
 
-The stabilization tracker is currently clear after the `0.7.32` GPT-5.6 model-policy release. Remaining open docs/research issues stay outside the stabilization lane.
+The stabilization tracker has one active packaging fix after the `0.7.32` GPT-5.6 model-policy release: #61 prevents a repo-root skill install from recursively exposing bundled helper definitions as duplicate skills. Remaining open docs/research issues stay outside the stabilization lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
 - avoid speculative backlog churn while `0.7.32` is being consumed on real repos

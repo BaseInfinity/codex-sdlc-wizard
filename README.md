@@ -315,6 +315,8 @@ Canonical entrypoint: `$sdlc`. `/sdlc` is historical shorthand for the missing s
 
 Codex treats same-name skills from different scopes as distinct choices. To avoid duplicate `$sdlc` workflow rows, normal setup installs global helper skills only (`feedback`, `setup-wizard`, and `update-wizard`) and keeps `.agents/skills/sdlc` as the canonical repo-scoped workflow.
 
+The repository keeps installable helper definitions under `skill-sources/` as `SKILL.template.md` files. This matters when the repo root is installed as `$codex-sdlc-wizard`: Codex recursively discovers nested files named `SKILL.md` inside that global bundle, which would otherwise duplicate the repo workflow and direct global helpers. Setup/update materialize the standard `SKILL.md` filename only in each intended direct global helper destination.
+
 These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so repo-scoped skills are loaded cleanly.
 
 The bridge here is explicit, not magical: this adapter ships the Codex-native skill copies that target repos consume. It does not depend on local `.claude/skills/*` paths being present in the target repo.

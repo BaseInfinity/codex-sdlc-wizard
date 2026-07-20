@@ -10,6 +10,7 @@ SKILL_MD="$REPO_DIR/SKILL.md"
 OPENAI_YAML="$REPO_DIR/agents/openai.yaml"
 REPO_SDLC_SKILL="$REPO_DIR/.agents/skills/sdlc/SKILL.md"
 REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
+GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
 REPO_AGENTS="$REPO_DIR/AGENTS.md"
 PASSED=0
 FAILED=0
@@ -210,6 +211,38 @@ test_default_repo_scoped_skill_surface_is_sdlc_only() {
     fi
 }
 
+test_root_skill_bundle_avoids_nested_skill_discovery() {
+    local avoids_nested_skill_files=true
+    local has_installable_sources=true
+    local powershell_materializes_sources=true
+    local skill_name
+
+    if find "$GLOBAL_SKILL_SOURCES" -name SKILL.md -print -quit 2>/dev/null | grep -q .; then
+        avoids_nested_skill_files=false
+    fi
+
+    for skill_name in feedback sdlc setup-wizard update-wizard; do
+        [ -f "$GLOBAL_SKILL_SOURCES/$skill_name/SKILL.template.md" ] || has_installable_sources=false
+    done
+
+    grep -Fq '$sourceSkillsRoot = Join-Path $SourceRoot "skill-sources"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq '$globalHelperSkills = @("feedback", "setup-wizard", "update-wizard")' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq '$installedTemplatePath = Join-Path $installedSkillPath "SKILL.template.md"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq 'Move-Item -LiteralPath $installedTemplatePath -Destination $installedSkillFile' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq 'Install-RepoSkill -SourceRoot $scriptDir -Name "sdlc"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq '$repoSkillTarget = ".agents\skills\$Name\SKILL.md"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq '$collidingSdlcPath = Join-Path $skillsRoot "sdlc"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq 'Test-WizardManagedSkill' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+
+    if [ "$avoids_nested_skill_files" = "true" ] &&
+       [ "$has_installable_sources" = "true" ] &&
+       [ "$powershell_materializes_sources" = "true" ]; then
+        pass "Root bundle templates avoid recursive discovery and materialize on shell and PowerShell paths"
+    else
+        fail "Root bundle templates are discoverable, missing, or not materialized by the PowerShell installer"
+    fi
+}
+
 test_repo_scoped_skills_are_codex_native() {
     local has_no_todowrite=true
     local has_no_slash_review=true
@@ -307,6 +340,7 @@ test_skill_recommends_current_codex_after_install
 test_skill_documents_model_profiles
 test_repo_contract_keeps_this_repo_on_maximum
 test_default_repo_scoped_skill_surface_is_sdlc_only
+test_root_skill_bundle_avoids_nested_skill_discovery
 test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
