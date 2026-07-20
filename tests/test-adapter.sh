@@ -76,7 +76,7 @@ payload_for_compact() {
     HOOK_EVENT="$1" TRIGGER_TEXT="${2:-auto}" CWD_TEXT="${3:-$PWD}" node -e 'process.stdout.write(JSON.stringify({
       cwd: process.env.CWD_TEXT,
       hook_event_name: process.env.HOOK_EVENT,
-      model: "gpt-5.5",
+      model: "gpt-5.6-sol",
       session_id: "session-test",
       transcript_path: null,
       trigger: process.env.TRIGGER_TEXT,
@@ -1892,6 +1892,19 @@ test_update_skill_has_idempotent_update_contract() {
     fi
 }
 
+test_update_skill_has_sol_high_default_contract() {
+    local skill="$REPO_DIR/skills/update-wizard/SKILL.md"
+
+    if grep -Eqi 'Sol `high`.*(standing|default|normal).*(driver|root)|default.*(driver|root).*Sol `high`' "$skill" \
+        && grep -Eqi '`mixed`.*experimental.*explicit opt-in|experimental.*`mixed`.*explicit opt-in' "$skill" \
+        && grep -Eqi 'profile-less|missing.*model profile' "$skill" \
+        && grep -Eqi 'preserve.*explicit.*`mixed`|explicit.*`mixed`.*preserve' "$skill"; then
+        pass "update-wizard defaults profile-less repos to Sol high while preserving explicit mixed opt-ins"
+    else
+        fail "update-wizard is missing the Sol-high default and explicit mixed preservation contract"
+    fi
+}
+
 test_skills_document_hooks_feature_rename() {
     local setup_skill="$REPO_DIR/skills/setup-wizard/SKILL.md"
     local update_skill="$REPO_DIR/skills/update-wizard/SKILL.md"
@@ -2093,31 +2106,47 @@ test_sdlc_skill_has_docsync_learning_and_merge_guard() {
     fi
 }
 
-test_repo_defaults_to_xhigh_reasoning() {
+test_repo_separates_consumer_high_default_from_maintainer_xhigh_exception() {
     local all_passed=true
 
-    if ! grep -Eiq 'gpt-5\.5.*xhigh|xhigh.*gpt-5\.5' "$REPO_DIR/AGENTS.md"; then
-        fail "AGENTS.md does not set gpt-5.5 xhigh as the default reasoning policy"
+    if ! grep -Eiq 'gpt-5\.6-sol.*xhigh|xhigh.*gpt-5\.6-sol' "$REPO_DIR/AGENTS.md"; then
+        fail "AGENTS.md does not keep this high-blast-radius wizard repo on gpt-5.6 Sol xhigh"
         all_passed=false
     fi
 
-    if ! grep -q 'Default to `xhigh`' "$REPO_DIR/README.md"; then
-        fail "README.md does not set xhigh as the default reasoning policy"
+    if ! grep -q '^model_reasoning_effort = "xhigh"' "$REPO_DIR/.codex/config.toml"; then
+        fail "repo-local config does not preserve the wizard maintainer xhigh exception"
         all_passed=false
     fi
 
-    if ! grep -q 'default: `xhigh`' "$REPO_DIR/skills/sdlc/SKILL.md"; then
-        fail "sdlc skill does not set xhigh as the default reasoning policy"
+    if ! grep -Eiq 'consumer.*default.*`high`|default.*consumer.*`high`|agentic coding.*default.*`high`' "$REPO_DIR/README.md"; then
+        fail "README.md does not set high as the broad consumer/agentic-coding default"
         all_passed=false
     fi
 
-    if ! grep -q 'Default to `xhigh`' "$REPO_DIR/SDLC-LOOP.md"; then
-        fail "SDLC-LOOP.md does not set xhigh as the default reasoning policy"
+    if ! grep -Eiq 'xhigh.*(security|migration|destructive|long-running|difficult)|security.*xhigh|migration.*xhigh' "$REPO_DIR/README.md"; then
+        fail "README.md does not document risk-based xhigh escalation"
         all_passed=false
     fi
 
-    if ! grep -q 'Use xhigh reasoning by default' "$REPO_DIR/START-SDLC.md"; then
-        fail "START-SDLC.md does not set xhigh as the default reasoning policy"
+    if ! grep -q 'default: `high`' "$REPO_DIR/skills/sdlc/SKILL.md"; then
+        fail "sdlc skill does not set high as the portable default reasoning policy"
+        all_passed=false
+    fi
+
+    if ! grep -q 'Default to `high`' "$REPO_DIR/SDLC-LOOP.md"; then
+        fail "SDLC-LOOP.md does not set high as the portable default reasoning policy"
+        all_passed=false
+    fi
+
+    if ! grep -q 'Use high reasoning by default' "$REPO_DIR/START-SDLC.md"; then
+        fail "START-SDLC.md does not set high as the portable default reasoning policy"
+        all_passed=false
+    fi
+
+    if ! grep -Fq 'Baseline reasoning: `{{REASONING_BASELINE}}`' "$REPO_DIR/templates/AGENTS.md.tmpl" ||
+       ! grep -Fq '{{REASONING_ESCALATION_SCOPES}}' "$REPO_DIR/templates/AGENTS.md.tmpl"; then
+        fail "generated AGENTS template does not expose adaptive reasoning guidance"
         all_passed=false
     fi
 
@@ -2127,13 +2156,77 @@ test_repo_defaults_to_xhigh_reasoning() {
         "$REPO_DIR/install.sh" \
         "$REPO_DIR/install.ps1" \
         "$REPO_DIR/README.md"; then
-        fail "repo model/config surface still contains non-mini gpt-5.4"
+        fail "repo model/config surface still contains stale legacy model references"
         all_passed=false
     fi
 
-    if ! grep -q 'codex resume -m gpt-5.5' "$REPO_DIR/install.ps1" ||
-       ! grep -q 'model_reasoning_effort=`"xhigh`"' "$REPO_DIR/install.ps1"; then
-        fail "PowerShell installer does not print model-explicit gpt-5.5 xhigh resume guidance"
+    if grep -R -E --exclude-dir=.git --exclude-dir=node_modules --exclude=test-adapter.sh \
+        'gpt-5\.(5|4|3)|GPT-5\.(5|4|3)|Codex Spark|mini-only' "$REPO_DIR" >/dev/null 2>&1; then
+        fail "repo still contains stale legacy model-family references"
+        all_passed=false
+    fi
+
+    if ! grep -q 'codex resume -m gpt-5.6-sol' "$REPO_DIR/install.ps1" ||
+       ! grep -q 'model_reasoning_effort=`"high`"' "$REPO_DIR/install.ps1"; then
+        fail "PowerShell installer does not print model-explicit gpt-5.6 Sol high resume guidance"
+        all_passed=false
+    fi
+
+    if ! grep -Eq '\[string\]\$ModelProfile = "maximum"' "$REPO_DIR/install.ps1" ||
+       ! grep -Eq '^MODEL_PROFILE="maximum"$' "$REPO_DIR/install.sh"; then
+        fail "installers do not default to the Sol maximum profile"
+        all_passed=false
+    fi
+
+    local ps_guard_line ps_install_line
+    ps_guard_line=$(grep -n '^Assert-Gpt56CodexVersion$' "$REPO_DIR/install.ps1" | head -1 | cut -d: -f1 || true)
+    ps_install_line=$(grep -n '^Write-Host "Installing SDLC Wizard for Codex CLI\.\.\."$' "$REPO_DIR/install.ps1" | head -1 | cut -d: -f1 || true)
+    if ! grep -Fq 'function Assert-Gpt56CodexVersion' "$REPO_DIR/install.ps1" ||
+       ! grep -Fq '0.144.0' "$REPO_DIR/install.ps1" ||
+       [ -z "$ps_guard_line" ] ||
+       [ -z "$ps_install_line" ] ||
+       [ "$ps_guard_line" -ge "$ps_install_line" ]; then
+        fail "PowerShell installer does not enforce the GPT-5.6 Codex minimum before mutation"
+        all_passed=false
+    fi
+
+    if ! grep -Fq 'CODEX_SDLC_CODEX_BIN' "$REPO_DIR/lib/codex-config.sh" ||
+       ! grep -Fq 'CODEX_SDLC_CODEX_BIN' "$REPO_DIR/install.ps1"; then
+        fail "installer version gates do not honor the configured Codex binary"
+        all_passed=false
+    fi
+
+    if ! sed -n '/function Assert-Gpt56CodexVersion/,/^}/p' "$REPO_DIR/install.ps1" | grep -Fq 'not installed or is unavailable' ||
+       ! sed -n '/function Assert-Gpt56CodexVersion/,/^}/p' "$REPO_DIR/install.ps1" | grep -Fq 'could not report its version'; then
+        fail "PowerShell installer version gate does not fail closed for missing or unqueryable Codex binaries"
+        all_passed=false
+    fi
+
+    if sed -n '/function Assert-Gpt56CodexVersion/,/^}/p' "$REPO_DIR/install.ps1" | grep -Fq 'CODEX_SDLC_DISABLE_REASONING' ||
+       ! grep -Fq '(?im)^\s*(?:OpenAI\s+)?Codex' "$REPO_DIR/install.ps1"; then
+        fail "PowerShell installer bypasses compatibility validation or parses an unanchored version"
+        all_passed=false
+    fi
+
+    if ! grep -Fq 'Selected profile: `{{MODEL_PROFILE}}`' "$REPO_DIR/templates/AGENTS.baseline.md" ||
+       ! grep -Fq 'Baseline reasoning: `{{REASONING_BASELINE}}`' "$REPO_DIR/templates/AGENTS.baseline.md" ||
+       ! grep -Fq 'install_agents_baseline' "$REPO_DIR/install.sh" ||
+       ! grep -Fq 'Install-AgentsBaseline' "$REPO_DIR/install.ps1"; then
+        fail "direct installers do not render AGENTS baseline from the selected profile"
+        all_passed=false
+    fi
+
+    if ! grep -Fq 'review = "gpt-5.6-sol"' "$REPO_DIR/install.ps1" ||
+       ! grep -Fq 'review_model: "gpt-5.6-sol"' "$REPO_DIR/lib/codex-config.sh"; then
+        fail "maximum profile does not pin Sol reviews across installer/config paths"
+        all_passed=false
+    fi
+
+    if ! grep -Fq 'Write-ModelProfile' "$REPO_DIR/install.ps1" ||
+       ! grep -Fq 'schema_version = 2' "$REPO_DIR/install.ps1" ||
+       ! grep -Fq 'review_effort_source = "explicit command override"' "$REPO_DIR/install.ps1" ||
+       ! grep -Fq 'selected_profile' "$REPO_DIR/install.ps1"; then
+        fail "PowerShell installer does not persist the selected Sol-high model profile"
         all_passed=false
     fi
 
@@ -2152,7 +2245,39 @@ test_repo_defaults_to_xhigh_reasoning() {
     fi
 
     if [ "$all_passed" = "true" ]; then
-        pass "repo contract defaults to xhigh reasoning"
+        pass "consumer guidance defaults to high while this wizard repo preserves its xhigh exception"
+    fi
+}
+
+test_repo_documents_max_ultra_reasoning_boundary() {
+    local all_passed=true
+
+    if ! grep -Eiq 'Max.*single|single.*Max|max.*single|single.*max' "$REPO_DIR/AI_SETUP_LANES.md" "$REPO_DIR/README.md"; then
+        fail "model guidance does not explain that Max is a single-task reasoning escalation"
+        all_passed=false
+    fi
+
+    if ! grep -Eiq 'Ultra.*subagent|subagent.*Ultra|ultra.*subagent|subagent.*ultra|Ultra.*parallel|parallel.*Ultra' "$REPO_DIR/AI_SETUP_LANES.md" "$REPO_DIR/README.md"; then
+        fail "model guidance does not explain that Ultra is for subagent-backed parallel work"
+        all_passed=false
+    fi
+
+    if ! grep -Eiq 'most tasks do not need Max or Ultra|do not.*default.*(max|ultra)|max.*ultra.*not.*default|not.*default.*(max|ultra)' "$REPO_DIR/AI_SETUP_LANES.md" "$REPO_DIR/README.md" "$REPO_DIR/AGENTS.md"; then
+        fail "repo guidance does not keep Max and Ultra out of default profiles"
+        all_passed=false
+    fi
+
+    if grep -Eq 'model_reasoning_effort = "(max|ultra)"' \
+        "$REPO_DIR/.codex/config.toml" \
+        "$REPO_DIR/lib/codex-config.sh" \
+        "$REPO_DIR/install.sh" \
+        "$REPO_DIR/install.ps1"; then
+        fail "repo config/installers should not write Max or Ultra as project defaults"
+        all_passed=false
+    fi
+
+    if [ "$all_passed" = "true" ]; then
+        pass "repo documents Max versus Ultra without making either a default"
     fi
 }
 
@@ -2276,10 +2401,12 @@ test_package_cli_help_documents_bootstrap_profile_policy() {
 
     if echo "$output" | grep -Eqi 'default.*adaptive setup|adaptive setup.*default' &&
        echo "$output" | grep -Eqi 'setup.*maximum|bootstrap.*maximum' &&
-       echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed'; then
-        pass "npm CLI help documents adaptive setup as the default and the bootstrap profile policy"
+       echo "$output" | grep -Eqi 'normal.*(driver|work).*Sol high|Sol high.*normal.*(driver|work)' &&
+       echo "$output" | grep -Eqi 'mixed.*experimental.*explicit opt-in|experimental.*mixed.*explicit opt-in' &&
+       ! echo "$output" | grep -Eqi 'routine work.*mixed|day-to-day.*mixed|after bootstrap.*mixed'; then
+        pass "npm CLI help documents Sol high as the normal driver and mixed as experimental opt-in"
     else
-        fail "npm CLI help does not document the adaptive default and bootstrap-versus-routine profile policy"
+        fail "npm CLI help does not document the Sol-high default and experimental mixed policy"
     fi
 }
 
@@ -2397,6 +2524,20 @@ test_e2e_requires_explicit_token_opt_in() {
     fi
 }
 
+test_e2e_bypasses_hook_trust_only_for_ephemeral_automation() {
+    local exec_count
+    local bypass_count
+
+    exec_count=$(grep -Ec '^[[:space:]]*output=.*codex exec' "$REPO_DIR/tests/test-e2e.sh")
+    bypass_count=$(grep -c -- '--dangerously-bypass-hook-trust' "$REPO_DIR/tests/test-e2e.sh" || true)
+
+    if [ "$exec_count" -gt 0 ] && [ "$bypass_count" -eq "$exec_count" ]; then
+        pass "E2E explicitly bypasses hook trust for every ephemeral automation session"
+    else
+        fail "E2E must bypass hook trust for each ephemeral temp repo (exec=$exec_count, bypass=$bypass_count)"
+    fi
+}
+
 test_docs_document_proof_stamp_gate() {
     if grep -q 'git-guard.cjs prove --reviewed' "$REPO_DIR/PROVE-IT.md" \
         && grep -q 'git-guard.cjs prove --reviewed' "$REPO_DIR/README.md" \
@@ -2451,6 +2592,7 @@ test_install_backs_up_hooks_json
 test_agents_md_size
 test_setup_skill_has_confidence_setup_contract
 test_update_skill_has_idempotent_update_contract
+test_update_skill_has_sol_high_default_contract
 test_skills_document_hooks_feature_rename
 test_update_skill_frontloads_package_upgrade_boundary
 test_helper_skill_metadata_uses_codex_sdlc_not_xdlc
@@ -2460,7 +2602,8 @@ test_setup_docs_include_codex_desktop_handoff
 test_setup_docs_include_m365_auth_lane_guidance
 test_setup_docs_include_task_routing_gate
 test_sdlc_skill_has_docsync_learning_and_merge_guard
-test_repo_defaults_to_xhigh_reasoning
+test_repo_separates_consumer_high_default_from_maintainer_xhigh_exception
+test_repo_documents_max_ultra_reasoning_boundary
 test_package_has_npm_release_surface
 test_package_uses_single_canonical_sdlc_skill_name
 test_package_cli_is_honest_about_supported_flags
@@ -2472,6 +2615,7 @@ test_package_cli_runs_check_command
 test_package_cli_runs_update_command
 test_readme_mentions_npx_entrypoint
 test_e2e_requires_explicit_token_opt_in
+test_e2e_bypasses_hook_trust_only_for_ephemeral_automation
 test_docs_document_proof_stamp_gate
 
 echo ""

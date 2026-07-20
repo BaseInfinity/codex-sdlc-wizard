@@ -1,5 +1,5 @@
 #!/bin/bash
-# Summarize the gpt-5.4-mini + gpt-5.5 xhigh-review experiment against all-xhigh.
+# Summarize Terra-medium plus explicitly overridden Sol-high review against Sol-high maximum.
 
 set -euo pipefail
 
@@ -81,18 +81,18 @@ mixed_follow_up_rate="$(percent "$mixed_follow_up_count" "$mixed_sample_size")"
 mixed_average_cycle="$(average_cycle_for_mode mixed)"
 mixed_median_cycle="$(median_cycle_for_mode mixed)"
 
-all_xhigh_sample_size="$(sample_size_for_mode all-xhigh)"
-all_xhigh_success_count="$(sum_column_for_mode all-xhigh 6)"
-all_xhigh_follow_up_count="$(sum_column_for_mode all-xhigh 7)"
-all_xhigh_success_rate="$(percent "$all_xhigh_success_count" "$all_xhigh_sample_size")"
-all_xhigh_follow_up_rate="$(percent "$all_xhigh_follow_up_count" "$all_xhigh_sample_size")"
-all_xhigh_average_cycle="$(average_cycle_for_mode all-xhigh)"
-all_xhigh_median_cycle="$(median_cycle_for_mode all-xhigh)"
+maximum_sample_size="$(sample_size_for_mode maximum)"
+maximum_success_count="$(sum_column_for_mode maximum 6)"
+maximum_follow_up_count="$(sum_column_for_mode maximum 7)"
+maximum_success_rate="$(percent "$maximum_success_count" "$maximum_sample_size")"
+maximum_follow_up_rate="$(percent "$maximum_follow_up_count" "$maximum_sample_size")"
+maximum_average_cycle="$(average_cycle_for_mode maximum)"
+maximum_median_cycle="$(median_cycle_for_mode maximum)"
 
 cycle_time_improvement="n/a"
-if [ "$mixed_median_cycle" != "n/a" ] && [ "$all_xhigh_median_cycle" != "n/a" ]; then
+if [ "$mixed_median_cycle" != "n/a" ] && [ "$maximum_median_cycle" != "n/a" ]; then
     cycle_time_improvement="$(
-        awk -v mixed="$mixed_median_cycle" -v baseline="$all_xhigh_median_cycle" '
+        awk -v mixed="$mixed_median_cycle" -v baseline="$maximum_median_cycle" '
             BEGIN {
                 if (baseline == 0) {
                     print "n/a"
@@ -108,7 +108,7 @@ recommendation="hold-default"
 reason="mixed sample size is below 20"
 
 if [ "$mixed_sample_size" -ge 20 ]; then
-    recommendation="recommend-mixed-default"
+    recommendation="recommend-mixed-for-routine"
     reason="mixed mode meets the sample, success, follow-up, and speed thresholds"
 
     if ! awk -v rate="${mixed_success_rate%%%}" 'BEGIN { exit !(rate >= 95) }'; then
@@ -119,10 +119,10 @@ if [ "$mixed_sample_size" -ge 20 ]; then
         reason="mixed follow-up rate is above 10%"
     elif [ "$cycle_time_improvement" = "n/a" ]; then
         recommendation="hold-default"
-        reason="all-xhigh baseline data is missing"
+        reason="maximum baseline data is missing"
     elif ! awk -v improvement="${cycle_time_improvement%%%}" 'BEGIN { exit !(improvement >= 15) }'; then
         recommendation="hold-default"
-        reason="cycle time improvement versus all-xhigh is below 15%"
+        reason="cycle time improvement versus maximum is below 15%"
     fi
 fi
 
@@ -133,13 +133,13 @@ success_rate: $mixed_success_rate
 follow_up_rate: $mixed_follow_up_rate
 average_cycle_minutes: $mixed_average_cycle
 median_cycle_minutes: $mixed_median_cycle
-mode: all-xhigh
-sample_size: $all_xhigh_sample_size
-success_rate: $all_xhigh_success_rate
-follow_up_rate: $all_xhigh_follow_up_rate
-average_cycle_minutes: $all_xhigh_average_cycle
-median_cycle_minutes: $all_xhigh_median_cycle
-cycle_time_improvement_vs_all_xhigh: $cycle_time_improvement
+mode: maximum
+sample_size: $maximum_sample_size
+success_rate: $maximum_success_rate
+follow_up_rate: $maximum_follow_up_rate
+average_cycle_minutes: $maximum_average_cycle
+median_cycle_minutes: $maximum_median_cycle
+cycle_time_improvement_vs_maximum: $cycle_time_improvement
 recommendation: $recommendation
 reason: $reason
 EOF

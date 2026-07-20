@@ -7,7 +7,8 @@ Codex does not have a native `/sdlc` command. This file is the honest replacemen
 1. Frame the slice
    Restate the task, set a scope guard, state confidence (`HIGH` / `MEDIUM` / `LOW`), and say what will prove the work is done.
 2. Pick the reasoning level
-   Default to `xhigh` in this repo. Drop lower only when the user explicitly wants a faster or cheaper pass.
+   Default to `high` for meaningful agentic coding. Escalate the difficult slice to `xhigh` for security review, migrations, destructive operations, long-running research, or challenging coding where `high` leaves unresolved risk. Repo-local instructions may define a measured exception.
+   Use Max as a single-task escalation only when `xhigh` is not enough. Use Ultra only for subagent-backed parallel work that divides cleanly. Most tasks do not need Max or Ultra.
 3. Red first
    Write the failing test first when the task is code-shaped.
    If the task is setup, auth, or environment repair, define the failing observable first instead of pretending it is unit-testable.

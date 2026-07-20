@@ -37,7 +37,13 @@ If network is unavailable, say the latest package status could not be verified a
 
 ## Reasoning policy
 
-Default to `xhigh` in this repo. Update work is maintenance architecture, and customized drift makes lower-effort passes too risky by default.
+Default to `high`. Escalate customized high-risk drift, security-sensitive changes, destructive migrations, or unusually difficult maintenance architecture to `xhigh` when `high` leaves unresolved risk.
+
+## Model driver policy
+
+Sol `high` is the standing default root driver for meaningful SDLC work. For a fresh or profile-less repo, select `maximum`; a missing model profile is repaired to that Sol-high default.
+
+`mixed` is experimental and requires explicit opt-in. Preserve an explicitly selected `mixed` profile during update, but do not recommend it for routine work or select it automatically. Terra and Luna may be used for bounded support work with an explicit verification boundary; they are not normal root-driver defaults.
 
 ## Scope guard
 
@@ -100,7 +106,7 @@ Group findings as:
 
 Platform-specific hook wiring is `drift / broken`, not a customization to preserve. On Windows, `.codex/hooks.json` that still points at Bash hook scripts is broken. On macOS/Linux, `.codex/hooks.json` that still points at `powershell.exe` is broken. Repair both cases to the universal Node hook entrypoints.
 
-If `.codex-sdlc/model-profile.json` or `SDLC.md` says one model profile but `.codex/config.toml` still inherits a different user/global model, classify that as drift. Preserve unrelated config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].hooks` settings. Treat active `[features].codex_hooks` as deprecated drift; the exact replacement is `[features].hooks = true`. Migrate deprecated `codex_hooks` entries away instead of preserving duplicate feature flags. Explain that `mixed` is wizard policy, not a native Codex mode, and that project config only loads after the repo is trusted.
+If `.codex-sdlc/model-profile.json` or `SDLC.md` says one model profile but `.codex/config.toml` still inherits a different user/global model, classify that as drift. Preserve unrelated config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].hooks` settings. Treat active `[features].codex_hooks` as deprecated drift; the exact replacement is `[features].hooks = true`. Migrate deprecated `codex_hooks` entries away instead of preserving duplicate feature flags. Explain that `mixed` is experimental wizard policy, not a native Codex mode, that `review_model` does not set review effort independently, and that mixed review must explicitly override `model_reasoning_effort` to `high`. Project config only loads after the repo is trusted.
 
 ### Step 3: Show update plan first
 
@@ -137,7 +143,7 @@ This verification is diagnostic for product behavior. If a failing command point
 
 ### Step 6: Restart and next steps
 
-If skills, hooks, hook config, or helper scripts were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun update just for that restart. If they closed an interrupted handoff and Codex printed a resume id, recommend `codex resume -m <model> -c 'model_reasoning_effort="xhigh"' <session-id>` for model-explicit continuation, or plain `codex resume <session-id>` when they want config-driven startup. If they normally say yolo, give the full-trust variant with `--dangerously-bypass-approvals-and-sandbox` and say full-auto is not full-trust.
+If skills, hooks, hook config, or helper scripts were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun update just for that restart. If they closed an interrupted handoff and Codex printed a resume id, recommend `codex resume -m <model> -c 'model_reasoning_effort="high"' <session-id>` for model-explicit continuation, or plain `codex resume <session-id>` when they want config-driven startup. If they normally say yolo, give the full-trust variant with `--dangerously-bypass-approvals-and-sandbox` and say full-auto is not full-trust.
 
 ## Rules
 

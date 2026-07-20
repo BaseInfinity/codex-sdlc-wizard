@@ -30,6 +30,10 @@ SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
 CORE_SKILLS=("feedback" "setup-wizard" "update-wizard")
 COLLIDING_GLOBAL_SKILLS=("sdlc:repo-scoped .agents/skills/sdlc")
 LEGACY_SKILLS=("codex-sdlc:sdlc")
+LEGACY_MODEL_POLICY_SDLC_SKILL_HASH="sha256:c2c280c2b0edf97538c674bf131eec06f0b6a3b50f4d56924c929f6bd0e509df"
+LEGACY_FEEDBACK_SKILL_HASH="sha256:cdda0e9e12b764154a44c91f8de352138d85ce18f491972099fd332301b98ca1"
+LEGACY_SETUP_WIZARD_SKILL_HASH="sha256:9e32cf8acb99ad5876e86e561f846e5b2542f12c26b85d08566a38589ee6ccc7"
+LEGACY_UPDATE_WIZARD_SKILL_HASH="sha256:82696ee709eafdeef3f35def96c9179c485b368d300148326b49560d35262aad"
 
 for arg in "$@"; do
     case "$arg" in
@@ -107,6 +111,9 @@ repair_managed_file() {
         .codex/config.toml)
             merge_codex_config_profile ".codex/config.toml" "$MODEL_PROFILE"
             ;;
+        .codex-sdlc/model-profile.json)
+            write_model_profile_metadata ".codex-sdlc/model-profile.json" "$MODEL_PROFILE"
+            ;;
         *)
             copy_static_file "$relative_path"
             ;;
@@ -135,6 +142,84 @@ manifest_needs_mcp_browser_policy_refresh() {
 
 config_needs_repair() {
     codex_config_needs_profile_repair ".codex/config.toml" "$MODEL_PROFILE"
+}
+
+file_sha256() {
+    local file_path="$1"
+
+    FILE_PATH="$file_path" node -e '
+const crypto = require("crypto");
+const fs = require("fs");
+const content = fs.readFileSync(process.env.FILE_PATH, "utf8").replace(/\r\n/g, "\n");
+const hash = crypto.createHash("sha256").update(content).digest("hex");
+process.stdout.write(`sha256:${hash}`);
+'
+}
+
+legacy_core_skill_hash() {
+    case "$1" in
+        feedback) printf '%s\n' "$LEGACY_FEEDBACK_SKILL_HASH" ;;
+        setup-wizard) printf '%s\n' "$LEGACY_SETUP_WIZARD_SKILL_HASH" ;;
+        update-wizard) printf '%s\n' "$LEGACY_UPDATE_WIZARD_SKILL_HASH" ;;
+        *) return 1 ;;
+    esac
+}
+
+skill_support_files_match_bundle() {
+    local skill_name="$1"
+    local source_path="$SCRIPT_DIR/skills/$skill_name"
+    local target_path="$SKILLS_ROOT/$skill_name"
+
+    SOURCE_PATH="$source_path" TARGET_PATH="$target_path" node <<'NODE'
+const fs = require("fs");
+const path = require("path");
+
+function files(root, relative = "") {
+  const current = path.join(root, relative);
+  const entries = fs.readdirSync(current, { withFileTypes: true });
+  return entries.flatMap((entry) => {
+    const child = path.join(relative, entry.name);
+    return entry.isDirectory() ? files(root, child) : [child.split(path.sep).join("/")];
+  });
+}
+
+const sourceRoot = process.env.SOURCE_PATH;
+const targetRoot = process.env.TARGET_PATH;
+const sourceFiles = files(sourceRoot).filter((file) => file !== "SKILL.md").sort();
+const targetFiles = files(targetRoot).filter((file) => file !== "SKILL.md").sort();
+
+if (JSON.stringify(sourceFiles) !== JSON.stringify(targetFiles)) process.exit(1);
+for (const relativePath of sourceFiles) {
+  const source = fs.readFileSync(path.join(sourceRoot, relativePath), "utf8").replace(/\r\n/g, "\n");
+  const target = fs.readFileSync(path.join(targetRoot, relativePath), "utf8").replace(/\r\n/g, "\n");
+  if (source !== target) process.exit(1);
+}
+NODE
+}
+
+matches_legacy_core_skill() {
+    local skill_name="$1"
+    local expected_hash
+    local skill_path="$SKILLS_ROOT/$skill_name/SKILL.md"
+
+    expected_hash="$(legacy_core_skill_hash "$skill_name")" || return 1
+    [ -f "$skill_path" ] || return 1
+    [ "$(file_sha256 "$skill_path")" = "$expected_hash" ] || return 1
+    skill_support_files_match_bundle "$skill_name"
+}
+
+matches_legacy_model_policy_sdlc_skill() {
+    local skill_path=".agents/skills/sdlc/SKILL.md"
+
+    [ -f "$skill_path" ] || return 1
+    [ "$(file_sha256 "$skill_path")" = "$LEGACY_MODEL_POLICY_SDLC_SKILL_HASH" ]
+}
+
+is_model_policy_static_surface() {
+    case "$1" in
+        SDLC-LOOP.md|START-SDLC.md|.agents/skills/sdlc/SKILL.md) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 repair_skill() {
@@ -207,9 +292,27 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
 manifest.managed_files = manifest.managed_files || {};
 for (const [relativePath, expectedHash] of Object.entries(skippedHashes)) {
-  manifest.managed_files[relativePath] = expectedHash;
+  if (expectedHash === null) {
+    delete manifest.managed_files[relativePath];
+  } else {
+    manifest.managed_files[relativePath] = expectedHash;
+  }
 }
 
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+}
+
+record_model_policy_migration() {
+    local manifest_path=".codex-sdlc/manifest.json"
+
+    MANIFEST_PATH="$manifest_path" MODEL_POLICY_SCHEMA_VERSION_SELECTED="$MODEL_POLICY_SCHEMA_VERSION" node - <<'NODE'
+const fs = require("fs");
+
+const manifestPath = process.env.MANIFEST_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+manifest.model_profile = manifest.model_profile || {};
+manifest.model_profile.policy_schema_version = Number(process.env.MODEL_POLICY_SCHEMA_VERSION_SELECTED);
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE
 }
@@ -221,12 +324,41 @@ INSTALLED_VERSION="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.adapter_ve
 BROKEN_REASON="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.reason || ""')"
 MODEL_PROFILE="$(json_get_file ".codex-sdlc/manifest.json" 'data.model_profile?.selected_profile || ""')"
 [ -n "$MODEL_PROFILE" ] || MODEL_PROFILE="$(json_get_file ".codex-sdlc/model-profile.json" 'data.selected_profile || ""')"
-[ -n "$MODEL_PROFILE" ] || MODEL_PROFILE="maximum"
+MODEL_PROFILE_DEFAULTED=false
+if [ -z "$MODEL_PROFILE" ]; then
+    MODEL_PROFILE="maximum"
+    MODEL_PROFILE_DEFAULTED=true
+fi
 
 case "$MODEL_PROFILE" in
     mixed|maximum) ;;
-    *) MODEL_PROFILE="maximum" ;;
+    *)
+        MODEL_PROFILE="maximum"
+        MODEL_PROFILE_DEFAULTED=true
+        ;;
 esac
+
+MODEL_PROFILE_METADATA_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex-sdlc/model-profile.json"]?.status || ""')"
+MANIFEST_MODEL_POLICY_SCHEMA_VERSION="$(json_get_file ".codex-sdlc/manifest.json" 'data.model_profile?.policy_schema_version || ""')"
+MODEL_POLICY_SCHEMA_MIGRATION=false
+RECORD_MODEL_POLICY_MIGRATION=false
+case "$MANIFEST_MODEL_POLICY_SCHEMA_VERSION" in
+    ''|*[!0-9]*) MODEL_POLICY_SCHEMA_MIGRATION=true ;;
+    *)
+        if [ "$MANIFEST_MODEL_POLICY_SCHEMA_VERSION" -lt "$MODEL_POLICY_SCHEMA_VERSION" ]; then
+            MODEL_POLICY_SCHEMA_MIGRATION=true
+        fi
+        ;;
+esac
+MODEL_PROFILE_MIGRATION="$MODEL_PROFILE_DEFAULTED"
+if [ "$MODEL_PROFILE_METADATA_STATUS" = "missing" ]; then
+    MODEL_PROFILE_MIGRATION=true
+elif [ "$MODEL_PROFILE_METADATA_STATUS" = "match" ] && model_profile_metadata_needs_refresh ".codex-sdlc/model-profile.json" "$MODEL_PROFILE"; then
+    MODEL_PROFILE_MIGRATION=true
+elif [ "$MODEL_PROFILE_METADATA_STATUS" = "customized" ] && [ "$MODEL_POLICY_SCHEMA_MIGRATION" = "true" ] && model_profile_metadata_is_legacy ".codex-sdlc/model-profile.json"; then
+    MODEL_PROFILE_MIGRATION=true
+    RECORD_MODEL_POLICY_MIGRATION=true
+fi
 
 if [ "$REPO_STATE" != "initialized" ]; then
     echo "Update cannot continue: repo is uninitialized (${BROKEN_REASON:-unknown})."
@@ -253,6 +385,7 @@ declare -a SKILL_REPAIRS=()
 declare -a COLLIDING_SKILL_REMOVALS=()
 declare -a LEGACY_SKILL_REMOVALS=()
 declare -a SKIPPED_CUSTOMIZED_PATHS=()
+declare -a SKIPPED_UNTRACKED_PATHS=()
 declare -a MATCHED_GENERATED_DOCS=()
 declare -a REGENERATE_EXISTING_DOCS=()
 CHANGES_PENDING=false
@@ -315,7 +448,22 @@ for line in "${STATUS_LINES[@]}"; do
     action="keep"
     case "$status" in
         match)
-            if [ "$relative_path" = ".codex/config.toml" ] && config_needs_repair; then
+            if [ "$relative_path" = ".codex-sdlc/model-profile.json" ] && [ "$MODEL_PROFILE_MIGRATION" = "true" ]; then
+                action="refresh legacy model profile metadata"
+                CHANGES_PENDING=true
+                RUN_REGENERATE=true
+                queue_static_repair "$relative_path"
+            elif [ "$relative_path" = "AGENTS.md" ] && [ "$MODEL_PROFILE_MIGRATION" = "true" ]; then
+                action="refresh generated model policy"
+                CHANGES_PENDING=true
+                RUN_REGENERATE=true
+                queue_regenerate_existing_doc "$relative_path"
+            elif [ "$MODEL_PROFILE_MIGRATION" = "true" ] && is_model_policy_static_surface "$relative_path"; then
+                action="refresh model policy"
+                CHANGES_PENDING=true
+                RUN_REGENERATE=true
+                queue_static_repair "$relative_path"
+            elif [ "$relative_path" = ".codex/config.toml" ] && config_needs_repair; then
                 action="merge managed model/profile settings"
                 CHANGES_PENDING=true
                 RUN_REGENERATE=true
@@ -363,6 +511,29 @@ for line in "${STATUS_LINES[@]}"; do
     PLAN_LINES+=("$relative_path|$status|$action")
 done
 
+if [ "$RECORD_MODEL_POLICY_MIGRATION" = "true" ]; then
+    PLAN_LINES+=(".codex-sdlc/manifest.json|model policy schema $MANIFEST_MODEL_POLICY_SCHEMA_VERSION|record model policy migration completion")
+    CHANGES_PENDING=true
+fi
+
+REPO_SDLC_SKILL_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".agents/skills/sdlc/SKILL.md"]?.status || ""')"
+if [ "$MODEL_PROFILE_MIGRATION" = "true" ] && [ -z "$REPO_SDLC_SKILL_STATUS" ]; then
+    if [ ! -f ".agents/skills/sdlc/SKILL.md" ]; then
+        PLAN_LINES+=(".agents/skills/sdlc/SKILL.md|missing|repair")
+        CHANGES_PENDING=true
+        RUN_REGENERATE=true
+        queue_static_repair ".agents/skills/sdlc/SKILL.md"
+    elif matches_legacy_model_policy_sdlc_skill; then
+        PLAN_LINES+=(".agents/skills/sdlc/SKILL.md|legacy unmodified|refresh model policy")
+        CHANGES_PENDING=true
+        RUN_REGENERATE=true
+        queue_static_repair ".agents/skills/sdlc/SKILL.md"
+    else
+        PLAN_LINES+=(".agents/skills/sdlc/SKILL.md|untracked|skip (preserve customization)")
+        SKIPPED_UNTRACKED_PATHS+=(".agents/skills/sdlc/SKILL.md")
+    fi
+fi
+
 if manifest_needs_mcp_browser_policy_refresh; then
     PLAN_LINES+=(".codex-sdlc/manifest.json|MCP browser policy missing|refresh generated docs from live scan")
     CHANGES_PENDING=true
@@ -388,6 +559,19 @@ for skill_name in "${CORE_SKILLS[@]}"; do
         skill_action="refresh (force-all)"
         CHANGES_PENDING=true
         queue_skill_repair "$skill_name"
+    elif [ "$MODEL_PROFILE_MIGRATION" = "true" ]; then
+        if global_skill_matches_bundle "$skill_name"; then
+            skill_status="present"
+            skill_action="keep"
+        elif matches_legacy_core_skill "$skill_name"; then
+            skill_status="legacy unmodified"
+            skill_action="refresh model policy"
+            CHANGES_PENDING=true
+            queue_skill_repair "$skill_name"
+        else
+            skill_status="customized"
+            skill_action="skip (preserve customization)"
+        fi
     fi
 
     PLAN_LINES+=("skills/$skill_name|$skill_status|$skill_action")
@@ -416,12 +600,15 @@ for legacy_spec in "${LEGACY_SKILLS[@]}"; do
 done
 
 SKIPPED_CUSTOM_HASHES_JSON="{}"
-if [ "${#SKIPPED_CUSTOMIZED_PATHS[@]}" -gt 0 ]; then
+if [ "${#SKIPPED_CUSTOMIZED_PATHS[@]}" -gt 0 ] || [ "${#SKIPPED_UNTRACKED_PATHS[@]}" -gt 0 ]; then
     SKIPPED_PATHS="$(
         printf '%s\n' "${SKIPPED_CUSTOMIZED_PATHS[@]}"
     )"
+    UNTRACKED_PATHS="$(
+        printf '%s\n' "${SKIPPED_UNTRACKED_PATHS[@]}"
+    )"
     SKIPPED_CUSTOM_HASHES_JSON="$(
-        UPDATE_CHECK_JSON="$CHECK_JSON" UPDATE_SKIPPED_PATHS="$SKIPPED_PATHS" node -e '
+        UPDATE_CHECK_JSON="$CHECK_JSON" UPDATE_SKIPPED_PATHS="$SKIPPED_PATHS" UPDATE_UNTRACKED_PATHS="$UNTRACKED_PATHS" node -e '
 const data = JSON.parse(process.env.UPDATE_CHECK_JSON || "{}");
 const skippedPaths = (process.env.UPDATE_SKIPPED_PATHS || "")
   .split(/\r?\n/)
@@ -434,6 +621,10 @@ for (const [relativePath, info] of Object.entries(data.managed_files || {})) {
   if (skippedPathSet.has(relativePath) && info && info.expected_hash) {
     skipped[relativePath] = info.expected_hash;
   }
+}
+
+for (const relativePath of (process.env.UPDATE_UNTRACKED_PATHS || "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
+  skipped[relativePath] = null;
 }
 
 process.stdout.write(JSON.stringify(skipped));
@@ -463,6 +654,8 @@ if [ "$CHANGES_PENDING" = "false" ]; then
     echo "No changes applied."
     exit 0
 fi
+
+require_gpt56_codex_version
 
 echo ""
 echo "Applying planned updates..."
@@ -513,6 +706,11 @@ fi
 
 if [ "$FORCE_ALL" = "false" ] && [ "$RUN_REGENERATE" = "true" ]; then
     restore_skipped_hashes "$SKIPPED_CUSTOM_HASHES_JSON"
+fi
+
+if [ "$RECORD_MODEL_POLICY_MIGRATION" = "true" ]; then
+    record_model_policy_migration
+    echo "Applied: .codex-sdlc/manifest.json (recorded model policy migration completion)"
 fi
 
 echo ""

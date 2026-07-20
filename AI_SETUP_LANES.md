@@ -1,103 +1,109 @@
 # AI Setup Lanes
 
-Three recommended AI coding setups for this repo. Setups A and B are complete triads: **planner → driver → reviewer**. Setup C is a lightweight driver-only lane for operational grunt work.
+Adaptive GPT-5.6 guidance for repositories installed by this wizard. Sol `high` is the normal standing root driver for meaningful SDLC work. Terra and Luna remain available for bounded support work and measured experiments, but the wizard does not route ordinary coding away from Sol merely because a task looks routine.
 
-This is **guidance, not a hard rule**. Maintainer override is always allowed.
+This is guidance, not a hard lock. Maintainers may choose another profile explicitly, and update preserves that choice.
 
-## Setup A — Codex Premium
+## Current Model Baseline
 
-| Role | Model |
-|------|-------|
-| **Planner** | Codex (GPT-5.5) xhigh |
-| **Driver** | Codex (GPT-5.5) xhigh |
-| **Reviewer** | Codex (GPT-5.5) xhigh |
+| Tier | Model | Standard API token price | Best fit |
+|------|-------|--------------------------|----------|
+| **Sol** | `gpt-5.6-sol` | $5 / 1M input, $30 / 1M output | Ambiguous, difficult, high-value coding and research |
+| **Terra** | `gpt-5.6-terra` | $2.50 / 1M input, $15 / 1M output | Bounded implementation and supporting work with explicit verification |
+| **Luna** | `gpt-5.6-luna` | $1 / 1M input, $6 / 1M output | Clear, repeatable, high-volume support tasks |
 
-Quality-first lane. GPT-5.5 xhigh all the way through — planning, implementation, and review all stay at the flagship level. No model switching, no billing-pool surprises. One model, one effort level, maximum quality.
+OpenAI's model guidance starts demanding agentic work on Sol and positions Terra and Luna for lighter or clearer work. Price alone does not determine the driver: independent coding results and developer reports remain harness-sensitive and mixed, and this repo has no completed representative local slices proving that its Terra-led profile preserves quality. The quality-first default therefore stays on Sol `high`.
 
-## Setup B — Codex Saver
+## Adaptive Decision Stack
 
-| Role | Model | Notes |
-|------|-------|-------|
-| **Planner** | Codex (GPT-5.5) xhigh | |
-| **Driver** | GPT-5.3 Codex Spark (max reasoning) | Primary — different billing bucket (preview) |
-| **Driver fallback** | GPT-5.4 mini xhigh | If Spark unavailable — same billing pool as GPT-5.5 but cheaper per token |
-| **Reviewer** | Codex (GPT-5.5) xhigh | |
+Make the decisions in this order:
 
-Cost-efficient lane. Keeps GPT-5.5 xhigh as both the planning brain and the final reviewer — where reasoning and judgment matter most. Moves the driver to **GPT-5.3 Codex Spark** (max reasoning), which draws from a separate billing bucket because it's currently a preview model. If Spark isn't available, fall back to **GPT-5.4 mini xhigh** (also a different bucket). The cheaper driver handles routine coding while the flagship reviewer catches what it missed.
+1. **Start meaningful SDLC work on Sol `high`.** The root agent owns planning, implementation, verification, and synthesis.
+2. **Keep clear low-risk support work bounded.** Terra or Luna may handle extraction, scans, summaries, or mechanical transforms when a Sol-owned task has an explicit verification boundary.
+3. **Escalate only the difficult slice to `xhigh`.** Good triggers include security review, migrations, destructive operations, long-running research, and challenging coding where `high` leaves unresolved risk.
+4. **Use Max for one exceptionally hard task.** Max gives one selected model more reasoning time.
+5. **Use Ultra when parallelism is the point.** Ultra uses subagents and fits work that divides cleanly into independent workstreams.
 
-## When to Use Setup A
+Most tasks do not need `xhigh`, Max, or Ultra. None is a standing consumer default.
 
-Reach for Premium when the change can damage a consumer repo or has high blast radius:
+## Roles Are Optional
 
-- Architecture or methodology changes
-- Tagged release prep
-- Installer behavior (`install.sh`, `setup.sh`, `bin/`)
-- Destructive file operations
-- Package publishing
-- Generated repo modifications (template changes)
-- CI / release automation
-- Security-sensitive behavior
-- Anything that could damage a consumer repo
+Codex does not require a permanent advisor/driver pair. The Sol `high` root normally owns the full task. Add an explorer, reviewer, or planner only when specialization removes real uncertainty or creates useful parallelism. The workflow must remain correct when heterogeneous subagent routing is unavailable or inherited from the root session.
 
-## When to Use Setup B
+## Setup A: Sol Quality-First
 
-Setup B is sufficient for routine work where the mini driver can ship with a strong reviewer:
+Recommended default for meaningful SDLC work.
 
-- Routine implementation
-- Documentation
-- Examples
-- Tests
-- Normal script changes (non-installer)
-- Low-risk methodology edits
-- Mechanical refactors
+| Work | Model | Effort |
+|------|-------|--------|
+| Root agent / driver | `gpt-5.6-sol` | `high` |
+| Review | `gpt-5.6-sol` | `high` |
+| Difficult or high-risk slice | `gpt-5.6-sol` | `xhigh` |
+| Exceptional single task | `gpt-5.6-sol` | Max, only when justified |
+| Parallel independent work | Sol root plus task-appropriate subagents | Ultra, only when the task divides cleanly |
 
-## Setup C — Codex Lite
+Use this lane for normal agentic coding as well as architecture, complex features, releases, security-sensitive behavior, installer changes, migrations, and work that can damage a consumer repo. Repo scanning adapts escalation triggers and verification, not the standing driver.
 
-| Role | Model | Notes |
-|------|-------|-------|
-| **Planner** | You (the user) | Task is pre-planned, no model reasoning needed |
-| **Driver** | GPT-5.4 mini standard | Cheapest available in the Codex ecosystem |
-| **Driver fallback** | GPT-5.4 standard | If mini can't handle the task |
-| **Reviewer** | None | Blast radius too low for review overhead |
+## Setup B: Experimental Mixed
 
-The "just do the thing" lane. No SDLC enforcement, no cross-model review, no planning phase. You already know what to do — you just need a fast, cheap pair of hands.
+Explicit opt-in profile for measured efficiency trials, not a routine-work recommendation.
 
-## When to Use Setup C
+| Work | Model | Effort |
+|------|-------|--------|
+| Main pass | `gpt-5.6-terra` | `medium` |
+| Review | `gpt-5.6-sol` | `high` via explicit command override |
+| Difficult review or unresolved risk | `gpt-5.6-sol` | `xhigh` |
 
-Setup C is for work where SDLC discipline overhead exceeds the value:
+Use `mixed` only when the task is bounded, verification is strong, and the maintainer accepts the quality/latency tradeoff. `review_model` selects Sol but does not override the profile's global reasoning effort, so run `codex -c 'model_reasoning_effort="high"' review ...` for the required review gate. Record representative results before promoting it. Existing repos that explicitly selected `mixed` keep that choice during update; the wizard does not select it automatically.
 
-- Run a script with basic intelligence
-- Deploy to staging or prod
-- Config updates, env var changes
-- File moves, renames, bulk operations
-- Repo maintenance (dependency bumps, lockfile refreshes)
-- Simple administrative tasks
-- Anything where blast radius is low and you need speed, not depth
+## Setup C: Lightweight Support
 
-**Escalation rule:** if the task turns out harder than expected, escalate to Setup B or A. Don't force-fit mini on a complex problem.
+Manual support lane for clear, low-risk, repeatable work. It is not a normal SDLC driver profile.
 
-## Final Review Policy
+| Work | Model | Effort |
+|------|-------|--------|
+| Bounded support task | `gpt-5.6-terra` or `gpt-5.6-luna` | lowest reliable effort |
+| Integration and acceptance | Sol root | `high` |
 
-**Setups A and B end at GPT-5.5 xhigh as the reviewer.** The review step catches what the driver missed — in Setup A that's self-review at flagship; in Setup B the flagship reviewer catches what the mini driver missed.
+Good candidates include extraction, classification, structured summaries, tagging, and mechanical transforms. Secrets, security advisories, migrations, destructive bulk operations, and production-impacting changes are not lightweight support work.
 
-**Setup C has no reviewer** — the blast radius doesn't justify it. If you're unsure whether a task is truly Lite, it probably isn't. Escalate.
+## Repo-Aware Escalation
 
-## Credit-Spend Warning
+Setup scans the repository and records risk surfaces such as deployment tooling, databases, CI, and firmware. Generated `AGENTS.md` keeps Sol `high` as the normal baseline and names the detected surfaces where an agent should consider `xhigh` for the affected task.
 
-Setup A bills everything against your OpenAI account at GPT-5.5 rates. Setup B's driver draws from a **different billing bucket** than GPT-5.5 — that's the cost-saving mechanism:
+This is task-scoped. A repository containing a database does not need every documentation edit to run at `xhigh`; a schema migration in that same repository often does.
 
-- **GPT-5.3 Codex Spark** (primary driver): separate bucket because it's a preview model. Max reasoning keeps quality high while the billing stays off the main GPT-5.5 pool.
-- **GPT-5.4 mini xhigh** (fallback driver): same billing pool as GPT-5.5 but cheaper per token.
+## Wizard Model Profiles
 
-The planner and reviewer in Setup B still use GPT-5.5, so the savings come specifically from the driver leg being routed to a cheaper billing pool.
+The shipped profile names remain stable:
 
-## Maintainer Override
+| Wizard profile | Main model | Review model | Use |
+|----------------|------------|--------------|-----|
+| `maximum` | `gpt-5.6-sol` high | Sol high in the same session | Default and normal quality-first driver |
+| `mixed` | `gpt-5.6-terra` medium | `gpt-5.6-sol` high via explicit override | Experimental explicit opt-in efficiency trial |
 
-**Override at any time.** A blanket setup choice doesn't replace judgment per change. If you're touching CI but the change is a one-line typo, Setup B is fine. If you're touching docs but the section is the installer's safety-critical path, Setup A is the call.
+`maximum` means the maximum **model tier** supplied by the wizard. It does not select Max reasoning. Luna remains manual because the lightweight lane is support work, not a standing root profile.
 
-The wizard does not enforce setup lane selection — it documents the recommended default per change shape. Whatever ships is your call.
+Fresh installs and profile-less updates select `maximum`. Updates preserve an explicitly selected `mixed` profile instead of silently overriding a maintainer decision.
+
+## Evidence And Promotion Gate
+
+This decision is quality-based, not pricing-only:
+
+- official guidance supports Sol for demanding agentic work and lighter tiers for clearer supporting tasks
+- public benchmark and developer reports vary by harness, token use, latency, and repository shape, so no single leaderboard or Reddit post is treated as universal proof
+- the local [`benchmarks/model-experiment.csv`](benchmarks/model-experiment.csv) ledger must contain representative completed slices before `mixed` can become a recommendation
+- until that gate passes, Sol `high` remains the default and `mixed` remains experimental
+
+## Maintainer Exception
+
+The `codex-sdlc-wizard` repository itself remains on `gpt-5.6-sol` at `xhigh` while its Sol `high` benchmark is unfinished. This is a narrow repo-maintainer exception for unusually meta, downstream-enforcement work; it is not the consumer default.
 
 ## See Also
 
-- [`AGENTS.md`](AGENTS.md) — SDLC enforcement rules for this repo
-- [claude-sdlc-wizard `AI_SETUP_LANES.md`](https://github.com/BaseInfinity/claude-sdlc-wizard/blob/main/AI_SETUP_LANES.md) — Sibling lanes doc for Claude Code environments (uses Opus 4.6 max as primary coder + GPT-5.5 xhigh as cross-model reviewer — the Claude-side equivalent)
+- [`AGENTS.md`](AGENTS.md) - maintainer contract for this repo
+- [OpenAI Codex model guidance](https://learn.chatgpt.com/docs/models) - models, efforts, Max, and Ultra
+- [OpenAI reasoning guidance](https://developers.openai.com/api/docs/guides/reasoning#reasoning-effort) - high and xhigh use cases
+- [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) - current token pricing
+- [Community Sol/Terra/Luna report](https://www.reddit.com/r/codex/comments/1uz7pua/sol_vs_terra_vs_luna_what_actually_worked_for_me/) - anecdotal evidence, not the promotion gate
+- [claude-sdlc-wizard `AI_SETUP_LANES.md`](https://github.com/BaseInfinity/claude-sdlc-wizard/blob/main/AI_SETUP_LANES.md) - sibling lanes document

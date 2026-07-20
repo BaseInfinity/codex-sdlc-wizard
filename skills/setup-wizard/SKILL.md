@@ -13,7 +13,13 @@ Do not ask a fixed checklist. Do not ask what you already know.
 
 ## Reasoning policy
 
-Default to `xhigh` in this repo. Setup is one-time, high-leverage work and should use the highest planning discipline by default.
+Default to `high`. Setup is high-leverage agentic work, so escalate security-sensitive, destructive, migration-heavy, or unusually difficult setup slices to `xhigh` when `high` leaves unresolved risk.
+
+## Model driver policy
+
+Use `maximum` by default: Sol `high` is the normal standing root driver for meaningful SDLC work. Repo scanning adapts verification and task-scoped `xhigh` triggers; it does not automatically downgrade the driver.
+
+Treat `mixed` as an experimental explicit opt-in. Use Terra or Luna only for bounded support work with an explicit verification boundary, and keep final integration and acceptance with the Sol root.
 
 ## Scope guard
 
@@ -166,7 +172,7 @@ Recommend Codex-specific follow-ups where appropriate:
 - Codex Desktop handoff for browser, desktop-app, admin-portal, screenshot, or auth-heavy setup that CLI cannot see. Recommend `codex app .` from the repo root, note that Codex Desktop is available on macOS and Windows, and define the computer-use auth boundary: the user handles credentials, MFA, tenant consent, sends, deletes, license/admin changes, and policy publishing.
 - Microsoft 365 auth lane guidance when Graph PowerShell, WAM, browser, or Desktop auth is involved. Prefer Graph PowerShell first when `Get-MgContext` works. Distinguish browser sign-in success from script-context success. For fallback proofs, require tenant-bound OAuth evidence with tenant id plus expected work account, reject personal Microsoft account success as work-tenant proof, keep fallback proofs read-only by default, and record the proven lane plus next CLI action under `.reviews/`.
 
-When a model profile is selected, ensure the repo-local `.codex/config.toml` matches it. Preserve existing custom config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].hooks` settings. Migrate active deprecated `[features].codex_hooks` entries to `[features].hooks = true` rather than preserving both keys. Explain that `mixed` is wizard policy, not a native Codex mode, and that project config only loads after the repo is trusted. If Codex reports pending hook review after restart, tell the user to open `/hooks` and review the repo hooks before relying on enforcement.
+When a model profile is selected, ensure the repo-local `.codex/config.toml` matches it. Preserve existing custom config keys and only patch the wizard-owned top-level `model`, `model_reasoning_effort`, `review_model`, and `[features].hooks` settings. Migrate active deprecated `[features].codex_hooks` entries to `[features].hooks = true` rather than preserving both keys. Explain that `mixed` is wizard policy, not a native Codex mode, that `review_model` does not set review effort independently, and that mixed review must explicitly override `model_reasoning_effort` to `high`. Project config only loads after the repo is trusted. If Codex reports pending hook review after restart, tell the user to open `/hooks` and review the repo hooks before relying on enforcement.
 
 Treat platform-specific `.codex/hooks.json` wiring as broken drift, not as an acceptable customization. On Windows, stale Bash hook commands such as `bash-guard.sh` or `session-start.sh` are broken. On macOS/Linux, stale `powershell.exe` hook commands are broken. Repair both cases to the universal Node hook entrypoints.
 
@@ -186,7 +192,7 @@ This verification is diagnostic for product behavior. If a failing command point
 
 ### Step 8: Restart and next steps
 
-If new skills or hooks were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun setup just for that restart. If they closed an interrupted handoff and Codex printed a resume id, recommend `codex resume -m <model> -c 'model_reasoning_effort="xhigh"' <session-id>` for model-explicit continuation, or plain `codex resume <session-id>` when they want config-driven startup. If they normally say yolo, give the full-trust variant with `--dangerously-bypass-approvals-and-sandbox` and say full-auto is not full-trust.
+If new skills or hooks were installed or repaired, tell the user to exit and reopen Codex in this repo so the active session reloads them. Tell them: you do not need to rerun setup just for that restart. If they closed an interrupted handoff and Codex printed a resume id, recommend `codex resume -m <model> -c 'model_reasoning_effort="high"' <session-id>` for model-explicit continuation, or plain `codex resume <session-id>` when they want config-driven startup. If they normally say yolo, give the full-trust variant with `--dangerously-bypass-approvals-and-sandbox` and say full-auto is not full-trust.
 
 Then point them at the next entrypoint:
 

@@ -1,28 +1,196 @@
 #!/bin/bash
 set -euo pipefail
 
+MINIMUM_GPT56_CODEX_VERSION="${MINIMUM_GPT56_CODEX_VERSION:-0.144.0}"
+MODEL_POLICY_SCHEMA_VERSION=2
+
+require_gpt56_codex_version() {
+    local version_output=""
+    local parsed_version=""
+    local codex_bin="${CODEX_SDLC_CODEX_BIN:-codex}"
+
+    if ! command -v "$codex_bin" >/dev/null 2>&1; then
+        echo "GPT-5.6 profiles require Codex CLI $MINIMUM_GPT56_CODEX_VERSION or newer (Codex CLI is not installed or is unavailable: $codex_bin)." >&2
+        echo "Update with: npm install -g @openai/codex@latest" >&2
+        return 1
+    fi
+
+    if ! version_output=$("$codex_bin" --version 2>&1); then
+        echo "GPT-5.6 profiles require Codex CLI $MINIMUM_GPT56_CODEX_VERSION or newer (the configured Codex binary could not report its version: $codex_bin)." >&2
+        echo "Update with: npm install -g @openai/codex@latest" >&2
+        return 1
+    fi
+
+    parsed_version=$(CODEX_VERSION_OUTPUT="$version_output" node -e '
+const match = (process.env.CODEX_VERSION_OUTPUT || "").match(/(?:^|\n)\s*(?:OpenAI\s+)?Codex(?:-CLI)?\s+v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(?:\s|$)/i);
+if (match) process.stdout.write(`${match.slice(1, 4).join(".")}${match[4] || ""}`);
+')
+
+    if [ -z "$parsed_version" ] || ! CODEX_VERSION="$parsed_version" MINIMUM_CODEX_VERSION="$MINIMUM_GPT56_CODEX_VERSION" node -e '
+const [currentCore, prerelease = ""] = process.env.CODEX_VERSION.split(/-(.+)/, 2);
+const current = currentCore.split(".").map(Number);
+const minimum = process.env.MINIMUM_CODEX_VERSION.split(".").map(Number);
+for (let index = 0; index < Math.max(current.length, minimum.length); index += 1) {
+  const difference = (current[index] || 0) - (minimum[index] || 0);
+  if (difference > 0) process.exit(0);
+  if (difference < 0) process.exit(1);
+}
+if (prerelease) process.exit(1);
+'; then
+        local found_version="${parsed_version:-an unparseable version}"
+        echo "GPT-5.6 profiles require Codex CLI $MINIMUM_GPT56_CODEX_VERSION or newer (found $found_version)." >&2
+        echo "Update with: npm install -g @openai/codex@latest" >&2
+        return 1
+    fi
+}
+
 profile_model() {
     case "$1" in
-        mixed) printf '%s\n' "gpt-5.4-mini" ;;
-        maximum) printf '%s\n' "gpt-5.5" ;;
+        mixed) printf '%s\n' "gpt-5.6-terra" ;;
+        maximum) printf '%s\n' "gpt-5.6-sol" ;;
         *) return 1 ;;
     esac
 }
 
 profile_reasoning() {
     case "$1" in
-        mixed) printf '%s\n' "xhigh" ;;
-        maximum) printf '%s\n' "xhigh" ;;
+        mixed) printf '%s\n' "medium" ;;
+        maximum) printf '%s\n' "high" ;;
         *) return 1 ;;
     esac
 }
 
 profile_review_model() {
     case "$1" in
-        mixed) printf '%s\n' "gpt-5.5" ;;
-        maximum) printf '%s\n' "" ;;
+        mixed) printf '%s\n' "gpt-5.6-sol" ;;
+        maximum) printf '%s\n' "gpt-5.6-sol" ;;
         *) return 1 ;;
     esac
+}
+
+write_model_profile_metadata() {
+    local output_path="$1"
+    local model_profile="$2"
+
+    case "$model_profile" in
+        mixed|maximum) ;;
+        *) return 1 ;;
+    esac
+
+    mkdir -p "$(dirname "$output_path")"
+    CODEX_MODEL_PROFILE_PATH="$output_path" CODEX_MODEL_PROFILE="$model_profile" node <<'NODE'
+const fs = require("fs");
+
+const outputPath = process.env.CODEX_MODEL_PROFILE_PATH;
+const selectedProfile = process.env.CODEX_MODEL_PROFILE;
+const metadata = {
+  schema_version: 2,
+  selected_profile: selectedProfile,
+  profiles: {
+    mixed: {
+      main_model: "gpt-5.6-terra",
+      main_reasoning: "medium",
+      review_model: "gpt-5.6-sol",
+      review_reasoning: "high",
+      review_effort_source: "explicit command override",
+      review_command: "codex -c 'model_reasoning_effort=\"high\"' review",
+      tradeoff: "Experimental explicit opt-in efficiency profile for measured, bounded work; not the normal quality-first driver."
+    },
+    maximum: {
+      main_model: "gpt-5.6-sol",
+      main_reasoning: "high",
+      review_model: "gpt-5.6-sol",
+      review_reasoning: "high",
+      review_effort_source: "profile baseline",
+      review_command: "codex review",
+      tradeoff: "Default quality-first profile with Sol high as the standing root driver."
+    }
+  },
+  policy: {
+    high_confidence_threshold_percent: 95,
+    default_profile: "maximum",
+    default_driver: "gpt-5.6-sol",
+    default_reasoning: "high",
+    low_confidence_rule: "Research more first. If confidence stays below 95%, escalate the difficult slice or review to xhigh.",
+    reasoning_effort_rule: "Use Sol high as the normal root driver for meaningful SDLC work. Escalate only difficult or high-risk slices to xhigh.",
+    mixed_profile_rule: "Mixed is experimental and requires explicit opt-in. Preserve an existing explicit selection, but do not select it automatically.",
+    review_effort_rule: "review_model selects the review model only. Mixed reviews must explicitly override model_reasoning_effort to high.",
+    lightweight_rule: "Use Terra or Luna only for bounded support work when the task and verification boundary make the tradeoff explicit.",
+    escalation_rule: "Max is single-task reasoning; Ultra is subagent-backed parallel work. Most tasks do not need either, and neither is a default wizard profile."
+  }
+};
+
+fs.writeFileSync(outputPath, `${JSON.stringify(metadata, null, 2)}\n`);
+NODE
+}
+
+model_profile_metadata_needs_refresh() {
+    local profile_path="$1"
+    local selected_profile="$2"
+
+    [ -f "$profile_path" ] || return 0
+
+    CODEX_MODEL_PROFILE_PATH="$profile_path" CODEX_MODEL_PROFILE="$selected_profile" node <<'NODE'
+const fs = require("fs");
+
+const profilePath = process.env.CODEX_MODEL_PROFILE_PATH;
+const selectedProfile = process.env.CODEX_MODEL_PROFILE;
+let metadata;
+
+try {
+  metadata = JSON.parse(fs.readFileSync(profilePath, "utf8"));
+} catch {
+  process.exit(0);
+}
+
+const mixed = metadata.profiles?.mixed || {};
+const maximum = metadata.profiles?.maximum || {};
+const needsRefresh =
+  metadata.schema_version !== 2 ||
+  metadata.selected_profile !== selectedProfile ||
+  mixed.main_model !== "gpt-5.6-terra" ||
+  mixed.main_reasoning !== "medium" ||
+  mixed.review_model !== "gpt-5.6-sol" ||
+  mixed.review_reasoning !== "high" ||
+  mixed.review_effort_source !== "explicit command override" ||
+  maximum.main_model !== "gpt-5.6-sol" ||
+  maximum.main_reasoning !== "high" ||
+  maximum.review_model !== "gpt-5.6-sol" ||
+  maximum.review_reasoning !== "high" ||
+  metadata.policy?.default_profile !== "maximum" ||
+  metadata.policy?.default_driver !== "gpt-5.6-sol" ||
+  metadata.policy?.default_reasoning !== "high";
+
+process.exit(needsRefresh ? 0 : 1);
+NODE
+}
+
+model_profile_metadata_is_legacy() {
+    local profile_path="$1"
+
+    [ -f "$profile_path" ] || return 1
+
+    CODEX_MODEL_PROFILE_PATH="$profile_path" node <<'NODE'
+const fs = require("fs");
+
+let metadata;
+try {
+  metadata = JSON.parse(fs.readFileSync(process.env.CODEX_MODEL_PROFILE_PATH, "utf8"));
+} catch {
+  process.exit(1);
+}
+
+const models = [
+  metadata.profiles?.mixed?.main_model,
+  metadata.profiles?.mixed?.review_model,
+  metadata.profiles?.maximum?.main_model,
+  metadata.profiles?.maximum?.review_model
+].filter(Boolean);
+const hasLegacyModel = models.some((model) => /gpt-5\.(?:3|4|5)(?:\b|-)|legacy/i.test(model));
+const schemaVersion = Number(metadata.schema_version || 0);
+
+process.exit(schemaVersion < 2 || hasLegacyModel ? 0 : 1);
+NODE
 }
 
 merge_codex_config_profile() {
@@ -39,14 +207,14 @@ const profile = process.env.CODEX_MODEL_PROFILE;
 
 const profiles = {
   mixed: {
-    model: "gpt-5.4-mini",
-    model_reasoning_effort: "xhigh",
-    review_model: "gpt-5.5"
+    model: "gpt-5.6-terra",
+    model_reasoning_effort: "medium",
+    review_model: "gpt-5.6-sol"
   },
   maximum: {
-    model: "gpt-5.5",
-    model_reasoning_effort: "xhigh",
-    review_model: null
+    model: "gpt-5.6-sol",
+    model_reasoning_effort: "high",
+    review_model: "gpt-5.6-sol"
   }
 };
 
@@ -196,14 +364,14 @@ const configPath = process.env.CODEX_CONFIG_PATH;
 const profile = process.env.CODEX_MODEL_PROFILE;
 const profiles = {
   mixed: {
-    model: "gpt-5.4-mini",
-    model_reasoning_effort: "xhigh",
-    review_model: "gpt-5.5"
+    model: "gpt-5.6-terra",
+    model_reasoning_effort: "medium",
+    review_model: "gpt-5.6-sol"
   },
   maximum: {
-    model: "gpt-5.5",
-    model_reasoning_effort: "xhigh",
-    review_model: null
+    model: "gpt-5.6-sol",
+    model_reasoning_effort: "high",
+    review_model: "gpt-5.6-sol"
   }
 };
 

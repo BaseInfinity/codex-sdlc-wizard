@@ -187,26 +187,35 @@ test_roadmap_tracks_official_codex_plugin_distribution_plan() {
 }
 
 test_roadmap_tracks_review_model_measurement() {
-    local has_mini=true
-    local has_xhigh_review=true
+    local has_terra=true
+    local has_sol=true
+    local has_medium_main=true
+    local has_high_review=true
     local has_measurement_language=true
     local has_toggle_language=true
-    local avoids_experiment_word=true
+    local has_experimental_framing=true
+    local has_explicit_opt_in=true
 
-    grep -qi 'gpt-5\.4-mini' "$ROADMAP" || has_mini=false
-    grep -Eqi 'xhigh review|review.*xhigh|cross-model review.*xhigh' "$ROADMAP" || has_xhigh_review=false
+    grep -qi 'gpt-5\.6-terra' "$ROADMAP" || has_terra=false
+    grep -qi 'gpt-5\.6-sol' "$ROADMAP" || has_sol=false
+    grep -Eqi 'terra.{0,20}medium|mixed.{0,40}medium' "$ROADMAP" || has_medium_main=false
+    grep -Eqi 'high review|review.*high|cross-model review.*high' "$ROADMAP" || has_high_review=false
     grep -Eqi 'measure|measurement|compare|validate|data collection' "$ROADMAP" || has_measurement_language=false
-    grep -Eqi 'toggle|profile|switch between|all-xhigh|everything at xhigh' "$ROADMAP" || has_toggle_language=false
-    grep -Eqi 'experiment|experimental|experimentation' "$ROADMAP" && avoids_experiment_word=false
+    grep -Eqi 'toggle|profile|switch between|mixed.*maximum|maximum.*mixed' "$ROADMAP" || has_toggle_language=false
+    grep -Eqi 'experiment|experimental|experimentation' "$ROADMAP" || has_experimental_framing=false
+    grep -Eqi 'explicit opt-in|opt in explicitly|explicitly opt' "$ROADMAP" || has_explicit_opt_in=false
 
-    if [ "$has_mini" = "true" ] &&
-       [ "$has_xhigh_review" = "true" ] &&
+    if [ "$has_terra" = "true" ] &&
+       [ "$has_sol" = "true" ] &&
+       [ "$has_medium_main" = "true" ] &&
+       [ "$has_high_review" = "true" ] &&
        [ "$has_measurement_language" = "true" ] &&
        [ "$has_toggle_language" = "true" ] &&
-       [ "$avoids_experiment_word" = "true" ]; then
-        pass "Roadmap tracks gpt-5.4-mini vs xhigh-review measurement without experimental framing"
+       [ "$has_experimental_framing" = "true" ] &&
+       [ "$has_explicit_opt_in" = "true" ]; then
+        pass "Roadmap tracks mixed-profile measurement as an explicit experiment"
     else
-        fail "Roadmap does not track gpt-5.4-mini vs xhigh-review measurement without experimental framing"
+        fail "Roadmap does not frame Terra-medium versus Sol-high measurement as an explicit opt-in experiment"
     fi
 }
 
@@ -216,19 +225,25 @@ test_roadmap_sets_numeric_model_profile_targets() {
     local has_speed_delta=true
     local has_reopen_rate=true
     local has_complex_xhigh_rule=true
+    local has_high_vs_xhigh_gate=true
+    local preserves_xhigh_baseline=true
 
     grep -Eqi '20 slices|sample of 20|n=20' "$ROADMAP" || has_sample_size=false
     grep -Eqi '95%|>= ?95%' "$ROADMAP" || has_success_rate=false
     grep -Eqi '15% faster|>= ?15%|15% improvement' "$ROADMAP" || has_speed_delta=false
     grep -Eqi '10% reopen|<= ?10%|follow-up rate <= ?10%' "$ROADMAP" || has_reopen_rate=false
     grep -Eqi 'abstract|complex|high-blast-radius' "$ROADMAP" || has_complex_xhigh_rule=false
+    grep -Eqi 'Sol `?high`?.*Sol `?xhigh`?|high-vs-xhigh|high vs xhigh|one level lower' "$ROADMAP" || has_high_vs_xhigh_gate=false
+    grep -Eqi 'preserve.*xhigh|keep.*xhigh.*baseline|do not.*switch.*high|do not.*downgrade.*high' "$ROADMAP" || preserves_xhigh_baseline=false
 
     if [ "$has_sample_size" = "true" ] &&
        [ "$has_success_rate" = "true" ] &&
        [ "$has_speed_delta" = "true" ] &&
        [ "$has_reopen_rate" = "true" ] &&
-       [ "$has_complex_xhigh_rule" = "true" ]; then
-        pass "Roadmap sets numeric targets for model-profile measurement and keeps complex work on xhigh for now"
+       [ "$has_complex_xhigh_rule" = "true" ] &&
+       [ "$has_high_vs_xhigh_gate" = "true" ] &&
+       [ "$preserves_xhigh_baseline" = "true" ]; then
+        pass "Roadmap sets numeric targets for profile measurement and preserves the maintainer high-versus-xhigh gate"
     else
         fail "Roadmap does not set numeric targets for model-profile measurement clearly enough"
     fi

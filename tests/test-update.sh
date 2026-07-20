@@ -108,7 +108,7 @@ test_update_check_only_reports_missing_without_repair() {
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
     mkdir -p "$ws/src"
 
-    run_setup_local "$ws"
+    run_setup_local_args "$ws" --model-profile mixed
     rm -f "$ws/TESTING.md"
 
     local output status valid=true
@@ -582,7 +582,7 @@ test_update_merges_config_without_dropping_other_settings() {
 
     run_setup_local "$ws"
     cat > "$ws/.codex/config.toml" <<'EOF'
-model = "gpt-5.5"
+model = "gpt-5.6-luna"
 model_reasoning_effort = "xhigh"
 
 [features]
@@ -598,9 +598,9 @@ EOF
 
     grep -q '^hooks = true' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -v '^[[:space:]]*#' "$ws/.codex/config.toml" | grep -q '^codex_hooks\s*=' 2>/dev/null && valid=false
-    grep -q '^model = "gpt-5.5"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    grep -q '^review_model =' "$ws/.codex/config.toml" 2>/dev/null && valid=false
+    grep -q '^model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model_reasoning_effort = "high"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^review_model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q 'name = "o3"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     echo "$output" | grep -q '.codex/config.toml' 2>/dev/null || valid=false
     echo "$output" | grep -qi 'merge\|repair' 2>/dev/null || valid=false
@@ -697,7 +697,7 @@ EOF
     output=$(run_update "$ws")
 
     grep -q 'User-owned SDLC' "$ws/.codex-home/skills/sdlc/SKILL.md" 2>/dev/null || valid=false
-    echo "$output" | grep -q 'skills/sdlc' 2>/dev/null && valid=false
+    echo "$output" | grep -q '^- skills/sdlc:' 2>/dev/null && valid=false
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
@@ -707,7 +707,7 @@ EOF
     fi
 }
 
-# ---- Test 11: update repairs mixed profile drift to xhigh main reasoning ----
+# ---- Test 11: update repairs mixed profile drift to medium main reasoning ----
 test_update_repairs_mixed_profile_reasoning_drift() {
     local ws
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -716,9 +716,9 @@ test_update_repairs_mixed_profile_reasoning_drift() {
 
     run_setup_local_args "$ws" --model-profile mixed
     cat > "$ws/.codex/config.toml" <<'EOF'
-model = "gpt-5.4-mini"
+model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
-review_model = "gpt-5.4"
+review_model = "gpt-5.6-terra"
 
 [features]
 codex_hooks = true
@@ -728,9 +728,9 @@ EOF
     output=$(run_update "$ws")
     check_output=$(run_check "$ws")
 
-    grep -q '^model = "gpt-5.4-mini"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    grep -q '^model_reasoning_effort = "xhigh"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
-    grep -q '^review_model = "gpt-5.5"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model = "gpt-5.6-terra"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model_reasoning_effort = "medium"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^review_model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -q '^hooks = true' "$ws/.codex/config.toml" 2>/dev/null || valid=false
     grep -v '^[[:space:]]*#' "$ws/.codex/config.toml" | grep -q '^codex_hooks\s*=' 2>/dev/null && valid=false
     echo "$output" | grep -q '.codex/config.toml' 2>/dev/null || valid=false
@@ -738,9 +738,59 @@ EOF
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "update repairs mixed profile drift to xhigh main reasoning"
+        pass "update repairs mixed profile drift to medium main reasoning"
     else
-        fail "update did not repair mixed profile drift to xhigh main reasoning"
+        fail "update did not repair mixed profile drift to medium main reasoning"
+    fi
+}
+
+# ---- Test 12: profile-less updates restore the quality-first default ----
+test_update_defaults_profile_less_repo_to_sol_high() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    node - "$ws/.codex-sdlc/manifest.json" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+delete manifest.model_profile;
+fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    rm -f "$ws/.codex-sdlc/model-profile.json"
+    cat > "$ws/.codex/config.toml" <<'EOF'
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+review_model = "gpt-5.6-sol"
+
+[features]
+hooks = true
+EOF
+
+    local output update_status valid=true
+    set +e
+    output=$(run_update "$ws")
+    update_status=$?
+    set -e
+
+    [ "$update_status" -eq 0 ] || valid=false
+    grep -q '^model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^model_reasoning_effort = "high"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    grep -q '^review_model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.selected_profile' "maximum" || valid=false
+    grep -Fq 'Selected profile: maximum' "$ws/AGENTS.md" 2>/dev/null || valid=false
+    grep -Fq 'Baseline reasoning: `high`' "$ws/AGENTS.md" 2>/dev/null || valid=false
+    grep -Fq 'Selected profile: mixed' "$ws/AGENTS.md" 2>/dev/null && valid=false
+    echo "$output" | grep -q '.codex/config.toml' 2>/dev/null || valid=false
+    echo "$output" | grep -Fq 'Prepared for regeneration: AGENTS.md' || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "profile-less update restores the Sol-high maximum profile"
+    else
+        fail "profile-less update did not restore the Sol-high maximum profile"
     fi
 }
 
@@ -891,6 +941,407 @@ test_update_repairs_missing_goals_doc_when_manifest_tracks_it() {
     fi
 }
 
+# ---- Test 15: unsupported Codex versions cannot partially mutate updates ----
+test_update_rejects_unsupported_codex_version_before_mutation() {
+    local ws fakebin output status config_before manifest_before profile_before valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    cat > "$ws/.codex/config.toml" <<'EOF'
+model = "gpt-5.6-luna"
+model_reasoning_effort = "xhigh"
+
+[features]
+hooks = true
+EOF
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+    echo "codex-cli 0.143.9"
+    exit 0
+fi
+exit 99
+EOF
+    chmod +x "$fakebin/codex"
+
+    config_before=$(cat "$ws/.codex/config.toml")
+    manifest_before=$(cat "$ws/.codex-sdlc/manifest.json")
+    profile_before=$(cat "$ws/.codex-sdlc/model-profile.json")
+
+    set +e
+    output=$(PATH="$fakebin:$PATH" run_update "$ws")
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || valid=false
+    echo "$output" | grep -Fq 'Codex CLI 0.144.0 or newer' || valid=false
+    [ "$(cat "$ws/.codex/config.toml")" = "$config_before" ] || valid=false
+    [ "$(cat "$ws/.codex-sdlc/manifest.json")" = "$manifest_before" ] || valid=false
+    [ "$(cat "$ws/.codex-sdlc/model-profile.json")" = "$profile_before" ] || valid=false
+
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "update rejects unsupported Codex versions before mutating managed files"
+    else
+        echo "$output" >&2
+        fail "update partially mutated the repo before rejecting an unsupported Codex version"
+    fi
+}
+
+# ---- Test 16: matching legacy metadata migrates without losing explicit profile choice ----
+test_update_refreshes_matching_legacy_model_profile_metadata() {
+    local ws output check_output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local_args "$ws" --model-profile mixed
+    cat > "$ws/AGENTS.md" <<'EOF'
+# Old generated model policy
+
+- Selected profile: mixed
+- Baseline reasoning: `xhigh`
+- `mixed`: `legacy-mini` plus `legacy-flagship` review.
+EOF
+    cat > "$ws/.codex-sdlc/model-profile.json" <<'EOF'
+{
+  "selected_profile": "mixed",
+  "profiles": {
+    "mixed": {
+      "main_model": "legacy-mini",
+      "main_reasoning": "high",
+      "review_model": "legacy-flagship",
+      "review_reasoning": "xhigh"
+    },
+    "maximum": {
+      "main_model": "legacy-flagship",
+      "main_reasoning": "xhigh",
+      "review_model": "legacy-flagship",
+      "review_reasoning": "xhigh"
+    }
+  }
+}
+
+EOF
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" \
+    PROFILE_PATH="$ws/.codex-sdlc/model-profile.json" \
+    AGENTS_PATH="$ws/AGENTS.md" \
+    node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+const manifestPath = process.env.MANIFEST_PATH;
+const profilePath = process.env.PROFILE_PATH;
+const agentsPath = process.env.AGENTS_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+const hash = crypto.createHash("sha256").update(fs.readFileSync(profilePath)).digest("hex");
+manifest.managed_files[".codex-sdlc/model-profile.json"] = `sha256:${hash}`;
+manifest.managed_files["AGENTS.md"] = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(agentsPath)).digest("hex")}`;
+manifest.model_profile.selected_profile = "mixed";
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    output=$(run_update "$ws") || valid=false
+    check_output=$(run_check "$ws")
+
+    json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.schema_version' "2" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.selected_profile' "mixed" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.main_model' "gpt-5.6-terra" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.review_model' "gpt-5.6-sol" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.review_effort_source' "explicit command override" || valid=false
+    grep -Fq 'Selected profile: mixed' "$ws/AGENTS.md" || valid=false
+    grep -Fq 'Baseline reasoning: `medium`' "$ws/AGENTS.md" || valid=false
+    grep -Fq 'legacy-mini' "$ws/AGENTS.md" && valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex-sdlc/model-profile.json"].status' "match" || valid=false
+    echo "$output" | grep -Fq '.codex-sdlc/model-profile.json' || valid=false
+    echo "$output" | grep -Fq 'Prepared for regeneration: AGENTS.md' || valid=false
+    echo "$output" | grep -Eqi 'refresh|migrat' || valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update refreshes matching legacy model metadata and preserves explicit mixed selection"
+    else
+        echo "$output" >&2
+        fail "update left matching legacy model metadata stale or lost the selected profile"
+    fi
+}
+
+# ---- Test 17: missing managed metadata refreshes matching generated model policy ----
+test_update_refreshes_generated_policy_when_profile_metadata_is_missing() {
+    local ws output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local_args "$ws" --model-profile mixed
+    cat > "$ws/AGENTS.md" <<'EOF'
+# Old generated model policy
+
+- Selected profile: mixed
+- Baseline reasoning: `xhigh`
+- `mixed`: `legacy-mini` plus `legacy-flagship` review.
+EOF
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" \
+    AGENTS_PATH="$ws/AGENTS.md" \
+    node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+const manifestPath = process.env.MANIFEST_PATH;
+const agentsPath = process.env.AGENTS_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+manifest.managed_files["AGENTS.md"] = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(agentsPath)).digest("hex")}`;
+manifest.model_profile.selected_profile = "mixed";
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    rm -f "$ws/.codex-sdlc/model-profile.json"
+
+    output=$(run_update "$ws") || valid=false
+
+    json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.schema_version' "2" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.selected_profile' "mixed" || valid=false
+    grep -Fq 'Selected profile: mixed' "$ws/AGENTS.md" || valid=false
+    grep -Fq 'Baseline reasoning: `medium`' "$ws/AGENTS.md" || valid=false
+    grep -Fq 'legacy-mini' "$ws/AGENTS.md" && valid=false
+    echo "$output" | grep -Fq 'Prepared for regeneration: AGENTS.md' || valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update refreshes matching generated policy when managed profile metadata is missing"
+    else
+        echo "$output" >&2
+        fail "update repaired missing profile metadata but left matching generated model policy stale"
+    fi
+}
+
+# ---- Test 18: legacy model migration refreshes unchanged policy surfaces only ----
+test_update_refreshes_legacy_policy_surfaces_without_overwriting_customizations() {
+    local ws output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local_args "$ws" --model-profile mixed
+
+    cat > "$ws/AGENTS.md" <<'EOF'
+# Old generated model policy
+
+- Selected profile: mixed
+- Baseline reasoning: `xhigh`
+EOF
+    cat > "$ws/SDLC-LOOP.md" <<'EOF'
+# Old SDLC Loop
+
+Default to `xhigh` in every repo.
+EOF
+    cat > "$ws/START-SDLC.md" <<'EOF'
+# Customized old start policy
+
+Use xhigh reasoning by default for this repo.
+EOF
+    cp "$SCRIPT_DIR/fixtures/v0.7.31-sdlc-skill.md" "$ws/.agents/skills/sdlc/SKILL.md"
+    SKILL_PATH="$ws/.agents/skills/sdlc/SKILL.md" node <<'NODE'
+const fs = require("fs");
+const file = process.env.SKILL_PATH;
+fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/\n/g, "\r\n"));
+NODE
+    echo '# USER CUSTOM SETUP HELPER' > "$ws/.codex-home/skills/setup-wizard/SKILL.md"
+    echo '# USER CUSTOM UPDATE HELPER' > "$ws/.codex-home/skills/update-wizard/SKILL.md"
+
+    cat > "$ws/.codex-sdlc/model-profile.json" <<'EOF'
+{
+  "selected_profile": "mixed",
+  "profiles": {
+    "mixed": {
+      "main_model": "legacy-mini",
+      "main_reasoning": "high",
+      "review_model": "legacy-flagship",
+      "review_reasoning": "xhigh"
+    }
+  }
+}
+EOF
+
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" \
+    PROFILE_PATH="$ws/.codex-sdlc/model-profile.json" \
+    AGENTS_PATH="$ws/AGENTS.md" \
+    LOOP_PATH="$ws/SDLC-LOOP.md" \
+    START_PATH="$ws/START-SDLC.md" \
+    node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+const hash = (file) => `sha256:${crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")}`;
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+manifest.managed_files[".codex-sdlc/model-profile.json"] = hash(process.env.PROFILE_PATH);
+manifest.managed_files["AGENTS.md"] = hash(process.env.AGENTS_PATH);
+manifest.managed_files["SDLC-LOOP.md"] = hash(process.env.LOOP_PATH);
+manifest.managed_files["START-SDLC.md"] = hash(process.env.START_PATH);
+delete manifest.managed_files[".agents/skills/sdlc/SKILL.md"];
+manifest.model_profile.selected_profile = "mixed";
+fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    echo 'USER CUSTOM POLICY' >> "$ws/START-SDLC.md"
+
+    output=$(run_update "$ws") || valid=false
+
+    grep -Fq 'Default to `high`' "$ws/SDLC-LOOP.md" || valid=false
+    grep -Fq 'USER CUSTOM POLICY' "$ws/START-SDLC.md" || valid=false
+    grep -Fq 'Use xhigh reasoning by default for this repo.' "$ws/START-SDLC.md" || valid=false
+    grep -Fq 'model_reasoning_effort="high"' "$ws/.agents/skills/sdlc/SKILL.md" || valid=false
+    grep -Fq 'USER CUSTOM SETUP HELPER' "$ws/.codex-home/skills/setup-wizard/SKILL.md" || valid=false
+    grep -Fq 'USER CUSTOM UPDATE HELPER' "$ws/.codex-home/skills/update-wizard/SKILL.md" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.managed_files[".agents/skills/sdlc/SKILL.md"].startsWith("sha256:")' "true" || valid=false
+    echo "$output" | grep -Fq 'SDLC-LOOP.md' || valid=false
+    echo "$output" | grep -Fq '.agents/skills/sdlc/SKILL.md' || valid=false
+    echo "$output" | grep -Fq 'skills/setup-wizard: customized -> skip' || valid=false
+    echo "$output" | grep -Fq 'skills/update-wizard: customized -> skip' || valid=false
+    echo "$output" | grep -Fq 'START-SDLC.md: customized -> skip' || valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "legacy model migration refreshes unchanged policy surfaces and preserves customizations"
+    else
+        echo "$output" >&2
+        fail "legacy model migration left policy surfaces stale or overwrote customization"
+    fi
+}
+
+# ---- Test 19: customized legacy metadata still migrates unchanged policy surfaces ----
+test_update_migrates_legacy_policy_around_customized_profile_metadata() {
+    local ws output second_output profile_before check_output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local_args "$ws" --model-profile mixed
+    cat > "$ws/SDLC-LOOP.md" <<'EOF'
+# Old SDLC Loop
+
+Default to `xhigh` in every repo.
+EOF
+    LOOP_PATH="$ws/SDLC-LOOP.md" MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+const hash = crypto.createHash("sha256").update(fs.readFileSync(process.env.LOOP_PATH)).digest("hex");
+manifest.managed_files["SDLC-LOOP.md"] = `sha256:${hash}`;
+manifest.model_profile.policy_schema_version = 1;
+fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    cat > "$ws/.codex-sdlc/model-profile.json" <<'EOF'
+{
+  "selected_profile": "mixed",
+  "custom_policy": "KEEP ME",
+  "profiles": {
+    "mixed": {
+      "main_model": "legacy-custom-driver",
+      "review_model": "legacy-custom-review"
+    }
+  }
+}
+EOF
+    profile_before=$(cat "$ws/.codex-sdlc/model-profile.json")
+
+    output=$(run_update "$ws") || valid=false
+    check_output=$(run_check "$ws")
+    second_output=$(run_update "$ws") || valid=false
+
+    grep -Fq 'Default to `high`' "$ws/SDLC-LOOP.md" || valid=false
+    [ "$(cat "$ws/.codex-sdlc/model-profile.json")" = "$profile_before" ] || valid=false
+    echo "$output" | grep -Fq '.codex-sdlc/model-profile.json: customized -> skip' || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex-sdlc/model-profile.json"].status' "customized" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "2" || valid=false
+    echo "$second_output" | grep -Fq 'No changes applied.' || valid=false
+    echo "$second_output" | grep -Fq 'refresh model policy' && valid=false
+    echo "$second_output" | grep -Fq 'refresh generated model policy' && valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "customized legacy metadata migration preserves policy and converges after one update"
+    else
+        echo "$output" >&2
+        echo "$second_output" >&2
+        fail "customized legacy metadata migration did not preserve policy or converge"
+    fi
+}
+
+# ---- Test 20: customized policy surfaces still record one-time migration completion ----
+test_update_records_schema_only_migration_when_all_policy_surfaces_are_customized() {
+    local ws output second_output profile_before agents_before loop_before start_before skill_before valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local_args "$ws" --model-profile mixed
+    printf '\nUSER CUSTOM AGENTS POLICY\n' >> "$ws/AGENTS.md"
+    printf '\nUSER CUSTOM LOOP POLICY\n' >> "$ws/SDLC-LOOP.md"
+    printf '\nUSER CUSTOM START POLICY\n' >> "$ws/START-SDLC.md"
+    printf '\nUSER CUSTOM SDLC SKILL POLICY\n' >> "$ws/.agents/skills/sdlc/SKILL.md"
+    printf '\n# USER CUSTOM CONFIG\n' >> "$ws/.codex/config.toml"
+    printf '\nUSER CUSTOM SETUP HELPER\n' >> "$ws/.codex-home/skills/setup-wizard/SKILL.md"
+    printf '\nUSER CUSTOM UPDATE HELPER\n' >> "$ws/.codex-home/skills/update-wizard/SKILL.md"
+    cat > "$ws/.codex-sdlc/model-profile.json" <<'EOF'
+{
+  "selected_profile": "mixed",
+  "custom_policy": "KEEP ME",
+  "profiles": {
+    "mixed": {
+      "main_model": "legacy-custom-driver",
+      "review_model": "legacy-custom-review"
+    }
+  }
+}
+EOF
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node <<'NODE'
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+manifest.model_profile.policy_schema_version = 1;
+fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    profile_before=$(cat "$ws/.codex-sdlc/model-profile.json")
+    agents_before=$(cat "$ws/AGENTS.md")
+    loop_before=$(cat "$ws/SDLC-LOOP.md")
+    start_before=$(cat "$ws/START-SDLC.md")
+    skill_before=$(cat "$ws/.agents/skills/sdlc/SKILL.md")
+
+    output=$(run_update "$ws") || valid=false
+    second_output=$(run_update "$ws") || valid=false
+
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "2" || valid=false
+    [ "$(cat "$ws/.codex-sdlc/model-profile.json")" = "$profile_before" ] || valid=false
+    [ "$(cat "$ws/AGENTS.md")" = "$agents_before" ] || valid=false
+    [ "$(cat "$ws/SDLC-LOOP.md")" = "$loop_before" ] || valid=false
+    [ "$(cat "$ws/START-SDLC.md")" = "$start_before" ] || valid=false
+    [ "$(cat "$ws/.agents/skills/sdlc/SKILL.md")" = "$skill_before" ] || valid=false
+    grep -Fq 'USER CUSTOM SETUP HELPER' "$ws/.codex-home/skills/setup-wizard/SKILL.md" || valid=false
+    grep -Fq 'USER CUSTOM UPDATE HELPER' "$ws/.codex-home/skills/update-wizard/SKILL.md" || valid=false
+    echo "$output" | grep -Fq '.codex-sdlc/manifest.json' || valid=false
+    echo "$output" | grep -Fq 'record model policy migration completion' || valid=false
+    echo "$second_output" | grep -Fq 'No changes applied.' || valid=false
+    echo "$second_output" | grep -Fq 'record model policy migration completion' && valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "schema-only migration records completion and preserves every customized policy surface"
+    else
+        echo "$output" >&2
+        echo "$second_output" >&2
+        fail "schema-only migration did not converge without overwriting customized policy surfaces"
+    fi
+}
+
 test_update_reports_uninitialized_repo
 test_update_check_only_reports_missing_without_repair
 test_update_repairs_missing_generated_docs
@@ -907,9 +1358,16 @@ test_update_repairs_missing_native_skills
 test_update_removes_legacy_codex_sdlc_skill
 test_update_preserves_user_owned_global_sdlc_skill
 test_update_repairs_mixed_profile_reasoning_drift
+test_update_defaults_profile_less_repo_to_sol_high
 test_update_refreshes_playwright_mcp_policy_for_old_manifest
 test_update_refreshes_changed_playwright_mcp_policy
 test_update_repairs_missing_goals_doc_when_manifest_tracks_it
+test_update_rejects_unsupported_codex_version_before_mutation
+test_update_refreshes_matching_legacy_model_profile_metadata
+test_update_refreshes_generated_policy_when_profile_metadata_is_missing
+test_update_refreshes_legacy_policy_surfaces_without_overwriting_customizations
+test_update_migrates_legacy_policy_around_customized_profile_metadata
+test_update_records_schema_only_migration_when_all_policy_surfaces_are_customized
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
