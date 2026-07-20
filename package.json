@@ -19,7 +19,7 @@
     ".agents/",
     "agents/",
     "bin/",
-    "skills/",
+    "skill-sources/",
     ".codex/config.toml",
     ".codex/hooks.json",
     ".codex/unix-hooks.json",

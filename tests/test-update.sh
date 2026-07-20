@@ -648,7 +648,8 @@ test_update_removes_legacy_codex_sdlc_skill() {
 
     run_setup_local "$ws"
     rm -rf "$ws/.codex-home/skills/sdlc"
-    cp -R "$REPO_DIR/skills/sdlc" "$ws/.codex-home/skills/sdlc"
+    cp -R "$REPO_DIR/skill-sources/sdlc" "$ws/.codex-home/skills/sdlc"
+    mv "$ws/.codex-home/skills/sdlc/SKILL.template.md" "$ws/.codex-home/skills/sdlc/SKILL.md"
     mkdir -p "$ws/.codex-home/skills/codex-sdlc"
     echo "LEGACY" > "$ws/.codex-home/skills/codex-sdlc/marker.txt"
 
