@@ -34,8 +34,8 @@ After either path changes skills, hooks, hook config, or helper scripts, restart
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.33 check
-npx codex-sdlc-wizard@0.7.33 update
+npx codex-sdlc-wizard@0.7.34 check
+npx codex-sdlc-wizard@0.7.34 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -73,33 +73,45 @@ Get as far as possible through GOALS.md in small, shippable slices. Follow $sdlc
 
 ## What This Repo Is
 
-This repo is now a **Codex skill plus adaptive installer-style adapter** for Codex projects.
+This repo is a **skills-only plugin plus adaptive installer-style adapter** for Codex projects.
 
-- It ships a repo-root `SKILL.md` for the normal Codex skill install flow.
-- It is **not a Codex plugin** today.
-- It still ships `install.sh` / `setup.sh` when you want direct repo mutation from GitHub or npm.
+- `.codex-plugin/plugin.json` makes the repository and npm package an installable Codex plugin.
+- The plugin exposes one Codex skill at `skills/codex-sdlc-wizard/SKILL.md`; the legacy repo-root copy is gone, so recursive discovery cannot load the same installer twice.
+- The plugin does not bundle MCP servers or declare plugin-level hooks. `install.sh` / `setup.sh` remain the adaptive repo-mutation path that writes repository-scoped skills, hooks, config, and guidance.
 
 | Need | Use | Why |
 |------|-----|-----|
-| Install a reusable Codex skill from this repo | `SKILL.md` | The repo root is now a Codex skill package for normal GitHub skill-install flow |
+| Install from the shared plugin directory | **Codex SDLC Wizard** | The same skills-only plugin package can be loaded in ChatGPT Work, the Codex desktop app, and Codex CLI |
+| Inspect the plugin skill source | `skills/codex-sdlc-wizard/SKILL.md` | Inspection-only: the skill depends on scripts at the plugin root, so install the complete plugin instead of this directory alone |
 | Add SDLC enforcement to an existing Codex project now | `npx codex-sdlc-wizard` or `setup.sh` | The npm package bootstraps then hands off into live Codex setup; direct scripts still exist for advanced/manual shell paths |
-| Install a Codex plugin from this repo | Not supported | There is no `.codex-plugin/plugin.json` package here |
 
 ## Official Codex Distribution Status
 
-Current recommended install/discovery path: `npx codex-sdlc-wizard@latest` for repo setup, plus the repo-root `SKILL.md` / `agents/openai.yaml` package for skill installation.
+The source and npm tarball are now plugin-ready. Until the public directory listing is accepted, `npx codex-sdlc-wizard@latest` remains the reliable public repo-setup path.
 
 Official Codex docs now clarify the packaging boundary:
 
-- [Agent Skills](https://developers.openai.com/codex/skills): skills are the authoring format for reusable workflows.
-- [Plugins](https://developers.openai.com/codex/plugins) and [Build plugins](https://developers.openai.com/codex/plugins/build): plugins are the installable distribution unit for reusable skills, app integrations, and MCP servers in Codex.
+- [Skills and plugins](https://learn.chatgpt.com/docs/skills-and-plugins): skills are the authoring format for reusable workflows.
+- [Plugins](https://learn.chatgpt.com/docs/plugins) and [Build plugins](https://developers.openai.com/plugins/build/plugins): plugins are the installable distribution unit for reusable skills, app integrations, and MCP servers.
 
 What that means for this repo:
 
-1. Today, keep npm/npx as the supported consumer path and keep this README honest that the repo is not a plugin yet.
-2. Next packaging path, when worth doing, is a real Codex plugin with `.codex-plugin/plugin.json`, bundled `skills/`, optional `.mcp.json`, optional `.app.json`, and presentation assets.
-3. Local or team testing should use a plugin marketplace file at `.agents/plugins/marketplace.json`, then verify with `codex plugin marketplace add` and the CLI `/plugins` browser.
-4. Official public plugin listing is not self-serve yet; self-serve plugin publishing is coming soon. Until a listing actually exists, no approval or listing is implied.
+1. ChatGPT Work, the Codex desktop app, and Codex CLI draw public plugins from the same universal directory, but installation and enablement are surface-specific. Install or enable the plugin on each intended surface, then start a fresh thread or session there so it reloads the plugin.
+2. In ChatGPT Work, invoke the plugin with `@Codex SDLC Wizard`. In Codex, invoke its installer skill with `$codex-sdlc-wizard`; after repo setup, use the generated repo-scoped `$sdlc` workflow for delivery work.
+3. Ordinary Chat mode does not support plugins. Switch to Work or Codex when the task needs this plugin. A ChatGPT Work project without local repository/shell access can explain or plan the setup, but the mutating install must run in Codex desktop, Codex CLI, or another environment that can access the target repo.
+4. The official [plugin submission portal](https://developers.openai.com/plugins/deploy/submission) is live. This package's public listing is pending validation and submission; no official OpenAI endorsement is implied.
+
+### Migrate the legacy standalone skill
+
+Releases through `0.7.33` could be installed directly at `~/.codex/skills/codex-sdlc-wizard`. Installing the plugin does not remove that old directory, so Codex can discover two copies of the installer skill. Before using the plugin, move the stale standalone copy to a recoverable backup outside the active `skills/` directory. The default backup location is `~/.codex/skill-backups`:
+
+```bash
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skill-backups"
+mv "${CODEX_HOME:-$HOME/.codex}/skills/codex-sdlc-wizard" \
+  "${CODEX_HOME:-$HOME/.codex}/skill-backups/codex-sdlc-wizard-standalone"
+```
+
+Skip the `mv` when the legacy path does not exist. If the backup destination already exists, choose another name instead of overwriting it. Start a fresh thread or session after the move so ChatGPT Work or Codex reloads plugin discovery without the duplicate.
 
 ## Why Use This
 
@@ -219,10 +231,10 @@ How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.33 --model-profile maximum
+npx codex-sdlc-wizard@0.7.34 --model-profile maximum
 
 # experimental efficiency trial when you explicitly choose it
-npx codex-sdlc-wizard@0.7.33 --model-profile mixed
+npx codex-sdlc-wizard@0.7.34 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
@@ -315,7 +327,7 @@ Canonical entrypoint: `$sdlc`. `/sdlc` is historical shorthand for the missing s
 
 Codex treats same-name skills from different scopes as distinct choices. To avoid duplicate `$sdlc` workflow rows, normal setup installs global helper skills only (`feedback`, `setup-wizard`, and `update-wizard`) and keeps `.agents/skills/sdlc` as the canonical repo-scoped workflow.
 
-The repository keeps installable helper definitions under `skill-sources/` as `SKILL.template.md` files. This matters when the repo root is installed as `$codex-sdlc-wizard`: Codex recursively discovers nested files named `SKILL.md` inside that global bundle, which would otherwise duplicate the repo workflow and direct global helpers. Setup/update materialize the standard `SKILL.md` filename only in each intended direct global helper destination.
+The repository keeps helper definitions under `skill-sources/` as `SKILL.template.md` installer inputs, not directly discoverable plugin skills. Setup/update materialize the standard `SKILL.md` filename only in each intended direct global helper destination.
 
 These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so repo-scoped skills are loaded cleanly.
 
@@ -363,7 +375,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.33
+npx codex-sdlc-wizard@0.7.34
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -373,7 +385,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.33 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.34 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow
@@ -459,7 +471,7 @@ CODEX_E2E=1 bash tests/test-e2e.sh
 - `node scripts/run-proof-suite.cjs` runs the maintainer proof suite with bounded parallel jobs and per-check logs; use `--serial` when debugging ordering-sensitive failures.
 - Release contract tests for semver tags, GitHub Releases, and README release docs
 - Packaging smoke tests for the documented installer path and README packaging contract
-- Skill packaging tests for SKILL.md, agents/openai.yaml, and dual-distribution docs
+- Plugin-skill packaging tests for `skills/codex-sdlc-wizard/SKILL.md`, its `agents/openai.yaml`, and dual-distribution docs
 - npm packaging smoke tests for package metadata, packed contents, and npm exec
 - Adapter, setup, and update tests for the Codex-specific behavior surface
 - E2E integration tests are token-consuming and opt-in; use `CODEX_E2E=1 bash tests/test-e2e.sh` when you explicitly want real Codex sessions proving hooks fire

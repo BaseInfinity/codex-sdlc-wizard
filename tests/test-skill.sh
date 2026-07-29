@@ -6,8 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
-SKILL_MD="$REPO_DIR/SKILL.md"
-OPENAI_YAML="$REPO_DIR/agents/openai.yaml"
+SKILL_MD="$REPO_DIR/skills/codex-sdlc-wizard/SKILL.md"
+OPENAI_YAML="$REPO_DIR/skills/codex-sdlc-wizard/agents/openai.yaml"
 REPO_SDLC_SKILL="$REPO_DIR/.agents/skills/sdlc/SKILL.md"
 REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
 GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
@@ -51,6 +51,78 @@ test_skill_manifest_exists() {
         pass "SKILL.md exists and explains the installer/setup split"
     else
         fail "SKILL.md is missing or does not explain how to use the bundled scripts"
+    fi
+}
+
+test_plugin_skill_resolves_bundled_scripts_from_plugin_root() {
+    local has_plugin_root_rule=true
+    local has_relative_location=true
+    local has_absolute_execution_path=true
+    local has_target_repo_workdir=true
+    local documents_windows_paths=true
+    local requires_git_bash_for_windows_adaptive_setup=true
+    local keeps_windows_adaptive_setup_noninteractive=true
+    local avoids_nonexistent_setup_ps1=true
+    local avoids_bare_npx_adaptive_setup=true
+
+    grep -Eqi 'plugin root' "$SKILL_MD" || has_plugin_root_rule=false
+    grep -Fq '`../..`' "$SKILL_MD" || has_relative_location=false
+    grep -Eqi 'absolute path.*(install|setup)\.sh|(install|setup)\.sh.*absolute path' "$SKILL_MD" || has_absolute_execution_path=false
+    grep -Eqi 'target repo(sitory)?.*(working directory|current working directory)|(working directory|current working directory).*target repo(sitory)?' "$SKILL_MD" || has_target_repo_workdir=false
+    grep -Fq '`install.ps1`' "$SKILL_MD" || documents_windows_paths=false
+    grep -Eqi 'PowerShell.*Git Bash|Git Bash.*PowerShell' "$SKILL_MD" || requires_git_bash_for_windows_adaptive_setup=false
+    grep -Eqi 'PowerShell.*`bash .*setup\.sh.*--yes`|`bash .*setup\.sh.*--yes`.*PowerShell' "$SKILL_MD" || keeps_windows_adaptive_setup_noninteractive=false
+    grep -Fq 'there is no `setup.ps1`' "$SKILL_MD" || avoids_nonexistent_setup_ps1=false
+    grep -Eqi 'PowerShell.*adaptive setup uses `npx codex-sdlc-wizard`' "$SKILL_MD" && avoids_bare_npx_adaptive_setup=false
+
+    if [ "$has_plugin_root_rule" = "true" ] &&
+       [ "$has_relative_location" = "true" ] &&
+       [ "$has_absolute_execution_path" = "true" ] &&
+       [ "$has_target_repo_workdir" = "true" ] &&
+       [ "$documents_windows_paths" = "true" ] &&
+       [ "$requires_git_bash_for_windows_adaptive_setup" = "true" ] &&
+       [ "$keeps_windows_adaptive_setup_noninteractive" = "true" ] &&
+       [ "$avoids_nonexistent_setup_ps1" = "true" ] &&
+       [ "$avoids_bare_npx_adaptive_setup" = "true" ]; then
+        pass "Plugin skill resolves bundled scripts from its installed plugin root"
+    else
+        fail "Plugin skill does not safely resolve bundled scripts from its installed plugin root"
+    fi
+}
+
+test_plugin_skill_handles_legacy_standalone_install() {
+    local identifies_legacy_path=true
+    local explains_duplicate_risk=true
+    local requires_permission=true
+    local avoids_automatic_deletion=true
+
+    grep -Fq '${CODEX_HOME:-$HOME/.codex}/skills/codex-sdlc-wizard' "$SKILL_MD" || identifies_legacy_path=false
+    grep -Eqi 'duplicate|two copies|stale standalone' "$SKILL_MD" || explains_duplicate_risk=false
+    grep -Eqi 'ask.*(permission|confirmation)|explicit (permission|confirmation)' "$SKILL_MD" || requires_permission=false
+    grep -Eqi 'do not (delete|remove|move).*(automatically|without)|never (delete|remove|move).*(automatically|without)' "$SKILL_MD" || avoids_automatic_deletion=false
+
+    if [ "$identifies_legacy_path" = "true" ] &&
+       [ "$explains_duplicate_risk" = "true" ] &&
+       [ "$requires_permission" = "true" ] &&
+       [ "$avoids_automatic_deletion" = "true" ]; then
+        pass "Plugin skill safely detects and migrates legacy standalone installs"
+    else
+        fail "Plugin skill does not safely handle legacy standalone skill duplication"
+    fi
+}
+
+test_plugin_skill_documents_surface_specific_installation() {
+    local has_shared_catalog=true
+    local has_surface_specific_install=true
+
+    grep -Eqi 'shared plugin directory|same public catalog|universal plugin directory' "$SKILL_MD" || has_shared_catalog=false
+    grep -Eqi 'install(ation)?(/enablement)? (is|remains) surface-specific|install or enable (it|the plugin) (on|in) each intended surface' "$SKILL_MD" || has_surface_specific_install=false
+
+    if [ "$has_shared_catalog" = "true" ] &&
+       [ "$has_surface_specific_install" = "true" ]; then
+        pass "Plugin skill distinguishes shared discovery from surface-specific installation"
+    else
+        fail "Plugin skill conflates the shared plugin catalog with installation state"
     fi
 }
 
@@ -211,10 +283,12 @@ test_default_repo_scoped_skill_surface_is_sdlc_only() {
     fi
 }
 
-test_root_skill_bundle_avoids_nested_skill_discovery() {
+test_plugin_skill_bundle_avoids_duplicate_helper_discovery() {
     local avoids_nested_skill_files=true
     local has_installable_sources=true
     local powershell_materializes_sources=true
+    local readme_treats_templates_as_installer_inputs=true
+    local avoids_legacy_root_bundle_explanation=true
     local skill_name
 
     if find "$GLOBAL_SKILL_SOURCES" -name SKILL.md -print -quit 2>/dev/null | grep -q .; then
@@ -233,11 +307,15 @@ test_root_skill_bundle_avoids_nested_skill_discovery() {
     grep -Fq '$repoSkillTarget = ".agents\skills\$Name\SKILL.md"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
     grep -Fq '$collidingSdlcPath = Join-Path $skillsRoot "sdlc"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
     grep -Fq 'Test-WizardManagedSkill' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Eqi 'installer inputs?.*not.*directly discoverable plugin skills?|not.*directly discoverable plugin skills?.*installer inputs?' "$README" || readme_treats_templates_as_installer_inputs=false
+    grep -Eqi 'repo root is installed as|repo-root.*installed as' "$README" && avoids_legacy_root_bundle_explanation=false
 
     if [ "$avoids_nested_skill_files" = "true" ] &&
        [ "$has_installable_sources" = "true" ] &&
-       [ "$powershell_materializes_sources" = "true" ]; then
-        pass "Root bundle templates avoid recursive discovery and materialize on shell and PowerShell paths"
+       [ "$powershell_materializes_sources" = "true" ] &&
+       [ "$readme_treats_templates_as_installer_inputs" = "true" ] &&
+       [ "$avoids_legacy_root_bundle_explanation" = "true" ]; then
+        pass "Plugin bundle templates avoid recursive discovery and materialize on shell and PowerShell paths"
     else
         fail "Root bundle templates are discoverable, missing, or not materialized by the PowerShell installer"
     fi
@@ -333,6 +411,9 @@ test_repo_scoped_sdlc_skill_documents_native_review() {
 }
 
 test_skill_manifest_exists
+test_plugin_skill_resolves_bundled_scripts_from_plugin_root
+test_plugin_skill_handles_legacy_standalone_install
+test_plugin_skill_documents_surface_specific_installation
 test_agents_openai_yaml_exists
 test_readme_documents_dual_distribution
 test_readme_recommends_current_codex_startup
@@ -340,7 +421,7 @@ test_skill_recommends_current_codex_after_install
 test_skill_documents_model_profiles
 test_repo_contract_keeps_this_repo_on_maximum
 test_default_repo_scoped_skill_surface_is_sdlc_only
-test_root_skill_bundle_avoids_nested_skill_discovery
+test_plugin_skill_bundle_avoids_duplicate_helper_discovery
 test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review

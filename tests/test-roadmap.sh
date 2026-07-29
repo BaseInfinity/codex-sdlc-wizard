@@ -124,21 +124,21 @@ test_roadmap_records_resolved_packaging_issue() {
     fi
 }
 
-test_roadmap_tracks_late_creator_investigation() {
+test_roadmap_records_creator_investigation_outcome() {
     local has_skill_creator=true
     local has_plugin_creator=true
-    local has_later_priority=true
+    local has_implementation_outcome=true
 
     grep -qi 'Skill Creator' "$ROADMAP" || has_skill_creator=false
     grep -qi 'Plugin Creator' "$ROADMAP" || has_plugin_creator=false
-    grep -Eqi 'later|down the road|after' "$ROADMAP" || has_later_priority=false
+    grep -Eqi 'skills-only plugin|plugin manifest.*implemented|implemented.*plugin manifest' "$ROADMAP" || has_implementation_outcome=false
 
     if [ "$has_skill_creator" = "true" ] &&
        [ "$has_plugin_creator" = "true" ] &&
-       [ "$has_later_priority" = "true" ]; then
-        pass "Roadmap tracks Skill Creator / Plugin Creator investigation as later work"
+       [ "$has_implementation_outcome" = "true" ]; then
+        pass "Roadmap records the Skill Creator / Plugin Creator investigation outcome"
     else
-        fail "Roadmap does not track the later Skill Creator / Plugin Creator investigation"
+        fail "Roadmap does not record the creator-tool investigation outcome"
     fi
 }
 
@@ -168,19 +168,24 @@ test_roadmap_tracks_goal_mode_guidance() {
 test_roadmap_tracks_official_codex_plugin_distribution_plan() {
     local has_official_distribution=true
     local has_plugin_manifest=true
-    local has_marketplace=true
+    local has_skills_only_shape=true
+    local has_supported_surfaces=true
     local has_publish_boundary=true
     local has_no_endorsement_rule=true
 
     grep -Eqi 'official Codex.*distribution|Codex plugin distribution' "$ROADMAP" || has_official_distribution=false
     grep -q '.codex-plugin/plugin.json' "$ROADMAP" || has_plugin_manifest=false
-    grep -q '.agents/plugins/marketplace.json' "$ROADMAP" || has_marketplace=false
-    grep -Eqi 'self-serve plugin publishing.*coming soon|official public plugin.*coming soon|coming soon.*plugin publishing' "$ROADMAP" || has_publish_boundary=false
+    grep -Eqi 'skills-only plugin|manifest.*SKILL.md|SKILL.md.*manifest' "$ROADMAP" || has_skills_only_shape=false
+    grep -q 'ChatGPT Work' "$ROADMAP" || has_supported_surfaces=false
+    grep -Eqi 'Codex (desktop|app)' "$ROADMAP" || has_supported_surfaces=false
+    grep -q 'Codex CLI' "$ROADMAP" || has_supported_surfaces=false
+    grep -Eqi 'submission portal.*(live|available|open)|public listing.*pending' "$ROADMAP" || has_publish_boundary=false
     grep -Eqi 'do not imply official OpenAI endorsement|no official OpenAI endorsement|without official OpenAI endorsement' "$ROADMAP" || has_no_endorsement_rule=false
 
     if [ "$has_official_distribution" = "true" ] &&
        [ "$has_plugin_manifest" = "true" ] &&
-       [ "$has_marketplace" = "true" ] &&
+       [ "$has_skills_only_shape" = "true" ] &&
+       [ "$has_supported_surfaces" = "true" ] &&
        [ "$has_publish_boundary" = "true" ] &&
        [ "$has_no_endorsement_rule" = "true" ]; then
         pass "Roadmap tracks the official Codex plugin distribution plan and publish boundary"
@@ -273,10 +278,10 @@ test_roadmap_tracks_default_use_pilot_gate() {
     fi
 }
 
-test_roadmap_prioritizes_pilot_rollout_before_creator_investigation() {
+test_roadmap_prioritizes_plugin_surface_validation() {
     local order_section
-    local line_pilot_rollout
-    local line_creator_investigation
+    local line_plugin_validation
+    local line_public_submission
 
     order_section=$(awk '
         /^## Working Order$/ { in_section=1; next }
@@ -284,15 +289,15 @@ test_roadmap_prioritizes_pilot_rollout_before_creator_investigation() {
         in_section { print }
     ' "$ROADMAP")
 
-    line_pilot_rollout=$(echo "$order_section" | nl -ba | grep -Ei 'pilot repos|pilot rollout|default use' | awk '{print $1}' | head -n1)
-    line_creator_investigation=$(echo "$order_section" | nl -ba | grep -Ei 'creator-tool|creator' | awk '{print $1}' | head -n1)
+    line_plugin_validation=$(echo "$order_section" | nl -ba | grep -Ei 'plugin.*(ChatGPT Work|Codex desktop|supported surfaces)|supported surfaces.*plugin' | awk '{print $1}' | head -n1)
+    line_public_submission=$(echo "$order_section" | nl -ba | grep -Ei 'public.*(submission|listing)|submission portal' | awk '{print $1}' | head -n1)
 
-    if [ -n "${line_pilot_rollout:-}" ] &&
-       [ -n "${line_creator_investigation:-}" ] &&
-       [ "$line_pilot_rollout" -lt "$line_creator_investigation" ]; then
-        pass "Roadmap prioritizes pilot rollout before later creator-tool investigation"
+    if [ -n "${line_plugin_validation:-}" ] &&
+       [ -n "${line_public_submission:-}" ] &&
+       [ "$line_plugin_validation" -lt "$line_public_submission" ]; then
+        pass "Roadmap prioritizes supported-surface plugin validation before public submission"
     else
-        fail "Roadmap does not prioritize pilot rollout ahead of later creator-tool investigation"
+        fail "Roadmap does not prioritize plugin validation ahead of public submission"
     fi
 }
 
@@ -300,13 +305,13 @@ test_roadmap_exists
 test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
 test_roadmap_records_resolved_packaging_issue
-test_roadmap_tracks_late_creator_investigation
+test_roadmap_records_creator_investigation_outcome
 test_roadmap_tracks_goal_mode_guidance
 test_roadmap_tracks_official_codex_plugin_distribution_plan
 test_roadmap_tracks_review_model_measurement
 test_roadmap_sets_numeric_model_profile_targets
 test_roadmap_tracks_default_use_pilot_gate
-test_roadmap_prioritizes_pilot_rollout_before_creator_investigation
+test_roadmap_prioritizes_plugin_surface_validation
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

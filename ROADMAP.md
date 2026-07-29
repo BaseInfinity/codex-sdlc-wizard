@@ -2,9 +2,10 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.33` and `v0.7.33` are the current release target for the SDLC-only default repo skill surface
+- `codex-sdlc-wizard@0.7.34` and `v0.7.34` are the current release target for the first skills-only plugin distribution
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
-- the repo now ships both a Codex skill package (`SKILL.md`, `agents/openai.yaml`) and the installer/setup adapter (`install.sh`, `setup.sh`)
+- the repo now ships a skills-only Codex plugin (`.codex-plugin/plugin.json` pointing to `skills/`), one installer skill at `skills/codex-sdlc-wizard/SKILL.md`, and the installer/setup adapter (`install.sh`, `setup.sh`)
+- the plugin declares no MCP servers, apps, or plugin-level hooks; repo-scoped enforcement remains the responsibility of the adaptive installer
 - the npm CLI now defaults to adaptive interactive setup instead of requiring an explicit `setup` subcommand for the main human path
 - setup now layers deterministic scan plus live Codex `gpt-5.6-sol` / `high` refinement when available
 - setup now keeps detected values automatically, asks inferred values conversationally, and asks only missing core repo facts directly
@@ -45,7 +46,7 @@
 - the repo now ships a consumer bug-report template for install/setup/runtime failures
 - the public README now leads with the real `@latest` adaptive setup path and keeps the top section consumer-focused
 - the public README now has consumer-parity sections that explain why to use the wizard without exposing later ecosystem branding
-- official Codex skills/plugins docs now have a documented distribution boundary in README and ROADMAP: npm/skill remains current, plugin packaging is future work
+- the official Codex plugin distribution boundary is documented in README and ROADMAP: ChatGPT Work, the Codex desktop app, and Codex CLI share plugin distribution, while ordinary Chat does not support plugins
 - maintainers can run `node scripts/run-proof-suite.cjs` for bounded parallel release proof without dropping any checks, with `--serial` available for debugging
 - benchmark and pilot-rollout ledgers now exist so model/default-use decisions can be measured, not guessed
 - release, packaging, npm, skill, setup, adapter, update, and E2E tests are green when the parity merge is complete
@@ -53,18 +54,19 @@
 - setup now supports optional `--goals` generation for a manifest-tracked `GOALS.md` active-scope contract, while `ROADMAP.md` remains backlog/history
 - README and generated `GOALS.md` now document manual Codex `/goal` usage as SDLC-backed active work anchored to `$sdlc`, confidence/verification gates, and clean-break commits; programmatic `/goal` automation remains unassumed
 - setup/check now reject unknown arguments before mutating or inspecting the current directory, so mistyped flags do not silently operate on the wrong repo
-- upstream sync has been reviewed through `agentic-ai-sdlc-wizard` / `claude-sdlc-wizard` `v1.73.0`; Codex-relevant workflow hardening was ported, while Claude-only precompact hooks, plugin packaging, and research churn remain intentionally out of scope unless they prove reusable here
+- upstream sync has been reviewed through `agentic-ai-sdlc-wizard` / `claude-sdlc-wizard` `v1.73.0`; Codex-relevant workflow hardening was ported, while Claude-only precompact hooks and research churn remain intentionally out of scope unless they prove reusable here
 
 ## Next Release Cycle
 
 ### 0.7.34
 
-Purpose: continue pilot rollout after the `0.7.33` skill-packaging stabilization release while keeping new patches tied to proven reusable wizard bugs or verified Codex-native workflow behavior.
+Purpose: ship and validate the skills-only plugin package across the supported OpenAI surfaces, then continue pilot rollout while keeping runtime patches tied to proven reusable wizard bugs.
 
 Scope:
-- keep `0.7.33` as the Sol-high consumer default, explicit mixed-profile experiment, initialized-clone update, current-Codex handoff/full-trust guidance, duplicate-free root skill packaging, demo-runtime claim gate, parallel proof-runner, current Codex hooks feature-flag and compact lifecycle baseline, optional `GOALS.md` active-scope contract, manual `/goal` guidance baseline, and fail-fast unknown-argument baseline for pilot consumption
+- package `.codex-plugin/plugin.json` and `skills/codex-sdlc-wizard/SKILL.md` in npm without introducing duplicate skill discovery
+- validate install/discovery and one real repo mutation from ChatGPT Work where project access permits it, the Codex desktop app, and Codex CLI
+- keep the existing npx path as the deterministic repo-mutation engine and preserve `0.7.33` runtime behavior as the Sol-high consumer baseline
 - keep programmatic `/goal` automation unassumed unless Codex exposes a stable CLI/API path for it
-- address the README/discovery/sponsor backlog only in small, separately verified slices
 - cut another stabilization patch only if real consumption surfaces another reusable wizard bug
 - keep separate model-profile measurement running, but do not let it block pilot rollout work
 
@@ -77,29 +79,29 @@ The stabilization tracker is clear after `0.7.33`: #61 is resolved by preventing
 
 ## Remaining Backlog
 
-After `0.7.33`, the main backlog is:
+After `0.7.34`, the main backlog is:
 
-- README/discovery cleanup for the open docs issues
+- complete supported-surface plugin validation and submit the public directory listing
 - any new reusable wizard fixes discovered during the pilot set
-- official Codex plugin distribution packaging, after the current npm/skill path stays stable
 - model-profile measurement data collection for `mixed` vs `maximum`
-- later creator-tool research after the active backlog stays under control
+- optional Skill Creator maintenance research after the active backlog stays under control
 
 ## Official Codex Plugin Distribution Plan
 
-Official Codex docs now make plugins the installable distribution unit for reusable skills, apps, MCP servers, and presentation assets. The current repo remains npm/skill-first until plugin packaging is justified by consumption.
+Official Codex docs make plugins the installable distribution unit for reusable skills, apps, MCP servers, and presentation assets. The implementation outcome for this repo is a skills-only plugin: `.codex-plugin/plugin.json` points to the conventional `skills/` directory and its single installer skill, while npx remains the repo-mutation engine.
 
-- Keep the current consumer path as `npx codex-sdlc-wizard@latest` plus the existing Codex skill package.
-- When packaging as a plugin, add `.codex-plugin/plugin.json`, bundle the public `$sdlc` workflow under plugin `skills/`, keep helper skills scoped as support tooling, and include only required `.mcp.json` or `.app.json` integrations.
-- Test local/team discovery through `.agents/plugins/marketplace.json` before considering a public listing.
-- Official docs say self-serve plugin publishing is coming soon; treat public listing as blocked until that path is actually available in practice.
+- Package the manifest in `codex-sdlc-wizard@0.7.34` so the same artifact carries the plugin skill and the existing CLI/installer.
+- Validate discovery in ChatGPT Work, the Codex desktop app, and Codex CLI. Ordinary Chat remains outside the supported plugin surfaces.
+- Keep MCP servers, apps, and plugin-level hooks out until a proven product need exists; the installer continues to write repo-local hooks and config.
+- The official submission portal is live; the public listing is pending supported-surface validation and submission.
 - Do not imply official OpenAI endorsement unless the plugin is actually accepted into the official Plugin Directory.
 
 ## Working Order
 
-1. Keep pilot rollout and stabilization patches tied to real consumption bugs
-2. Work the README/discovery backlog in small verified slices
-3. Keep creator-tool investigation behind the active backlog
+1. Validate the skills-only plugin in ChatGPT Work, the Codex desktop app, and Codex CLI
+2. Publish the version-aligned npm package and verify clean installation
+3. Submit the public listing through the live submission portal after supported-surface validation
+4. Keep pilot rollout and stabilization patches tied to real consumption bugs
 
 ## Default-Use Gate
 
@@ -113,11 +115,11 @@ Before calling this the default Codex SDLC path, prove it on real pilot repos in
 
 ## Later Research
 
-After the current backlog is under control, investigate whether Codex's built-in `Skill Creator` and `Plugin Creator` can help reduce maintenance or packaging friction for this repo.
+The creator-tool investigation is complete for the distribution decision: `Plugin Creator` established the minimum valid package shape and led to the implemented skills-only plugin. `Skill Creator` remains a possible later maintenance aid rather than a release blocker.
 
 - investigate programmatic `/goal` automation only if Codex exposes a stable CLI/API path; keep manual `/goal` guidance anchored to `$sdlc`
-- evaluate `Skill Creator` as a possible future aid for skill-structure maintenance
-- evaluate `Plugin Creator` only as later research, since plugins are not part of the current shipping path
+- evaluate `Skill Creator` later as a possible aid for skill-structure maintenance
+- keep the implemented `Plugin Creator` manifest contract covered by packaging tests
 - run an experimental explicit opt-in measurement of `gpt-5.6-terra` `medium` for the main working pass with a `gpt-5.6-sol` review explicitly overridden to `high`, and compare that against the Sol `high` `maximum` profile
 - keep an easy toggle between the two explicit profiles:
   - `mixed`: `gpt-5.6-terra` `medium` main pass plus `gpt-5.6-sol` review with an explicit `high` effort override
