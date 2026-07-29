@@ -1952,7 +1952,7 @@ test_helper_skill_metadata_uses_codex_sdlc_not_xdlc() {
     local all_passed=true
 
     if grep -REiq 'Codex[[:space:]]+XDLC|XDLC[[:space:]]+adapter|host adapter core|core metadata' \
-        "$setup_skill" "$update_skill" "$setup_openai" "$update_openai" "$REPO_DIR/SKILL.md" "$REPO_DIR/agents/openai.yaml" 2>/dev/null; then
+        "$setup_skill" "$update_skill" "$setup_openai" "$update_openai" "$REPO_DIR/skills/codex-sdlc-wizard/SKILL.md" "$REPO_DIR/skills/codex-sdlc-wizard/agents/openai.yaml" 2>/dev/null; then
         all_passed=false
     fi
 
@@ -2308,8 +2308,9 @@ test_package_has_npm_release_surface() {
 
     for path in \
         ".agents/" \
-        "agents/" \
+        ".codex-plugin/" \
         "bin/" \
+        "skills/" \
         "skill-sources/" \
         ".codex/config.toml" \
         ".codex/hooks.json" \
@@ -2323,7 +2324,6 @@ test_package_has_npm_release_surface() {
         "setup.sh" \
         "check.sh" \
         "update.sh" \
-        "SKILL.md" \
         "AGENTS.md" \
         "README.md" \
         "ROADMAP.md" \
@@ -2384,8 +2384,8 @@ test_package_uses_single_canonical_sdlc_skill_name() {
     grep -Fq 'normal setup installs global helper skills only' "$REPO_DIR/README.md" || all_passed=false
     grep -Fq 'Canonical entrypoint: `$sdlc`' "$REPO_DIR/skill-sources/sdlc/SKILL.template.md" || all_passed=false
     grep -Fq 'do not pretend Codex has a native `/sdlc` command' "$REPO_DIR/skill-sources/sdlc/SKILL.template.md" || all_passed=false
-    grep -RE '\$codex-sdlc([^A-Za-z0-9_-]|$)' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skill-sources" 2>/dev/null && all_passed=false
-    bad_slash_sdlc=$(grep -REin '(invoke|run|use|type|call|start|enter|execute)[[:space:]]+(the[[:space:]]+)?`?/sdlc`?' "$REPO_DIR/README.md" "$REPO_DIR/SKILL.md" "$REPO_DIR/skill-sources" "$REPO_DIR/START-SDLC.md" "$REPO_DIR/SDLC-LOOP.md" 2>/dev/null || true)
+    grep -RE '\$codex-sdlc([^A-Za-z0-9_-]|$)' "$REPO_DIR/README.md" "$REPO_DIR/skills/codex-sdlc-wizard/SKILL.md" "$REPO_DIR/skill-sources" 2>/dev/null && all_passed=false
+    bad_slash_sdlc=$(grep -REin '(invoke|run|use|type|call|start|enter|execute)[[:space:]]+(the[[:space:]]+)?`?/sdlc`?' "$REPO_DIR/README.md" "$REPO_DIR/skills/codex-sdlc-wizard/SKILL.md" "$REPO_DIR/skill-sources" "$REPO_DIR/START-SDLC.md" "$REPO_DIR/SDLC-LOOP.md" 2>/dev/null || true)
     [ -z "$bad_slash_sdlc" ] || all_passed=false
 
     if [ "$all_passed" = "true" ]; then

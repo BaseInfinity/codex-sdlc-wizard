@@ -85,7 +85,10 @@ test_npm_pack_includes_runtime_files() {
     local has_setup=true
     local has_hooks=true
     local has_bin=true
-    local has_skill=true
+    local has_plugin_skill=true
+    local avoids_legacy_root_skill=true
+    local has_plugin_manifest=true
+    local has_plugin_brand_assets=true
     local has_canonical_sdlc_skill=true
     local has_legacy_sdlc_skill=false
     local has_openai_yaml=true
@@ -98,7 +101,10 @@ test_npm_pack_includes_runtime_files() {
         has_setup=false
         has_hooks=false
         has_bin=false
-        has_skill=false
+        has_plugin_skill=false
+        avoids_legacy_root_skill=false
+        has_plugin_manifest=false
+        has_plugin_brand_assets=false
         has_openai_yaml=false
         has_repo_sdlc_skill=false
         has_repo_adlc_skill=true
@@ -110,10 +116,15 @@ test_npm_pack_includes_runtime_files() {
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/session-start.cjs") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/compact-guard.cjs") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "bin/codex-sdlc-wizard.js") ? "yes" : ""')" = "yes" ] || has_bin=false
-        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "SKILL.md") ? "yes" : ""')" = "yes" ] || has_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/codex-sdlc-wizard/SKILL.md") ? "yes" : ""')" = "yes" ] || has_plugin_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/codex-sdlc-wizard/agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_plugin_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "SKILL.md") ? "yes" : ""')" = "yes" ] && avoids_legacy_root_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex-plugin/plugin.json") ? "yes" : ""')" = "yes" ] || has_plugin_manifest=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "assets/composer-icon.svg") ? "yes" : ""')" = "yes" ] || has_plugin_brand_assets=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "assets/logo.svg") ? "yes" : ""')" = "yes" ] || has_plugin_brand_assets=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skill-sources/sdlc/SKILL.template.md") ? "yes" : ""')" = "yes" ] || has_canonical_sdlc_skill=false
-        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path.startsWith("skills/") || (file.path.startsWith("skill-sources/") && file.path.endsWith("/SKILL.md")) || file.path.startsWith("skill-sources/codex-sdlc/")) ? "yes" : ""')" = "yes" ] && has_legacy_sdlc_skill=true
-        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_openai_yaml=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => (file.path.startsWith("skill-sources/") && file.path.endsWith("/SKILL.md")) || file.path.startsWith("skill-sources/codex-sdlc/")) ? "yes" : ""')" = "yes" ] && has_legacy_sdlc_skill=true
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/codex-sdlc-wizard/agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_openai_yaml=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_sdlc_skill=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/adlc/SKILL.md") ? "yes" : ""')" = "yes" ] && has_repo_adlc_skill=true
     fi
@@ -125,13 +136,16 @@ test_npm_pack_includes_runtime_files() {
        [ "$has_setup" = "true" ] &&
        [ "$has_hooks" = "true" ] &&
        [ "$has_bin" = "true" ] &&
-       [ "$has_skill" = "true" ] &&
+       [ "$has_plugin_skill" = "true" ] &&
+       [ "$avoids_legacy_root_skill" = "true" ] &&
+       [ "$has_plugin_manifest" = "true" ] &&
+       [ "$has_plugin_brand_assets" = "true" ] &&
        [ "$has_canonical_sdlc_skill" = "true" ] &&
        [ "$has_legacy_sdlc_skill" = "false" ] &&
        [ "$has_openai_yaml" = "true" ] &&
        [ "$has_repo_sdlc_skill" = "true" ] &&
        [ "$has_repo_adlc_skill" = "false" ]; then
-        pass "npm pack includes the CLI, installer, and skill runtime files"
+        pass "npm pack includes the CLI, installer, plugin manifest, and skill runtime files"
     else
         fail "npm pack is missing required runtime files"
     fi

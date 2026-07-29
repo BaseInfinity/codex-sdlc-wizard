@@ -1,7 +1,7 @@
 {
   "name": "codex-sdlc-wizard",
-  "version": "0.7.33",
-  "description": "Codex SDLC adaptive setup wizard and maintenance CLI for npx distribution",
+  "version": "0.7.34",
+  "description": "Codex SDLC plugin, adaptive setup wizard, and maintenance CLI",
   "license": "MIT",
   "funding": {
     "type": "github",
@@ -16,9 +16,11 @@
     "codex-sdlc-wizard": "bin/codex-sdlc-wizard.js"
   },
   "files": [
+    ".codex-plugin/",
     ".agents/",
-    "agents/",
+    "assets/",
     "bin/",
+    "skills/",
     "skill-sources/",
     ".codex/config.toml",
     ".codex/hooks.json",
@@ -32,7 +34,6 @@
     "setup.sh",
     "check.sh",
     "update.sh",
-    "SKILL.md",
     "AGENTS.md",
     "README.md",
     "ROADMAP.md",

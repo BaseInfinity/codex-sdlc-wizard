@@ -9,6 +9,8 @@ README="$REPO_DIR/README.md"
 ROADMAP="$REPO_DIR/ROADMAP.md"
 GOALS_TEMPLATE="$REPO_DIR/templates/GOALS.md.tmpl"
 PACKAGE_JSON="$REPO_DIR/package.json"
+PLUGIN_MANIFEST="$REPO_DIR/.codex-plugin/plugin.json"
+PLUGIN_SKILL="$REPO_DIR/skills/codex-sdlc-wizard/SKILL.md"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
 source "$JSON_HELPERS"
 require_node
@@ -495,31 +497,151 @@ test_readme_explains_distribution_model() {
     local has_section=true
     local has_adapter=true
     local has_skill=true
-    local has_not_plugin=true
+    local has_plugin=true
+    local has_skills_only_boundary=true
     local has_install_sh=true
 
     grep -q '^## What This Repo Is$' "$README" || has_section=false
     grep -qi 'installer-style adapter' "$README" || has_adapter=false
     grep -qi 'Codex skill' "$README" || has_skill=false
-    grep -qi 'not a Codex plugin' "$README" || has_not_plugin=false
+    grep -qi 'skills-only plugin' "$README" || has_plugin=false
+    grep -Eqi 'plugin.*(does not|doesn.t).*(bundle|declare).*(hooks|MCP)|hooks.*remain.*repo' "$README" || has_skills_only_boundary=false
     grep -q '`install.sh`' "$README" || has_install_sh=false
 
     if [ "$has_section" = "true" ] &&
        [ "$has_adapter" = "true" ] &&
        [ "$has_skill" = "true" ] &&
-       [ "$has_not_plugin" = "true" ] &&
+       [ "$has_plugin" = "true" ] &&
+       [ "$has_skills_only_boundary" = "true" ] &&
        [ "$has_install_sh" = "true" ]; then
-        pass "README explains the dual skill plus installer distribution near the top"
+        pass "README explains the skills-only plugin plus adaptive installer distribution near the top"
     else
-        fail "README does not clearly explain adapter vs skill vs plugin"
+        fail "README does not clearly explain the plugin, skill, installer, and hook boundary"
+    fi
+}
+
+test_repo_is_installable_skills_only_plugin() {
+    local has_manifest=true
+    local version_matches=true
+    local has_plugin_skills_directory=true
+    local avoids_legacy_root_skill=true
+    local has_interface_metadata=true
+    local passes_final_directory_metadata_limits=true
+    local has_square_brand_assets=true
+    local avoids_unsupported_runtime_declarations=true
+    local composer_icon="$REPO_DIR/assets/composer-icon.svg"
+    local logo="$REPO_DIR/assets/logo.svg"
+
+    [ -f "$PLUGIN_MANIFEST" ] || has_manifest=false
+
+    if [ "$has_manifest" = "true" ]; then
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.name === "codex-sdlc-wizard"' || has_manifest=false
+        [ "$(json_get_file "$PLUGIN_MANIFEST" 'data.version')" = "$CURRENT_VERSION" ] || version_matches=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.skills === "./skills/"' || has_plugin_skills_directory=false
+        [ -f "$PLUGIN_SKILL" ] || has_plugin_skills_directory=false
+        [ ! -e "$REPO_DIR/SKILL.md" ] || avoids_legacy_root_skill=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.author && typeof data.author.name === "string" && data.author.name.length > 0' || has_interface_metadata=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.interface && data.interface.displayName === "Codex SDLC Wizard"' || has_interface_metadata=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.interface && typeof data.interface.shortDescription === "string" && data.interface.shortDescription.length > 0' || has_interface_metadata=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.interface && typeof data.interface.longDescription === "string" && data.interface.longDescription.length > 0' || has_interface_metadata=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.interface && (typeof data.interface.defaultPrompt === "string" || Array.isArray(data.interface.defaultPrompt))' || has_interface_metadata=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.interface.displayName.length <= 30 && data.interface.shortDescription.length <= 30 && data.interface.longDescription.length <= 4000' || passes_final_directory_metadata_limits=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" 'data.interface.composerIcon === "./assets/composer-icon.svg" && data.interface.logo === "./assets/logo.svg"' || has_square_brand_assets=false
+        [ -f "$composer_icon" ] || has_square_brand_assets=false
+        [ -f "$logo" ] || has_square_brand_assets=false
+        grep -Eq '<svg[^>]+(width="512"[^>]+height="512"|height="512"[^>]+width="512"|viewBox="0 0 512 512")' "$composer_icon" 2>/dev/null || has_square_brand_assets=false
+        grep -Eq '<svg[^>]+(width="512"[^>]+height="512"|height="512"[^>]+width="512"|viewBox="0 0 512 512")' "$logo" 2>/dev/null || has_square_brand_assets=false
+        json_has_truthy_file "$PLUGIN_MANIFEST" '!Object.hasOwn(data, "mcpServers") && !Object.hasOwn(data, "apps") && !Object.hasOwn(data, "hooks")' || avoids_unsupported_runtime_declarations=false
+    else
+        version_matches=false
+        has_plugin_skills_directory=false
+        avoids_legacy_root_skill=false
+        has_interface_metadata=false
+        passes_final_directory_metadata_limits=false
+        has_square_brand_assets=false
+        avoids_unsupported_runtime_declarations=false
+    fi
+
+    if [ "$has_manifest" = "true" ] &&
+       [ "$version_matches" = "true" ] &&
+       [ "$has_plugin_skills_directory" = "true" ] &&
+       [ "$avoids_legacy_root_skill" = "true" ] &&
+       [ "$has_interface_metadata" = "true" ] &&
+       [ "$passes_final_directory_metadata_limits" = "true" ] &&
+       [ "$has_square_brand_assets" = "true" ] &&
+       [ "$avoids_unsupported_runtime_declarations" = "true" ]; then
+        pass "Repository root is a version-aligned, directory-ready skills-only Codex plugin"
+    else
+        fail "Repository root is not yet a valid directory-ready skills-only Codex plugin"
+    fi
+}
+
+test_readme_documents_standalone_skill_migration() {
+    local has_migration_heading=true
+    local identifies_legacy_path=true
+    local uses_recoverable_backup=true
+    local explains_duplicate_risk=true
+    local requires_fresh_thread=true
+
+    grep -Eq '^### Migrate (the )?legacy standalone skill$' "$README" || has_migration_heading=false
+    grep -Fq '.codex/skills/codex-sdlc-wizard' "$README" || identifies_legacy_path=false
+    grep -Fq '.codex/skill-backups' "$README" || uses_recoverable_backup=false
+    grep -Eqi 'duplicate|two copies|stale standalone' "$README" || explains_duplicate_risk=false
+    grep -Eqi 'fresh (thread|session)' "$README" || requires_fresh_thread=false
+
+    if [ "$has_migration_heading" = "true" ] &&
+       [ "$identifies_legacy_path" = "true" ] &&
+       [ "$uses_recoverable_backup" = "true" ] &&
+       [ "$explains_duplicate_risk" = "true" ] &&
+       [ "$requires_fresh_thread" = "true" ]; then
+        pass "README documents a recoverable standalone-skill to plugin migration"
+    else
+        fail "README does not document how existing standalone-skill users avoid duplicate plugin discovery"
+    fi
+}
+
+test_plugin_skill_documents_cross_surface_execution_boundary() {
+    local has_work=true
+    local has_codex_surfaces=true
+    local has_invocation_syntax=true
+    local has_plain_chat_boundary=true
+    local has_local_repo_boundary=true
+
+    grep -q 'ChatGPT Work' "$PLUGIN_SKILL" || has_work=false
+    grep -Eqi 'Codex (desktop|app).*(CLI|command line)|CLI.*Codex (desktop|app)' "$PLUGIN_SKILL" || has_codex_surfaces=false
+    grep -Eq 'ChatGPT.*`@`|`@`.*ChatGPT' "$PLUGIN_SKILL" || has_invocation_syntax=false
+    grep -Eq 'Codex.*`\$`|`\$`.*Codex' "$PLUGIN_SKILL" || has_invocation_syntax=false
+    grep -Eqi 'ordinary Chat|plain Chat|Chat mode' "$PLUGIN_SKILL" || has_plain_chat_boundary=false
+    grep -Eqi 'does not support plugins|plugins are not available|plugin support is unavailable' "$PLUGIN_SKILL" || has_plain_chat_boundary=false
+    grep -Eqi 'local repo|local repository|project access' "$PLUGIN_SKILL" || has_local_repo_boundary=false
+
+    if [ "$has_work" = "true" ] &&
+       [ "$has_codex_surfaces" = "true" ] &&
+       [ "$has_invocation_syntax" = "true" ] &&
+       [ "$has_plain_chat_boundary" = "true" ] &&
+       [ "$has_local_repo_boundary" = "true" ]; then
+        pass "Plugin skill explains supported plugin surfaces, invocation syntax, and local-repo boundary"
+    else
+        fail "Plugin skill does not explain supported plugin surfaces and execution boundaries"
     fi
 }
 
 test_readme_has_install_choice_table() {
-    if grep -q '^| Need | Use | Why |$' "$README"; then
-        pass "README includes an install choice table"
+    local has_table=true
+    local marks_source_path_inspection_only=true
+    local avoids_broken_standalone_install_claim=true
+
+    grep -q '^| Need | Use | Why |$' "$README" || has_table=false
+    grep -Fq '| Inspect the plugin skill source |' "$README" || marks_source_path_inspection_only=false
+    grep -Eqi 'inspection-only|inspect(ion)? only' "$README" || marks_source_path_inspection_only=false
+    grep -Fq 'Inspect or install the reusable Codex skill from source' "$README" && avoids_broken_standalone_install_claim=false
+
+    if [ "$has_table" = "true" ] &&
+       [ "$marks_source_path_inspection_only" = "true" ] &&
+       [ "$avoids_broken_standalone_install_claim" = "true" ]; then
+        pass "README includes an install choice table without advertising a broken standalone skill"
     else
-        fail "README is missing an install choice table"
+        fail "README install table is missing or advertises a non-self-contained standalone skill"
     fi
 }
 
@@ -972,18 +1094,29 @@ test_readme_documents_official_codex_distribution_status() {
     local has_plugin_docs=true
     local has_authoring_format=true
     local has_installable_unit=true
-    local has_local_marketplace=true
+    local has_universal_directory=true
+    local has_surface_specific_install=true
+    local has_supported_surfaces=true
+    local has_plain_chat_boundary=true
     local has_publish_boundary=true
     local keeps_npx_path=true
     local avoids_endorsement=true
 
     grep -q '^## Official Codex Distribution Status$' "$README" || has_heading=false
-    grep -q 'developers.openai.com/codex/skills' "$README" || has_skill_docs=false
-    grep -q 'developers.openai.com/codex/plugins' "$README" || has_plugin_docs=false
+    grep -Eq 'learn.chatgpt.com/docs/skills-and-plugins|developers.openai.com/codex/skills' "$README" || has_skill_docs=false
+    grep -Eq 'learn.chatgpt.com/docs/plugins|developers.openai.com/plugins/build/plugins' "$README" || has_plugin_docs=false
     grep -qi 'skills are the authoring format' "$README" || has_authoring_format=false
     grep -qi 'plugins are the installable distribution unit' "$README" || has_installable_unit=false
-    grep -q 'codex plugin marketplace add' "$README" || has_local_marketplace=false
-    grep -qi 'self-serve plugin publishing.*coming soon\|official public plugin.*coming soon' "$README" || has_publish_boundary=false
+    grep -Eqi 'universal plugin directory|same plugin directory|shared plugin directory' "$README" || has_universal_directory=false
+    grep -Eqi 'install(ation)?(/enablement)? is surface-specific|install or enable (it|the plugin) (on|in) each intended surface' "$README" || has_surface_specific_install=false
+    grep -Eqi 'install once through a supported surface' "$README" && has_surface_specific_install=false
+    grep -q 'ChatGPT Work' "$README" || has_supported_surfaces=false
+    grep -Eqi 'Codex (desktop|app)' "$README" || has_supported_surfaces=false
+    grep -q 'Codex CLI' "$README" || has_supported_surfaces=false
+    grep -Eqi 'ordinary Chat|plain Chat|Chat mode' "$README" || has_plain_chat_boundary=false
+    grep -Eqi 'does not support plugins|plugins are not available|plugin support is unavailable' "$README" || has_plain_chat_boundary=false
+    grep -Eq 'developers.openai.com/plugins/deploy/submission' "$README" || has_publish_boundary=false
+    grep -Eqi 'submission portal.*(live|available|open)|public listing.*pending' "$README" || has_publish_boundary=false
     grep -q 'npx codex-sdlc-wizard@latest' "$README" || keeps_npx_path=false
     grep -Eqi 'official OpenAI (partner|endorsed|certified)|OpenAI-endorsed|OpenAI certified' "$README" && avoids_endorsement=false
 
@@ -992,7 +1125,10 @@ test_readme_documents_official_codex_distribution_status() {
        [ "$has_plugin_docs" = "true" ] &&
        [ "$has_authoring_format" = "true" ] &&
        [ "$has_installable_unit" = "true" ] &&
-       [ "$has_local_marketplace" = "true" ] &&
+       [ "$has_universal_directory" = "true" ] &&
+       [ "$has_surface_specific_install" = "true" ] &&
+       [ "$has_supported_surfaces" = "true" ] &&
+       [ "$has_plain_chat_boundary" = "true" ] &&
        [ "$has_publish_boundary" = "true" ] &&
        [ "$keeps_npx_path" = "true" ] &&
        [ "$avoids_endorsement" = "true" ]; then
@@ -1079,6 +1215,9 @@ test_installer_mentions_model_profile_tradeoff
 test_installer_calls_out_auth_heavy_boundary
 test_installer_offers_issue_ready_feedback_on_wizard_failure
 test_readme_explains_distribution_model
+test_repo_is_installable_skills_only_plugin
+test_readme_documents_standalone_skill_migration
+test_plugin_skill_documents_cross_surface_execution_boundary
 test_readme_has_install_choice_table
 test_readme_explains_install_side_effects
 test_readme_mentions_packaging_test_command

@@ -1,0 +1,35 @@
+{
+  "name": "codex-sdlc-wizard",
+  "version": "0.7.34",
+  "description": "Install and maintain Codex SDLC enforcement in local repositories.",
+  "author": {
+    "name": "BaseInfinity",
+    "url": "https://github.com/BaseInfinity"
+  },
+  "homepage": "https://github.com/BaseInfinity/codex-sdlc-wizard#readme",
+  "repository": "https://github.com/BaseInfinity/codex-sdlc-wizard",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "sdlc",
+    "tdd",
+    "code-review",
+    "developer-tools"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex SDLC Wizard",
+    "shortDescription": "Install Codex SDLC guardrails",
+    "longDescription": "Install, configure, update, and repair repository-scoped SDLC skills, hooks, and guidance for Codex.",
+    "developerName": "BaseInfinity",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Write"
+    ],
+    "websiteURL": "https://github.com/BaseInfinity/codex-sdlc-wizard",
+    "defaultPrompt": "Install or update Codex SDLC enforcement in this repository.",
+    "brandColor": "#10A37F",
+    "composerIcon": "./assets/composer-icon.svg",
+    "logo": "./assets/logo.svg"
+  }
+}
