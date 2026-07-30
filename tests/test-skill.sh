@@ -8,6 +8,7 @@ REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
 SKILL_MD="$REPO_DIR/skills/codex-sdlc-wizard/SKILL.md"
 OPENAI_YAML="$REPO_DIR/skills/codex-sdlc-wizard/agents/openai.yaml"
+PLUGIN_MANIFEST="$REPO_DIR/.codex-plugin/plugin.json"
 REPO_SDLC_SKILL="$REPO_DIR/.agents/skills/sdlc/SKILL.md"
 REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
 GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
@@ -143,6 +144,39 @@ test_agents_openai_yaml_exists() {
         pass "agents/openai.yaml exists with Codex skill metadata"
     else
         fail "agents/openai.yaml is missing or incomplete"
+    fi
+}
+
+test_plugin_and_installer_skill_have_distinct_picker_intents() {
+    local plugin_default_prompt
+    local plugin_display_name
+    local plugin_short_description
+    local skill_default_prompt
+    local skill_display_name
+    local skill_short_description
+    local valid=true
+
+    plugin_default_prompt=$(node -e 'process.stdout.write(require(process.argv[1]).interface.defaultPrompt)' "$PLUGIN_MANIFEST")
+    plugin_display_name=$(node -e 'process.stdout.write(require(process.argv[1]).interface.displayName)' "$PLUGIN_MANIFEST")
+    plugin_short_description=$(node -e 'process.stdout.write(require(process.argv[1]).interface.shortDescription)' "$PLUGIN_MANIFEST")
+    skill_default_prompt=$(sed -n 's/^  default_prompt: "\(.*\)"$/\1/p' "$OPENAI_YAML")
+    skill_display_name=$(sed -n 's/^  display_name: "\(.*\)"$/\1/p' "$OPENAI_YAML")
+    skill_short_description=$(sed -n 's/^  short_description: "\(.*\)"$/\1/p' "$OPENAI_YAML")
+
+    [ "$plugin_display_name" = "Codex SDLC Wizard" ] || valid=false
+    [ "$plugin_short_description" = "Explore Codex SDLC workflows" ] || valid=false
+    [ "$plugin_default_prompt" = "Show me the Codex SDLC Wizard workflows available for this repository and help me choose the right one." ] || valid=false
+    [ "$skill_display_name" = "Install SDLC Guardrails" ] || valid=false
+    [ "$skill_short_description" = "Set up or repair repo SDLC" ] || valid=false
+    [ "$skill_default_prompt" = "Use \$codex-sdlc-wizard to install or update Codex SDLC enforcement in this repository." ] || valid=false
+    [ "$plugin_display_name" != "$skill_display_name" ] || valid=false
+    [ "$plugin_short_description" != "$skill_short_description" ] || valid=false
+    [ "$plugin_default_prompt" != "$skill_default_prompt" ] || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "Plugin and bundled installer skill have distinct picker intents"
+    else
+        fail "Plugin and bundled installer skill are ambiguous in the picker"
     fi
 }
 
@@ -415,6 +449,7 @@ test_plugin_skill_resolves_bundled_scripts_from_plugin_root
 test_plugin_skill_handles_legacy_standalone_install
 test_plugin_skill_documents_surface_specific_installation
 test_agents_openai_yaml_exists
+test_plugin_and_installer_skill_have_distinct_picker_intents
 test_readme_documents_dual_distribution
 test_readme_recommends_current_codex_startup
 test_skill_recommends_current_codex_after_install
