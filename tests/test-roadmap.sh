@@ -66,7 +66,7 @@ test_roadmap_states_current_release_status() {
 test_roadmap_lists_next_release_cycle() {
     local has_semver_heading=true
     local has_heading=true
-    local has_pilot_rollout=true
+    local has_supported_surface_gate=true
     local has_stabilization_rule=true
     local next_release_section
     local next_release_heading
@@ -80,12 +80,12 @@ test_roadmap_lists_next_release_cycle() {
 
     grep -q '^## Next Release Cycle$' "$ROADMAP" || has_heading=false
     echo "$next_release_heading" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || has_semver_heading=false
-    echo "$next_release_section" | grep -Eqi 'pilot repos|pilot rollout|default use|default path' || has_pilot_rollout=false
-    echo "$next_release_section" | grep -Eqi 'reusable wizard bug|stabiliz|only if pilots surface' || has_stabilization_rule=false
+    echo "$next_release_section" | grep -Eqi 'supported-surface|Codex Desktop|ChatGPT Work|black-box' || has_supported_surface_gate=false
+    echo "$next_release_section" | grep -Eqi 'harden|reusable wizard bug|stabiliz|only if pilots surface' || has_stabilization_rule=false
 
     if [ "$has_heading" = "true" ] &&
        [ "$has_semver_heading" = "true" ] &&
-       [ "$has_pilot_rollout" = "true" ] &&
+       [ "$has_supported_surface_gate" = "true" ] &&
        [ "$has_stabilization_rule" = "true" ]; then
         pass "Roadmap lists the next release proof and main engineering item"
     else
@@ -93,10 +93,10 @@ test_roadmap_lists_next_release_cycle() {
     fi
 }
 
-test_roadmap_records_resolved_packaging_issue() {
+test_roadmap_records_stabilization_scope() {
     local has_heading=true
-    local has_resolved_packaging_issue=true
-    local has_no_active_stabilization_fix=true
+    local has_release_scope=true
+    local has_e2e_owner=true
     local has_new_issue_rule=true
     local avoids_active_issue_refs=true
     local cleanup_section
@@ -108,19 +108,19 @@ test_roadmap_records_resolved_packaging_issue() {
     ' "$ROADMAP")
 
     grep -q '^## Tracker Cleanup$' "$ROADMAP" || has_heading=false
-    echo "$cleanup_section" | grep -Eqi '#61.*(fixed|resolved|closed|released)|(fixed|resolved|closed|released).*#61' || has_resolved_packaging_issue=false
-    echo "$cleanup_section" | grep -Eqi 'no active (packaging|stabilization) fix|stabilization tracker.*clear' || has_no_active_stabilization_fix=false
+    echo "$cleanup_section" | grep -Eq '#55.*#56.*#69.*#70' || has_release_scope=false
+    echo "$cleanup_section" | grep -Eqi '#66.*(E2E|supported-surface)' || has_e2e_owner=false
     echo "$cleanup_section" | grep -Eqi 'open a new issue|pilot consumption exposes' || has_new_issue_rule=false
     echo "$cleanup_section" | grep -Eq '#15|#16|#17|#21|#22' && avoids_active_issue_refs=false
 
     if [ "$has_heading" = "true" ] &&
-       [ "$has_resolved_packaging_issue" = "true" ] &&
-       [ "$has_no_active_stabilization_fix" = "true" ] &&
+       [ "$has_release_scope" = "true" ] &&
+       [ "$has_e2e_owner" = "true" ] &&
        [ "$has_new_issue_rule" = "true" ] &&
        [ "$avoids_active_issue_refs" = "true" ]; then
-        pass "Roadmap records the resolved packaging fix and the rule for opening new issues from real consumption"
+        pass "Roadmap records the bounded stabilization scope and E2E owner"
     else
-        fail "Roadmap does not record the resolved packaging fix and clear stabilization state"
+        fail "Roadmap does not record the bounded stabilization scope and E2E owner"
     fi
 }
 
@@ -304,7 +304,7 @@ test_roadmap_prioritizes_plugin_surface_validation() {
 test_roadmap_exists
 test_roadmap_states_current_release_status
 test_roadmap_lists_next_release_cycle
-test_roadmap_records_resolved_packaging_issue
+test_roadmap_records_stabilization_scope
 test_roadmap_records_creator_investigation_outcome
 test_roadmap_tracks_goal_mode_guidance
 test_roadmap_tracks_official_codex_plugin_distribution_plan

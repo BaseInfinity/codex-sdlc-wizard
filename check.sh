@@ -25,10 +25,11 @@ for arg in "$@"; do
     esac
 done
 
-node - <<'NODE'
+node - "$SCRIPT_DIR/lib/merge-hooks.cjs" <<'NODE'
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { directoryFoldsCase, validateHooksDocument, wizardCommandPath } = require(process.argv[2]);
 
 const cwd = process.cwd();
 const manifestPath = path.join(cwd, ".codex-sdlc", "manifest.json");
@@ -70,17 +71,34 @@ function hasPlatformHookDrift(relativePath, absolutePath) {
     return false;
   }
 
-  const content = fs.readFileSync(absolutePath, "utf8");
-
-  if (content.includes(".codex/hooks/git-guard.js") || content.includes(".codex/hooks/session-start.js")) {
+  let document;
+  try {
+    const content = fs.readFileSync(absolutePath, "utf8").replace(/^\uFEFF/, "");
+    document = JSON.parse(content);
+    validateHooksDocument(document, relativePath);
+  } catch (_error) {
+    return true;
+  }
+  if (!document || typeof document !== "object" || Array.isArray(document)) {
     return true;
   }
 
-  if (process.platform === "win32") {
-    return content.includes("bash-guard.sh") || content.includes("session-start.sh");
-  }
+  const foldPathCase = directoryFoldsCase(path.dirname(absolutePath));
+  const commands = Object.values(document.hooks || {}).flatMap((entries) =>
+    Array.isArray(entries) ? entries.flatMap((entry) =>
+      Array.isArray(entry?.hooks) ? entry.hooks.map((hook) => hook?.command) : []) : [],
+  );
+  const scriptPaths = commands
+    .map((command) => wizardCommandPath(command, foldPathCase))
+    .filter(Boolean);
 
-  return content.includes("powershell.exe");
+  if (scriptPaths.some((scriptPath) => /\/(?:git-guard|session-start)\.js$/.test(scriptPath))) {
+    return true;
+  }
+  if (process.platform === "win32") {
+    return scriptPaths.some((scriptPath) => /\/(?:bash-guard|session-start)\.sh$/.test(scriptPath));
+  }
+  return scriptPaths.some((scriptPath) => /\/(?:git-guard|session-start)\.ps1$/.test(scriptPath));
 }
 
 function hasManagedHookSurfaceDrift(relativePath, absolutePath) {

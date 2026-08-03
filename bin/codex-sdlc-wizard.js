@@ -6,6 +6,7 @@ const path = require("node:path");
 const readline = require("node:readline/promises");
 
 const scriptDir = path.resolve(__dirname, "..");
+const packageVersion = require(path.join(scriptDir, "package.json")).version;
 const rawArgs = process.argv.slice(2);
 const codexCommand = process.env.CODEX_SDLC_CODEX_BIN || "codex";
 const minimumGpt56CodexVersion = [0, 144, 0];
@@ -234,6 +235,22 @@ function printHandoffRecovery(reason) {
     "Retry from this repo with: npx codex-sdlc-wizard@latest",
     "If Codex printed a session id before stopping, resume with: codex resume -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"' <session-id>",
     `For full-trust/yolo-style resume, use: codex resume ${fullTrustFlag} -m gpt-5.6-sol -c 'model_reasoning_effort=\"high\"' <session-id>`,
+    ""
+  ].join("\n"));
+}
+
+function printOptionalHandoffWarning(reason, modelProfile, options) {
+  const recoveryArgs = ["setup", "--yes", "--model-profile", modelProfile];
+  if (options.generateGoals) {
+    recoveryArgs.push("--goals");
+  }
+
+  process.stderr.write([
+    "",
+    "Warning: repository artifacts were installed successfully, but the optional Codex setup handoff failed.",
+    reason,
+    "The completed artifact install is still usable.",
+    `Finish setup without a nested handoff with: npx codex-sdlc-wizard@${packageVersion} ${recoveryArgs.join(" ")}`,
     ""
   ].join("\n"));
 }
@@ -540,11 +557,20 @@ async function handoffToCodex(modelProfile, options) {
   const codexResult = await runCodexHandoff(codexArgs);
 
   if (codexResult.error) {
-    process.stderr.write(`${codexResult.error.message}\n`);
-    process.exit(1);
+    printOptionalHandoffWarning(codexResult.error.message, modelProfile, options);
+    return 0;
   }
 
-  return codexResult.status === null ? 1 : codexResult.status;
+  if (codexResult.timedOut || codexResult.interruptedSignal || codexResult.signal) {
+    return codexResult.status === null ? 1 : codexResult.status;
+  }
+
+  if (codexResult.status !== 0) {
+    printOptionalHandoffWarning(`Codex exited with status ${codexResult.status === null ? 1 : codexResult.status}.`, modelProfile, options);
+    return 0;
+  }
+
+  return 0;
 }
 
 async function main() {

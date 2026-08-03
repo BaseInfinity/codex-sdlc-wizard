@@ -34,6 +34,7 @@ LEGACY_MODEL_POLICY_SDLC_SKILL_HASH="sha256:c2c280c2b0edf97538c674bf131eec06f0b6
 LEGACY_FEEDBACK_SKILL_HASH="sha256:cdda0e9e12b764154a44c91f8de352138d85ce18f491972099fd332301b98ca1"
 LEGACY_SETUP_WIZARD_SKILL_HASH="sha256:9e32cf8acb99ad5876e86e561f846e5b2542f12c26b85d08566a38589ee6ccc7"
 LEGACY_UPDATE_WIZARD_SKILL_HASH="sha256:82696ee709eafdeef3f35def96c9179c485b368d300148326b49560d35262aad"
+HOOKS_BACKUP_PATH=""
 
 for arg in "$@"; do
     case "$arg" in
@@ -82,6 +83,19 @@ copy_static_file() {
     esac
 }
 
+repair_hooks_config() {
+    if [ "$HOOKS_MERGE_STATUS" = "target-broken" ]; then
+        if [ -z "$HOOKS_BACKUP_PATH" ]; then
+            HOOKS_BACKUP_PATH=".codex/hooks.json.bak.$(date +%Y%m%d%H%M%S).$$"
+            cp ".codex/hooks.json" "$HOOKS_BACKUP_PATH"
+        fi
+        cp "$HOOKS_TEMPLATE" ".codex/hooks.json"
+        HOOKS_MERGE_STATUS="match"
+    else
+        node "$SCRIPT_DIR/lib/merge-hooks.cjs" ".codex/hooks.json" "$HOOKS_TEMPLATE"
+    fi
+}
+
 repair_hooks_bundle() {
     ensure_parent_dir ".codex/hooks.json"
     ensure_parent_dir ".codex/hooks/dummy"
@@ -91,21 +105,42 @@ repair_hooks_bundle() {
     rm -f .codex/hooks/git-guard.js .codex/hooks/session-start.js
 
     if [ "$IS_WINDOWS" = "true" ]; then
-        copy_static_file ".codex/windows-hooks.json" ".codex/hooks.json"
         copy_static_file ".codex/hooks/git-guard.ps1"
         copy_static_file ".codex/hooks/session-start.ps1"
     else
-        copy_static_file ".codex/unix-hooks.json" ".codex/hooks.json"
         copy_static_file ".codex/hooks/bash-guard.sh"
         copy_static_file ".codex/hooks/session-start.sh"
     fi
+    repair_hooks_config
+}
+
+repair_missing_hook_scripts() {
+    local required_hooks required_hook
+    required_hooks=".codex/hooks/git-guard.cjs .codex/hooks/session-start.cjs .codex/hooks/compact-guard.cjs"
+    if [ "$IS_WINDOWS" = "true" ]; then
+        required_hooks="$required_hooks .codex/hooks/git-guard.ps1 .codex/hooks/session-start.ps1"
+    else
+        required_hooks="$required_hooks .codex/hooks/bash-guard.sh .codex/hooks/session-start.sh"
+    fi
+
+    for required_hook in $required_hooks; do
+        if [ ! -f "$required_hook" ]; then
+            copy_static_file "$required_hook"
+        fi
+    done
 }
 
 repair_managed_file() {
     local relative_path="$1"
 
     case "$relative_path" in
-        .codex/hooks.json|.codex/hooks/git-guard.js|.codex/hooks/session-start.js)
+        .codex/hooks.json)
+            ensure_parent_dir ".codex/hooks.json"
+            repair_hooks_config
+            repair_missing_hook_scripts
+            rm -f .codex/hooks/git-guard.js .codex/hooks/session-start.js
+            ;;
+        .codex/hooks/git-guard.js|.codex/hooks/session-start.js)
             repair_hooks_bundle
             ;;
         .codex/config.toml)
@@ -371,6 +406,15 @@ if [ "$REPO_STATE" != "initialized" ]; then
     exit 1
 fi
 
+if [ "$IS_WINDOWS" = "true" ]; then
+    HOOKS_TEMPLATE="$SCRIPT_DIR/.codex/windows-hooks.json"
+else
+    HOOKS_TEMPLATE="$SCRIPT_DIR/.codex/unix-hooks.json"
+fi
+HOOKS_MERGE_STATUS="$(
+    node "$SCRIPT_DIR/lib/merge-hooks.cjs" --status ".codex/hooks.json" "$HOOKS_TEMPLATE"
+)"
+
 STATUS_LINES=()
 while IFS= read -r status_line; do
     STATUS_LINES+=("$status_line")
@@ -451,7 +495,22 @@ for line in "${STATUS_LINES[@]}"; do
     [ -n "$relative_path" ] || continue
 
     action="keep"
-    case "$status" in
+    if [ "$relative_path" = ".codex/hooks.json" ]; then
+        if [ "$HOOKS_MERGE_STATUS" = "merge" ]; then
+            action="merge wizard hooks (preserve host hooks)"
+            CHANGES_PENDING=true
+            RUN_REGENERATE=true
+            queue_static_repair "$relative_path"
+        elif [ "$HOOKS_MERGE_STATUS" = "target-broken" ]; then
+            action="replace broken hooks (backup original)"
+            CHANGES_PENDING=true
+            RUN_REGENERATE=true
+            queue_static_repair "$relative_path"
+        fi
+    fi
+
+    if [ "$action" = "keep" ]; then
+      case "$status" in
         match)
             if [ "$relative_path" = ".codex-sdlc/model-profile.json" ] && [ "$MODEL_PROFILE_MIGRATION" = "true" ]; then
                 action="refresh legacy model profile metadata"
@@ -511,7 +570,8 @@ for line in "${STATUS_LINES[@]}"; do
         *)
             action="inspect"
             ;;
-    esac
+      esac
+    fi
 
     PLAN_LINES+=("$relative_path|$status|$action")
 done
