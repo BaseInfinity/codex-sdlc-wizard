@@ -2,7 +2,7 @@
 
 ## Current State
 
-- `codex-sdlc-wizard@0.7.34` and `v0.7.34` are the current release target for the first skills-only plugin distribution
+- `codex-sdlc-wizard@0.7.34` and `v0.7.34` are the current published release; `0.7.35` is the Desktop-readiness release candidate
 - npm trusted publishing is configured and the GitHub release workflow is now proven for real OIDC publish
 - the repo now ships a skills-only Codex plugin (`.codex-plugin/plugin.json` pointing to `skills/`), one installer skill at `skills/codex-sdlc-wizard/SKILL.md`, and the installer/setup adapter (`install.sh`, `setup.sh`)
 - the plugin declares no MCP servers, apps, or plugin-level hooks; repo-scoped enforcement remains the responsibility of the adaptive installer
@@ -58,28 +58,27 @@
 
 ## Next Release Cycle
 
-### 0.7.34
+### 0.7.35
 
-Purpose: ship and validate the skills-only plugin package across the supported OpenAI surfaces, then continue pilot rollout while keeping runtime patches tied to proven reusable wizard bugs.
+Purpose: harden plugin-driven installation before final supported-surface validation and public directory submission.
 
 Scope:
-- package `.codex-plugin/plugin.json` and `skills/codex-sdlc-wizard/SKILL.md` in npm without introducing duplicate skill discovery
-- validate install/discovery and one real repo mutation from ChatGPT Work where project access permits it, the Codex desktop app, and Codex CLI
-- keep the existing npx path as the deterministic repo-mutation engine and preserve `0.7.33` runtime behavior as the Sol-high consumer baseline
-- keep programmatic `/goal` automation unassumed unless Codex exposes a stable CLI/API path for it
-- cut another stabilization patch only if real consumption surfaces another reusable wizard bug
-- keep separate model-profile measurement running, but do not let it block pilot rollout work
+- preserve unrelated host hooks while replacing only wizard-owned hook entries during install and repair
+- keep successful artifact installation successful when the optional nested Codex handoff cannot start or exits with an ordinary failure
+- refresh manifest hashes only for installer-touched artifacts and preserve untouched customizations
+- distinguish plugin exploration, install/repair, and repo-local lifecycle intents in the picker
+- validate the exact release candidate through Claude-driven black-box Codex Desktop and ChatGPT Work E2E before publishing
 
 ## Tracker Cleanup
 
-The stabilization tracker is clear after `0.7.33`: #61 is resolved by preventing a repo-root skill install from recursively exposing bundled helper definitions as duplicate skills. There is no active packaging or stabilization fix; remaining open docs/research issues stay outside the stabilization lane.
+The `0.7.35` stabilization set is intentionally limited to #55, #56, and the picker-intent fix from #69/PR #70. Issue #66 owns the final supported-surface E2E and public directory submission; remaining docs/research issues stay outside this release lane.
 
 - open a new issue only when pilot consumption exposes another proven reusable wizard bug
-- avoid speculative backlog churn while `0.7.33` is being consumed on real repos
+- avoid speculative backlog churn while `0.7.35` is being validated on supported Codex surfaces
 
 ## Remaining Backlog
 
-After `0.7.34`, the main backlog is:
+After `0.7.35`, the main backlog is:
 
 - complete supported-surface plugin validation and submit the public directory listing
 - any new reusable wizard fixes discovered during the pilot set
@@ -90,7 +89,7 @@ After `0.7.34`, the main backlog is:
 
 Official Codex docs make plugins the installable distribution unit for reusable skills, apps, MCP servers, and presentation assets. The implementation outcome for this repo is a skills-only plugin: `.codex-plugin/plugin.json` points to the conventional `skills/` directory and its single installer skill, while npx remains the repo-mutation engine.
 
-- Package the manifest in `codex-sdlc-wizard@0.7.34` so the same artifact carries the plugin skill and the existing CLI/installer.
+- Package the manifest in `codex-sdlc-wizard@0.7.35` so the same artifact carries the plugin skill and the existing CLI/installer.
 - Validate discovery in ChatGPT Work, the Codex desktop app, and Codex CLI. Ordinary Chat remains outside the supported plugin surfaces.
 - Keep MCP servers, apps, and plugin-level hooks out until a proven product need exists; the installer continues to write repo-local hooks and config.
 - The official submission portal is live; the public listing is pending supported-surface validation and submission.

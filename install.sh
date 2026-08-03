@@ -86,6 +86,8 @@ for required in \
   ".codex/hooks/compact-guard.cjs" \
   ".codex/hooks/git-guard.ps1" \
   ".codex/hooks/session-start.ps1" \
+  "lib/merge-hooks.cjs" \
+  "lib/refresh-manifest-hashes.cjs" \
   ".agents/skills/sdlc/SKILL.md"; do
   require_bundle_file "$SCRIPT_DIR/$required" "$required"
 done
@@ -94,6 +96,11 @@ CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
 GLOBAL_HELPER_SKILLS=("feedback" "setup-wizard" "update-wizard")
+INSTALL_TOUCHED_FILES=()
+
+mark_install_touched() {
+  INSTALL_TOUCHED_FILES+=("$1")
+}
 
 copy_if_missing() {
   local source="$1"
@@ -101,6 +108,7 @@ copy_if_missing() {
   local label="$3"
   if [ ! -f "$target" ]; then
     cp "$source" "$target"
+    mark_install_touched "$target"
     echo "Created $label"
   else
     echo "$label already exists - skipping (review manually)"
@@ -117,6 +125,7 @@ install_repo_skill() {
     echo "$target already exists - skipping (review manually)"
   else
     cp "$source" "$target"
+    mark_install_touched "$target"
     echo "Installed $target"
   fi
 }
@@ -218,6 +227,7 @@ prune_legacy_global_skill() {
 
 write_model_profile() {
   write_model_profile_metadata ".codex-sdlc/model-profile.json" "$MODEL_PROFILE"
+  mark_install_touched ".codex-sdlc/model-profile.json"
   echo "Wrote .codex-sdlc/model-profile.json ($MODEL_PROFILE)"
 }
 
@@ -236,8 +246,20 @@ install_agents_baseline() {
     -e "s|{{MODEL_PROFILE}}|$MODEL_PROFILE|g" \
     -e "s|{{REASONING_BASELINE}}|$reasoning_baseline|g" \
     "$source" > "$target"
+  mark_install_touched "$target"
   echo "Created AGENTS.md"
 }
+
+if [ "$IS_WINDOWS" = "true" ]; then
+  HOOKS_TEMPLATE="$SCRIPT_DIR/.codex/windows-hooks.json"
+else
+  HOOKS_TEMPLATE="$SCRIPT_DIR/.codex/unix-hooks.json"
+fi
+HOOKS_MERGE_STATUS="$(node "$SCRIPT_DIR/lib/merge-hooks.cjs" --status .codex/hooks.json "$HOOKS_TEMPLATE")"
+if [ "$HOOKS_MERGE_STATUS" = "target-broken" ]; then
+  echo "Error: .codex/hooks.json must contain a valid hooks object before baseline installation" >&2
+  exit 1
+fi
 
 echo "Installing SDLC Wizard for Codex CLI..."
 
@@ -256,6 +278,7 @@ prune_legacy_global_skill "codex-sdlc" "sdlc"
 mkdir -p .codex/hooks
 
 merge_codex_config_profile ".codex/config.toml" "$MODEL_PROFILE"
+mark_install_touched ".codex/config.toml"
 echo "Merged repo-local Codex config for model profile '$MODEL_PROFILE'"
 
 if [ -f ".codex/hooks.json" ]; then
@@ -267,25 +290,44 @@ cp "$SCRIPT_DIR/.codex/hooks/"*.sh .codex/hooks/
 chmod +x .codex/hooks/*.sh
 cp "$SCRIPT_DIR/.codex/hooks/"*.cjs .codex/hooks/
 rm -f .codex/hooks/git-guard.js .codex/hooks/session-start.js
+mark_install_touched ".codex/hooks/git-guard.js"
+mark_install_touched ".codex/hooks/session-start.js"
 
 if [ "$IS_WINDOWS" = "true" ]; then
-  cp "$SCRIPT_DIR/.codex/windows-hooks.json" .codex/hooks.json
+  node "$SCRIPT_DIR/lib/merge-hooks.cjs" .codex/hooks.json "$HOOKS_TEMPLATE"
   cp "$SCRIPT_DIR/.codex/hooks/git-guard.ps1" .codex/hooks/
   cp "$SCRIPT_DIR/.codex/hooks/session-start.ps1" .codex/hooks/
   copy_if_missing "$SCRIPT_DIR/start-sdlc.ps1" "start-sdlc.ps1" "start-sdlc.ps1"
   echo "Installed .codex/hooks.json (universal Node hooks)"
   echo "Installed Node and PowerShell hook scripts"
 else
-  cp "$SCRIPT_DIR/.codex/unix-hooks.json" .codex/hooks.json
+  node "$SCRIPT_DIR/lib/merge-hooks.cjs" .codex/hooks.json "$HOOKS_TEMPLATE"
   copy_if_missing "$SCRIPT_DIR/start-sdlc.sh" "start-sdlc.sh" "start-sdlc.sh"
   chmod +x start-sdlc.sh
   echo "Installed .codex/hooks.json (universal Node hooks)"
+fi
+if [ "$HOOKS_MERGE_STATUS" = "merge" ]; then
+  mark_install_touched ".codex/hooks.json"
+fi
+for touched_hook in \
+  .codex/hooks/bash-guard.sh \
+  .codex/hooks/session-start.sh \
+  .codex/hooks/git-guard.cjs \
+  .codex/hooks/session-start.cjs \
+  .codex/hooks/compact-guard.cjs; do
+  [ -f "$touched_hook" ] && mark_install_touched "$touched_hook"
+done
+if [ "$IS_WINDOWS" = "true" ]; then
+  mark_install_touched ".codex/hooks/git-guard.ps1"
+  mark_install_touched ".codex/hooks/session-start.ps1"
 fi
 
 echo "Installed shell hook scripts"
 
 install_repo_skill sdlc
 write_model_profile
+node "$SCRIPT_DIR/lib/refresh-manifest-hashes.cjs" \
+  ".codex-sdlc/manifest.json" "${INSTALL_TOUCHED_FILES[@]}"
 
 echo ""
 echo "SDLC Wizard for Codex installed."

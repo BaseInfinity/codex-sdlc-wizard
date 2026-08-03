@@ -1,4 +1,4 @@
 interface:
-  display_name: "Codex SDLC Wizard"
-  short_description: "Install Codex SDLC guardrails"
+  display_name: "Install SDLC Guardrails"
+  short_description: "Set up or repair repo SDLC"
   default_prompt: "Use $codex-sdlc-wizard to install or update Codex SDLC enforcement in this repository."

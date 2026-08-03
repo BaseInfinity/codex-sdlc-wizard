@@ -85,6 +85,7 @@ test_npm_pack_includes_runtime_files() {
     local has_setup=true
     local has_hooks=true
     local has_bin=true
+    local has_runtime_helpers=true
     local has_plugin_skill=true
     local avoids_legacy_root_skill=true
     local has_plugin_manifest=true
@@ -101,6 +102,7 @@ test_npm_pack_includes_runtime_files() {
         has_setup=false
         has_hooks=false
         has_bin=false
+        has_runtime_helpers=false
         has_plugin_skill=false
         avoids_legacy_root_skill=false
         has_plugin_manifest=false
@@ -116,6 +118,8 @@ test_npm_pack_includes_runtime_files() {
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/session-start.cjs") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".codex/hooks/compact-guard.cjs") ? "yes" : ""')" = "yes" ] || has_hooks=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "bin/codex-sdlc-wizard.js") ? "yes" : ""')" = "yes" ] || has_bin=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "lib/merge-hooks.cjs") ? "yes" : ""')" = "yes" ] || has_runtime_helpers=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "lib/refresh-manifest-hashes.cjs") ? "yes" : ""')" = "yes" ] || has_runtime_helpers=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/codex-sdlc-wizard/SKILL.md") ? "yes" : ""')" = "yes" ] || has_plugin_skill=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/codex-sdlc-wizard/agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_plugin_skill=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "SKILL.md") ? "yes" : ""')" = "yes" ] && avoids_legacy_root_skill=false
@@ -136,6 +140,7 @@ test_npm_pack_includes_runtime_files() {
        [ "$has_setup" = "true" ] &&
        [ "$has_hooks" = "true" ] &&
        [ "$has_bin" = "true" ] &&
+       [ "$has_runtime_helpers" = "true" ] &&
        [ "$has_plugin_skill" = "true" ] &&
        [ "$avoids_legacy_root_skill" = "true" ] &&
        [ "$has_plugin_manifest" = "true" ] &&
@@ -446,6 +451,106 @@ EOF
     fi
 }
 
+test_failed_optional_handoff_keeps_successful_install_successful() {
+    local ws fakebin codex_home input_file output package_version status valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+
+    printf '%s' '{"name":"handoff-failure","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    printf '\n' > "$input_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
+  exit 0
+fi
+echo "Error loading config.toml: unrelated user config failure" >&2
+exit 42
+EOF
+    chmod +x "$fakebin/codex"
+
+    set +e
+    output=$(
+        cd "$ws" && \
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        PATH="$fakebin:$PATH" \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" --model-profile mixed --goals < "$input_file" 2>&1
+    )
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    [ -f "$ws/.codex/config.toml" ] || valid=false
+    [ -f "$ws/.agents/skills/sdlc/SKILL.md" ] || valid=false
+    echo "$output" | grep -Eqi 'artifacts.*installed|install.*succeeded' || valid=false
+    echo "$output" | grep -Eqi 'handoff.*failed|could not.*handoff|Codex.*exited' || valid=false
+    package_version=$(node -p "require('$REPO_DIR/package.json').version")
+    echo "$output" | grep -Fq "npx codex-sdlc-wizard@$package_version setup --yes --model-profile mixed --goals" || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "optional Codex handoff failure warns after a successful artifact install"
+    else
+        fail "optional Codex handoff failure made a successful artifact install look failed"
+    fi
+}
+
+test_signal_terminated_optional_handoff_preserves_failure_status() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "signal-terminated optional handoff status is POSIX-only"
+        return
+    fi
+
+    local ws fakebin codex_home input_file status valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+
+    printf '%s' '{"name":"handoff-signal","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    printf '\n' > "$input_file"
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.144.0"
+  exit 0
+fi
+kill -TERM "$$"
+EOF
+    chmod +x "$fakebin/codex"
+
+    set +e
+    (
+        cd "$ws" || exit 1
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        PATH="$fakebin:$PATH" \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" >/dev/null 2>&1
+    )
+    status=$?
+    set -e
+
+    [ "$status" -eq 143 ] || valid=false
+    [ -f "$ws/.codex/config.toml" ] || valid=false
+    [ -f "$ws/.agents/skills/sdlc/SKILL.md" ] || valid=false
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "signal-terminated optional Codex handoff preserves failure status"
+    else
+        fail "signal-terminated optional Codex handoff was reported as success"
+    fi
+}
+
 test_unsupported_codex_version_blocks_handoff_before_mutation() {
     local ws fakebin codex_home output status valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
@@ -732,7 +837,7 @@ if [ "${1:-}" = "--version" ]; then
   exit 0
 fi
 printf started > "$FAKE_CODEX_STARTED_FILE"
-trap 'printf terminated > "$FAKE_CODEX_KILLED_FILE"; exit 143' TERM INT
+trap 'printf terminated > "$FAKE_CODEX_KILLED_FILE"; exit 0' TERM INT
 sleep 2
 printf completed > "$FAKE_CODEX_COMPLETED_FILE"
 exit 0
@@ -1368,6 +1473,8 @@ test_local_npx_setup_honors_model_profile_flag
 test_default_cli_updates_initialized_repo_without_explicit_subcommand
 test_packed_tarball_scratch_smoke
 test_default_interactive_hands_off_to_codex
+test_failed_optional_handoff_keeps_successful_install_successful
+test_signal_terminated_optional_handoff_preserves_failure_status
 test_unsupported_codex_version_blocks_handoff_before_mutation
 test_configured_codex_binary_drives_installer_version_gate
 test_interactive_handoff_preserves_goals_request

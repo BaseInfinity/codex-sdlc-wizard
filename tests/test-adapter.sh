@@ -1855,6 +1855,576 @@ test_install_backs_up_hooks_json() {
     fi
 }
 
+test_install_merges_existing_hooks_json() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.codex"
+    cat > "$tmpdir/.codex/hooks.json" <<'EOF'
+{
+  "customSetting": "keep-me",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .custom/session.cjs"
+          },
+          {
+            "type": "command",
+            "command": "node .codex/hooks/session-start.cjs"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^Write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .custom/guard.cjs"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.codex/hooks/bash-guard.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .custom/post-tool.cjs"
+          },
+          {
+            "type": "command",
+            "command": "node .custom/audit.cjs .codex/hooks/git-guard.cjs"
+          },
+          {
+            "type": "command",
+            "command": "node .codex/hooks/Git-Guard.cjs"
+          },
+          {
+            "type": "command",
+            "command": "pwsh -FILE .codex/hooks/git-guard.ps1"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/sdlc-prompt-check.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+    HOOKS_PATH="$tmpdir/.codex/hooks.json" node <<'NODE'
+const fs = require("fs");
+const hooksPath = process.env.HOOKS_PATH;
+fs.writeFileSync(hooksPath, `\uFEFF${fs.readFileSync(hooksPath, "utf8")}`);
+NODE
+    chmod 644 "$tmpdir/.codex/hooks.json"
+
+    local valid=true
+    (umask 077; cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1) || valid=false
+    (umask 077; cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1) || valid=false
+    [ "$(node "$REPO_DIR/lib/merge-hooks.cjs" --status "$tmpdir/.codex/hooks.json" "$REPO_DIR/.codex/unix-hooks.json")" = "match" ] || valid=false
+
+    HOOKS_PATH="$tmpdir/.codex/hooks.json" \
+    EXPECT_MODE_CHECK="$([ "$IS_WINDOWS" = "false" ] && echo true || echo false)" \
+    node <<'NODE' || valid=false
+const fs = require("fs");
+const path = require("path");
+const data = JSON.parse(fs.readFileSync(process.env.HOOKS_PATH, "utf8"));
+const commands = Object.values(data.hooks || {}).flatMap((entries) =>
+  entries.flatMap((entry) => (entry.hooks || []).map((hook) => hook.command))
+);
+const expectedOnce = [
+  "node .codex/hooks/git-guard.cjs",
+  "node .codex/hooks/session-start.cjs",
+  "node .codex/hooks/compact-guard.cjs",
+];
+if (data.customSetting !== "keep-me") process.exit(1);
+if (!commands.includes("node .custom/guard.cjs")) process.exit(1);
+if (!commands.includes("node .custom/post-tool.cjs")) process.exit(1);
+if (!commands.includes("node .custom/audit.cjs .codex/hooks/git-guard.cjs")) process.exit(1);
+const hasCaseDistinctHook = commands.includes("node .codex/hooks/Git-Guard.cjs");
+const hooksDirectory = path.dirname(process.env.HOOKS_PATH);
+let foldsCase = process.platform === "win32";
+if (process.platform === "darwin") {
+  try {
+    const alternate = path.join(path.dirname(hooksDirectory), ".CODEX");
+    foldsCase = fs.realpathSync.native(hooksDirectory) === fs.realpathSync.native(alternate);
+  } catch (_error) {
+    foldsCase = false;
+  }
+}
+
+if (foldsCase === hasCaseDistinctHook) process.exit(1);
+if (commands.includes("pwsh -FILE .codex/hooks/git-guard.ps1")) process.exit(1);
+if (!commands.includes("node .custom/session.cjs")) process.exit(1);
+if (commands.some((command) => /bash-guard|sdlc-prompt-check/.test(command))) process.exit(1);
+for (const command of expectedOnce) {
+  const expectedCount = command.includes("compact-guard") ? 2 : 1;
+  if (commands.filter((candidate) => candidate === command).length !== expectedCount) process.exit(1);
+}
+if (process.env.EXPECT_MODE_CHECK === "true" && (fs.statSync(process.env.HOOKS_PATH).mode & 0o777) !== 0o644) process.exit(1);
+NODE
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "install.sh preserves host hooks and replaces wizard-owned hook entries idempotently"
+    else
+        fail "install.sh overwrote host hooks or duplicated wizard-owned hook entries"
+    fi
+}
+
+test_merge_fresh_file_honors_restrictive_umask() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "fresh hook merge umask behavior is POSIX-only"
+        return
+    fi
+
+    local tmpdir valid=true
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.codex"
+
+    (
+        umask 077
+        node "$REPO_DIR/lib/merge-hooks.cjs" \
+            "$tmpdir/.codex/hooks.json" "$REPO_DIR/.codex/unix-hooks.json"
+    ) >/dev/null 2>&1 || valid=false
+    HOOKS_PATH="$tmpdir/.codex/hooks.json" node <<'NODE' || valid=false
+const fs = require("fs");
+if ((fs.statSync(process.env.HOOKS_PATH).mode & 0o777) !== 0o600) process.exit(1);
+NODE
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "fresh hook merge honors a restrictive process umask"
+    else
+        fail "fresh hook merge widened permissions beyond the process umask"
+    fi
+}
+
+test_check_passes_merge_helper_as_node_argument() {
+    if grep -Fq 'node - "$SCRIPT_DIR/lib/merge-hooks.cjs"' "$REPO_DIR/check.sh" \
+        && grep -Fq 'require(process.argv[2])' "$REPO_DIR/check.sh"; then
+        pass "check passes the merge helper through MSYS-convertible Node argv"
+    else
+        fail "check passes the merge helper through an unconverted environment path"
+    fi
+}
+
+test_check_reports_non_object_hooks_as_broken() {
+    local tmpdir output status valid=true
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.codex" "$tmpdir/.codex-sdlc"
+    printf '%s\n' 'null' > "$tmpdir/.codex/hooks.json"
+    cat > "$tmpdir/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "managed_files": {
+    ".codex/hooks.json": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}
+
+EOF
+
+    set +e
+    output=$(cd "$tmpdir" && bash "$REPO_DIR/check.sh" 2>/dev/null)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    CHECK_OUTPUT="$output" node <<'NODE' || valid=false
+const data = JSON.parse(process.env.CHECK_OUTPUT);
+if (data.managed_files?.[".codex/hooks.json"]?.status !== "drift / broken") process.exit(1);
+NODE
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "check reports non-object hooks.json as broken"
+    else
+        fail "check crashed on a non-object hooks.json document"
+    fi
+}
+
+test_check_reports_structurally_invalid_hooks_as_broken() {
+    local tmpdir output status valid=true
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.codex" "$tmpdir/.codex-sdlc"
+    printf '%s\n' '{"hooks":[]}' > "$tmpdir/.codex/hooks.json"
+    cat > "$tmpdir/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "managed_files": {
+    ".codex/hooks.json": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}
+EOF
+
+    set +e
+    output=$(cd "$tmpdir" && bash "$REPO_DIR/check.sh" 2>/dev/null)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    CHECK_OUTPUT="$output" node <<'NODE' || valid=false
+const data = JSON.parse(process.env.CHECK_OUTPUT);
+if (data.managed_files?.[".codex/hooks.json"]?.status !== "drift / broken") process.exit(1);
+NODE
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "check reports structurally invalid hooks.json as broken"
+    else
+        fail "check mislabeled structurally invalid hooks.json as customized"
+    fi
+}
+
+test_merge_status_distinguishes_broken_target_from_bad_template() {
+    local tmpdir output status before valid=true
+    tmpdir=$(mktemp -d)
+    printf '%s\n' '{"hooks":{}}' > "$tmpdir/target.json"
+    printf '%s\n' '{ malformed template' > "$tmpdir/template.json"
+    before=$(cat "$tmpdir/target.json")
+
+    set +e
+    output=$(node "$REPO_DIR/lib/merge-hooks.cjs" --status "$tmpdir/target.json" "$tmpdir/template.json" 2>&1)
+    status=$?
+    set -e
+    [ "$status" -ne 0 ] || valid=false
+    [ "$(cat "$tmpdir/target.json")" = "$before" ] || valid=false
+    echo "$output" | grep -Fq 'template.json' || valid=false
+
+    printf '%s\n' '{ malformed target' > "$tmpdir/target.json"
+    cp "$REPO_DIR/.codex/unix-hooks.json" "$tmpdir/template.json"
+    output=$(node "$REPO_DIR/lib/merge-hooks.cjs" --status "$tmpdir/target.json" "$tmpdir/template.json" 2>&1) || valid=false
+    [ "$output" = "target-broken" ] || valid=false
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "merge status distinguishes a broken target from a bad template"
+    else
+        fail "merge status could not distinguish target corruption from package failure"
+    fi
+}
+
+test_install_rejects_malformed_hooks_without_overwrite() {
+    local tmpdir before after guard_before guard_after output status valid=true
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.codex/hooks"
+    printf '%s\n' '{ malformed hooks json' > "$tmpdir/.codex/hooks.json"
+    printf '%s\n' 'USER CUSTOM GUARD' > "$tmpdir/.codex/hooks/git-guard.cjs"
+    before=$(cat "$tmpdir/.codex/hooks.json")
+    guard_before=$(cat "$tmpdir/.codex/hooks/git-guard.cjs")
+
+    set +e
+    output=$(cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" 2>&1)
+    status=$?
+    set -e
+    after=$(cat "$tmpdir/.codex/hooks.json")
+    guard_after=$(cat "$tmpdir/.codex/hooks/git-guard.cjs")
+
+    [ "$status" -ne 0 ] || valid=false
+    [ "$after" = "$before" ] || valid=false
+    [ "$guard_after" = "$guard_before" ] || valid=false
+    [ ! -e "$tmpdir/.codex/config.toml" ] || valid=false
+    [ ! -e "$tmpdir/.codex-home/skills/setup-wizard" ] || valid=false
+    echo "$output" | grep -Eqi 'hooks.json|JSON|parse' || valid=false
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "install.sh rejects malformed hooks.json without overwriting it"
+    else
+        fail "install.sh did not fail closed on malformed hooks.json"
+    fi
+}
+
+test_install_refreshes_unmodified_agents_for_profile_switch() {
+    local tmpdir output valid=true
+    tmpdir=$(mktemp -d)
+    echo '{"name":"profile-switch","scripts":{"test":"jest"}}' > "$tmpdir/package.json"
+    mkdir -p "$tmpdir/src"
+
+    (
+        umask 077 && cd "$tmpdir" && \
+        CODEX_HOME="$tmpdir/.codex-home" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        bash "$REPO_DIR/setup.sh" --yes --model-profile mixed >/dev/null 2>&1
+    ) || valid=false
+
+    cat > "$tmpdir/AGENTS.md" <<'EOF'
+# SDLC Enforcement
+
+- Selected profile: `mixed`
+- Baseline reasoning: `medium`
+EOF
+    MANIFEST_PATH="$tmpdir/.codex-sdlc/manifest.json" AGENTS_PATH="$tmpdir/AGENTS.md" node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+manifest.managed_files["AGENTS.md"] = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(process.env.AGENTS_PATH)).digest("hex")}`;
+fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    (
+        umask 077 && cd "$tmpdir" && \
+        CODEX_HOME="$tmpdir/.codex-home" \
+        bash "$REPO_DIR/install.sh" --model-profile maximum >/dev/null 2>&1
+    ) || valid=false
+    output=$(cd "$tmpdir" && bash "$REPO_DIR/check.sh" 2>/dev/null)
+
+    grep -Fq -- '- Selected profile: `maximum`' "$tmpdir/AGENTS.md" || valid=false
+    grep -Fq -- '- Baseline reasoning: `high`' "$tmpdir/AGENTS.md" || valid=false
+    ! grep -Fq -- '- Selected profile: mixed' "$tmpdir/AGENTS.md" || valid=false
+    CHECK_OUTPUT="$output" node <<'NODE' || valid=false
+const data = JSON.parse(process.env.CHECK_OUTPUT);
+if (data.managed_files?.["AGENTS.md"]?.status !== "match") process.exit(1);
+NODE
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "install refreshes unmodified AGENTS guidance when the selected profile changes"
+    else
+        fail "install left trusted AGENTS guidance on the old selected profile"
+    fi
+}
+
+test_profile_guidance_refresh_rejects_missing_reasoning() {
+    local tmpdir status valid=true
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.codex-sdlc"
+    cat > "$tmpdir/AGENTS.md" <<'EOF'
+- Selected profile: `mixed`
+- Baseline reasoning: `medium`
+EOF
+    ROOT="$tmpdir" node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const root = process.env.ROOT;
+const agents = fs.readFileSync(path.join(root, "AGENTS.md"));
+fs.writeFileSync(path.join(root, ".codex-sdlc", "manifest.json"), `${JSON.stringify({
+  model_profile: { selected_profile: "mixed" },
+  managed_files: {
+    "AGENTS.md": `sha256:${crypto.createHash("sha256").update(agents).digest("hex")}`,
+    ".codex-sdlc/model-profile.json": "sha256:old",
+  },
+}, null, 2)}\n`);
+fs.writeFileSync(path.join(root, ".codex-sdlc", "model-profile.json"), '{"selected_profile":"maximum"}\n');
+NODE
+
+    set +e
+    (cd "$tmpdir" && node "$REPO_DIR/lib/refresh-manifest-hashes.cjs" \
+        .codex-sdlc/manifest.json .codex-sdlc/model-profile.json) >/dev/null 2>&1
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || valid=false
+    ! grep -Fq '`undefined`' "$tmpdir/AGENTS.md" || valid=false
+    grep -Fq -- '- Selected profile: `mixed`' "$tmpdir/AGENTS.md" || valid=false
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "profile guidance refresh rejects metadata without a reasoning baseline"
+    else
+        fail "profile guidance refresh wrote an undefined reasoning baseline"
+    fi
+}
+
+test_profile_guidance_refresh_handles_legacy_and_partial_guidance() {
+    local legacy_dir partial_dir legacy_before partial_before valid=true
+    legacy_dir=$(mktemp -d)
+    partial_dir=$(mktemp -d)
+
+    for target_dir in "$legacy_dir" "$partial_dir"; do
+        mkdir -p "$target_dir/.codex-sdlc"
+    done
+
+    cat > "$legacy_dir/AGENTS.md" <<'EOF'
+- Selected profile: `maximum`
+- Baseline reasoning: `high`
+EOF
+    cat > "$partial_dir/AGENTS.md" <<'EOF'
+- Selected profile: `mixed`
+EOF
+    legacy_before=$(cat "$legacy_dir/AGENTS.md")
+    partial_before=$(cat "$partial_dir/AGENTS.md")
+
+    ROOT="$legacy_dir" PREVIOUS_PROFILE="" node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const root = process.env.ROOT;
+const agents = fs.readFileSync(path.join(root, "AGENTS.md"));
+fs.writeFileSync(path.join(root, ".codex-sdlc", "manifest.json"), `${JSON.stringify({
+  managed_files: {
+    "AGENTS.md": `sha256:${crypto.createHash("sha256").update(agents).digest("hex")}`,
+    ".codex-sdlc/model-profile.json": "sha256:old",
+  },
+}, null, 2)}\n`);
+fs.writeFileSync(path.join(root, ".codex-sdlc", "model-profile.json"), `${JSON.stringify({
+  schema_version: 2,
+  selected_profile: "maximum",
+  profiles: { maximum: { main_reasoning: "high" } },
+})}\n`);
+NODE
+    ROOT="$partial_dir" node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const root = process.env.ROOT;
+const agents = fs.readFileSync(path.join(root, "AGENTS.md"));
+fs.writeFileSync(path.join(root, ".codex-sdlc", "manifest.json"), `${JSON.stringify({
+  model_profile: { selected_profile: "mixed" },
+  managed_files: {
+    "AGENTS.md": `sha256:${crypto.createHash("sha256").update(agents).digest("hex")}`,
+    ".codex-sdlc/model-profile.json": "sha256:old",
+  },
+}, null, 2)}\n`);
+fs.writeFileSync(path.join(root, ".codex-sdlc", "model-profile.json"), `${JSON.stringify({
+  schema_version: 2,
+  selected_profile: "maximum",
+  profiles: { maximum: { main_reasoning: "high" } },
+})}\n`);
+NODE
+
+    (cd "$legacy_dir" && node "$REPO_DIR/lib/refresh-manifest-hashes.cjs" \
+        .codex-sdlc/manifest.json .codex-sdlc/model-profile.json) >/dev/null 2>&1 || valid=false
+    (cd "$partial_dir" && node "$REPO_DIR/lib/refresh-manifest-hashes.cjs" \
+        .codex-sdlc/manifest.json .codex-sdlc/model-profile.json) >/dev/null 2>&1 || valid=false
+
+    [ "$(cat "$legacy_dir/AGENTS.md")" = "$legacy_before" ] || valid=false
+    [ "$(cat "$partial_dir/AGENTS.md")" = "$partial_before" ] || valid=false
+    MANIFEST_PATH="$legacy_dir/.codex-sdlc/manifest.json" node <<'NODE' || valid=false
+const manifest = require(process.env.MANIFEST_PATH);
+if (manifest.model_profile?.selected_profile !== "maximum") process.exit(1);
+if (manifest.model_profile?.baseline_reasoning !== "high") process.exit(1);
+NODE
+    rm -rf "$legacy_dir" "$partial_dir"
+
+    if [ "$valid" = "true" ]; then
+        pass "profile refresh synchronizes legacy metadata without partially rewriting guidance"
+    else
+        fail "profile refresh failed or partially rewrote legacy guidance"
+    fi
+}
+
+test_install_refreshes_only_touched_manifest_hashes() {
+    local tmpdir output valid=true
+    tmpdir=$(mktemp -d)
+    echo '{"name":"manifest-refresh","scripts":{"test":"jest"}}' > "$tmpdir/package.json"
+    mkdir -p "$tmpdir/src"
+
+    (
+        cd "$tmpdir" && \
+        CODEX_HOME="$tmpdir/.codex-home" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        bash "$REPO_DIR/setup.sh" --yes --model-profile mixed >/dev/null 2>&1
+    ) || valid=false
+
+    printf '%s\n' 'legacy bash guard' > "$tmpdir/.codex/hooks/bash-guard.sh"
+    printf '%s\n' 'legacy PowerShell guard' > "$tmpdir/.codex/hooks/git-guard.ps1"
+    printf '%s\n' 'legacy JavaScript guard' > "$tmpdir/.codex/hooks/git-guard.js"
+    printf '%s\n' 'legacy JavaScript session hook' > "$tmpdir/.codex/hooks/session-start.js"
+    HOOKS_PATH="$tmpdir/.codex/hooks.json" node <<'NODE'
+const fs = require("fs");
+const hooksPath = process.env.HOOKS_PATH;
+const hooks = JSON.parse(fs.readFileSync(hooksPath, "utf8"));
+hooks.hostSetting = "preserve-without-adopting";
+fs.writeFileSync(hooksPath, `${JSON.stringify(hooks, null, 2)}\n`);
+NODE
+    cat > "$tmpdir/.codex/config.toml" <<'EOF'
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+
+[features]
+hooks = false
+EOF
+    printf '\nUSER CUSTOM AGENTS CONTENT\n' >> "$tmpdir/AGENTS.md"
+
+    MANIFEST_PATH="$tmpdir/.codex-sdlc/manifest.json" \
+    BASH_GUARD_PATH="$tmpdir/.codex/hooks/bash-guard.sh" \
+    PS_GUARD_PATH="$tmpdir/.codex/hooks/git-guard.ps1" \
+    LEGACY_GIT_GUARD_PATH="$tmpdir/.codex/hooks/git-guard.js" \
+    LEGACY_SESSION_PATH="$tmpdir/.codex/hooks/session-start.js" \
+    CONFIG_PATH="$tmpdir/.codex/config.toml" \
+    node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+const hash = (filePath) => `sha256:${crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex")}`;
+delete manifest.managed_files[".codex/hooks/compact-guard.cjs"];
+manifest.managed_files[".codex/hooks/bash-guard.sh"] = hash(process.env.BASH_GUARD_PATH);
+manifest.managed_files[".codex/hooks/git-guard.ps1"] = hash(process.env.PS_GUARD_PATH);
+manifest.managed_files[".codex/hooks/git-guard.js"] = hash(process.env.LEGACY_GIT_GUARD_PATH);
+manifest.managed_files[".codex/hooks/session-start.js"] = hash(process.env.LEGACY_SESSION_PATH);
+manifest.managed_files[".codex/config.toml"] = hash(process.env.CONFIG_PATH);
+fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    chmod 644 "$tmpdir/.codex-sdlc/manifest.json"
+    if [ "$IS_WINDOWS" = "false" ]; then
+        printf '%s\n' 'USER CUSTOM POWERSHELL GUARD' >> "$tmpdir/.codex/hooks/git-guard.ps1"
+    fi
+
+    (
+        umask 077 && cd "$tmpdir" && \
+        CODEX_HOME="$tmpdir/.codex-home" \
+        bash "$REPO_DIR/install.sh" --model-profile maximum >/dev/null 2>&1
+    ) || valid=false
+    output=$(cd "$tmpdir" && bash "$REPO_DIR/check.sh" 2>/dev/null)
+
+    CHECK_OUTPUT="$output" EXPECT_POWERSHELL_MATCH="$IS_WINDOWS" node <<'NODE' || valid=false
+const data = JSON.parse(process.env.CHECK_OUTPUT);
+for (const file of [
+  ".codex/hooks/bash-guard.sh",
+  ".codex/hooks/compact-guard.cjs",
+  ".codex/config.toml",
+]) {
+  if (data.managed_files?.[file]?.status !== "match") process.exit(1);
+}
+const expectedPowerShellStatus = process.env.EXPECT_POWERSHELL_MATCH === "true" ? "match" : "customized";
+if (data.managed_files?.[".codex/hooks/git-guard.ps1"]?.status !== expectedPowerShellStatus) process.exit(1);
+if (data.managed_files?.[".codex/hooks.json"]?.status !== "customized") process.exit(1);
+if (data.managed_files?.["AGENTS.md"]?.status !== "customized") process.exit(1);
+NODE
+    MANIFEST_PATH="$tmpdir/.codex-sdlc/manifest.json" EXPECT_POSIX="$([ "$IS_WINDOWS" = "false" ] && echo true || echo false)" node <<'NODE' || valid=false
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+if (manifest.model_profile?.selected_profile !== "maximum") process.exit(1);
+if (manifest.model_profile?.baseline_reasoning !== "high") process.exit(1);
+if (Object.prototype.hasOwnProperty.call(manifest.managed_files, ".codex/hooks/git-guard.js")) process.exit(1);
+if (Object.prototype.hasOwnProperty.call(manifest.managed_files, ".codex/hooks/session-start.js")) process.exit(1);
+if (process.env.EXPECT_POSIX === "true" && (fs.statSync(process.env.MANIFEST_PATH).mode & 0o777) !== 0o644) process.exit(1);
+NODE
+    grep -Fq 'refresh-manifest-hashes.cjs' "$REPO_DIR/install.ps1" || valid=false
+    grep -Fq 'merge-hooks.cjs") --status' "$REPO_DIR/install.ps1" || valid=false
+    grep -Fq 'Add-TouchedFile -Path ".agents/skills/$Name/SKILL.md"' "$REPO_DIR/install.ps1" || valid=false
+    grep -Fq '$touchedFileArgs = $touchedFiles.ToArray()' "$REPO_DIR/install.ps1" || valid=false
+    grep -Fq '@touchedFileArgs' "$REPO_DIR/install.ps1" || valid=false
+    rm -rf "$tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "install refreshes hashes only for artifacts it touched on shell and PowerShell paths"
+    else
+        fail "install left touched manifest hashes stale or adopted untouched custom content"
+    fi
+}
+
 test_agents_md_size() {
     local size
     size=$(wc -c < "$REPO_DIR/AGENTS.md" 2>/dev/null | tr -d ' ')
@@ -2589,6 +3159,17 @@ test_install_creates_skill
 test_install_keeps_skill_backups_out_of_skills_and_prunes_legacy_sdlc
 test_install_merges_config
 test_install_backs_up_hooks_json
+test_install_merges_existing_hooks_json
+test_merge_fresh_file_honors_restrictive_umask
+test_check_passes_merge_helper_as_node_argument
+test_install_rejects_malformed_hooks_without_overwrite
+test_check_reports_non_object_hooks_as_broken
+test_check_reports_structurally_invalid_hooks_as_broken
+test_merge_status_distinguishes_broken_target_from_bad_template
+test_install_refreshes_unmodified_agents_for_profile_switch
+test_profile_guidance_refresh_rejects_missing_reasoning
+test_profile_guidance_refresh_handles_legacy_and_partial_guidance
+test_install_refreshes_only_touched_manifest_hashes
 test_agents_md_size
 test_setup_skill_has_confidence_setup_contract
 test_update_skill_has_idempotent_update_contract
