@@ -573,6 +573,181 @@ NODE
     fi
 }
 
+test_update_repairs_managed_hook_drift_without_overwriting_host_hooks() {
+    local ws output precheck_output check_output host_hook_command host_hook_with_wizard_argument wizard_drift_command valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        host_hook_command="bash .custom/bash-guard.sh"
+        host_hook_with_wizard_argument="node .custom/audit.cjs .codex/hooks/bash-guard.sh"
+        wizard_drift_command='bash .codex\hooks\bash-guard.sh'
+    else
+        host_hook_command="powershell.exe -File .custom/host.ps1"
+        host_hook_with_wizard_argument="node .custom/audit.cjs .codex/hooks/git-guard.ps1"
+        wizard_drift_command='powershell.exe -File .codex\hooks\git-guard.ps1'
+    fi
+
+    run_setup_local "$ws"
+    HOOKS_JSON_PATH="$ws/.codex/hooks.json" HOST_HOOK_COMMAND="$host_hook_command" HOST_HOOK_WITH_WIZARD_ARGUMENT="$host_hook_with_wizard_argument" WIZARD_DRIFT_COMMAND="$wizard_drift_command" node <<'NODE'
+const fs = require("fs");
+const hooksPath = process.env.HOOKS_JSON_PATH;
+const data = JSON.parse(fs.readFileSync(hooksPath, "utf8"));
+data.customSetting = "keep-me";
+data.hooks.PreToolUse.push({
+  matcher: "^Write$",
+  hooks: [{ type: "command", command: "node .custom/guard.cjs" }],
+});
+data.hooks.PreToolUse[0].hooks[0].command = process.env.WIZARD_DRIFT_COMMAND;
+data.hooks.PostToolUse = [{
+  hooks: [
+    { type: "command", command: process.env.HOST_HOOK_COMMAND },
+    { type: "command", command: process.env.HOST_HOOK_WITH_WIZARD_ARGUMENT },
+  ],
+}];
+fs.writeFileSync(hooksPath, `${JSON.stringify(data, null, 2)}\n`);
+NODE
+
+    precheck_output=$(run_check "$ws")
+    output=$(run_update "$ws" 2>&1) || valid=false
+    check_output=$(run_check "$ws")
+
+    HOOKS_PATH="$ws/.codex/hooks.json" HOST_HOOK_COMMAND="$host_hook_command" HOST_HOOK_WITH_WIZARD_ARGUMENT="$host_hook_with_wizard_argument" node <<'NODE' || valid=false
+const fs = require("fs");
+const data = JSON.parse(fs.readFileSync(process.env.HOOKS_PATH, "utf8"));
+const commands = Object.values(data.hooks || {}).flatMap((entries) =>
+  entries.flatMap((entry) => (entry.hooks || []).map((hook) => hook.command))
+);
+if (data.customSetting !== "keep-me") process.exit(1);
+if (!commands.includes("node .custom/guard.cjs")) process.exit(1);
+if (!commands.includes(process.env.HOST_HOOK_COMMAND)) process.exit(1);
+if (!commands.includes(process.env.HOST_HOOK_WITH_WIZARD_ARGUMENT)) process.exit(1);
+if (commands.includes(".codex/hooks/bash-guard.sh")) process.exit(1);
+if (commands.filter((command) => command === "node .codex/hooks/git-guard.cjs").length !== 1) process.exit(1);
+NODE
+    json_text_equals "$precheck_output" 'data.managed_files[".codex/hooks.json"].status' "drift / broken" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update repairs wizard hook drift while preserving host hooks"
+    else
+        echo "$output" >&2
+        fail "update overwrote host hooks while repairing wizard hook drift"
+    fi
+}
+
+test_update_merges_hook_config_without_overwriting_customized_hook_scripts() {
+    local ws output check_output script_before valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    printf '%s\n' '// USER CUSTOM GUARD' > "$ws/.codex/hooks/git-guard.cjs"
+    script_before=$(cat "$ws/.codex/hooks/git-guard.cjs")
+    HOOKS_JSON_PATH="$ws/.codex/hooks.json" node <<'NODE'
+const fs = require("fs");
+const hooksPath = process.env.HOOKS_JSON_PATH;
+const data = JSON.parse(fs.readFileSync(hooksPath, "utf8"));
+data.hooks.PreToolUse[0].hooks[0].command = ".codex/hooks/bash-guard.sh";
+fs.writeFileSync(hooksPath, `${JSON.stringify(data, null, 2)}\n`);
+NODE
+
+    output=$(run_update "$ws" 2>&1) || valid=false
+    check_output=$(run_check "$ws")
+
+    [ "$(cat "$ws/.codex/hooks/git-guard.cjs")" = "$script_before" ] || valid=false
+    echo "$output" | grep -Fq '.codex/hooks/git-guard.cjs: customized -> skip (preserve customization)' || valid=false
+    HOOKS_PATH="$ws/.codex/hooks.json" node <<'NODE' || valid=false
+const fs = require("fs");
+const data = JSON.parse(fs.readFileSync(process.env.HOOKS_PATH, "utf8"));
+const commands = Object.values(data.hooks || {}).flatMap((entries) =>
+  entries.flatMap((entry) => (entry.hooks || []).map((hook) => hook.command))
+);
+if (commands.some((command) => /bash-guard/.test(command))) process.exit(1);
+if (commands.filter((command) => command === "node .codex/hooks/git-guard.cjs").length !== 1) process.exit(1);
+NODE
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "match" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/git-guard.cjs"].status' "customized" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update merges hook config without overwriting customized hook scripts"
+    else
+        echo "$output" >&2
+        fail "update overwrote a customized hook script while merging hooks.json"
+    fi
+}
+
+test_check_treats_bom_prefixed_hooks_as_customized() {
+    local ws check_output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    HOOKS_PATH="$ws/.codex/hooks.json" node <<'NODE'
+const fs = require("fs");
+const hooksPath = process.env.HOOKS_PATH;
+fs.writeFileSync(hooksPath, `\uFEFF${fs.readFileSync(hooksPath, "utf8")}`);
+NODE
+    check_output=$(run_check "$ws") || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "customized" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "check parses BOM-prefixed hooks.json before classifying drift"
+    else
+        fail "check treated a BOM-prefixed hooks.json as broken"
+    fi
+}
+
+test_update_replaces_and_backs_up_malformed_hooks() {
+    local ws output check_output backup_path valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    printf '%s\n' 'legacy git guard' > "$ws/.codex/hooks/git-guard.js"
+    printf '%s\n' 'legacy session hook' > "$ws/.codex/hooks/session-start.js"
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const manifestPath = process.env.MANIFEST_PATH;
+const root = path.dirname(path.dirname(manifestPath));
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+for (const relativePath of [".codex/hooks/git-guard.js", ".codex/hooks/session-start.js"]) {
+  const content = fs.readFileSync(path.join(root, relativePath));
+  manifest.managed_files[relativePath] = `sha256:${crypto.createHash("sha256").update(content).digest("hex")}`;
+}
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    printf '%s\n' '{ malformed hooks json' > "$ws/.codex/hooks.json"
+
+    output=$(run_update "$ws" 2>&1) || valid=false
+    check_output=$(run_check "$ws") || valid=false
+    backup_path=$(find "$ws/.codex" -maxdepth 1 -name 'hooks.json.bak.*' -print -quit)
+
+    [ -n "$backup_path" ] || valid=false
+    [ "$(cat "$backup_path")" = '{ malformed hooks json' ] || valid=false
+    [ ! -e "$ws/.codex/hooks/git-guard.js" ] || valid=false
+    [ ! -e "$ws/.codex/hooks/session-start.js" ] || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "match" || valid=false
+    echo "$output" | grep -Fq 'replace broken hooks (backup original)' || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update backs up and replaces malformed hooks.json"
+    else
+        echo "$output" >&2
+        fail "update could not recover a malformed hooks.json"
+    fi
+}
+
 # ---- Test 12: update merges managed hook config into existing config.toml ----
 test_update_merges_config_without_dropping_other_settings() {
     local ws
@@ -1354,6 +1529,10 @@ test_update_repairs_legacy_js_hook_manifest_entries
 test_update_repairs_matching_legacy_js_hook_manifest_entries
 test_update_repairs_matching_hook_surface_without_compact_lifecycle
 test_update_repairs_missing_compact_guard_without_overwriting_custom_hooks
+test_update_repairs_managed_hook_drift_without_overwriting_host_hooks
+test_update_merges_hook_config_without_overwriting_customized_hook_scripts
+test_check_treats_bom_prefixed_hooks_as_customized
+test_update_replaces_and_backs_up_malformed_hooks
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills
 test_update_removes_legacy_codex_sdlc_skill

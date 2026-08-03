@@ -7,6 +7,14 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $minimumGpt56CodexVersion = [version]"0.144.0"
+$touchedFiles = [System.Collections.Generic.List[string]]::new()
+
+function Add-TouchedFile {
+    param([string]$Path)
+    if (-not $script:touchedFiles.Contains($Path)) {
+        $script:touchedFiles.Add($Path)
+    }
+}
 
 function Assert-Gpt56CodexVersion {
     $codexExecutable = if ($env:CODEX_SDLC_CODEX_BIN) { $env:CODEX_SDLC_CODEX_BIN } else { "codex" }
@@ -59,6 +67,7 @@ function Install-AgentsBaseline {
     $content = Get-Content -LiteralPath $Source -Raw
     $content = $content.Replace("{{MODEL_PROFILE}}", $Profile).Replace("{{REASONING_BASELINE}}", $reasoningBaseline)
     Set-Content -LiteralPath "AGENTS.md" -Value $content -NoNewline
+    Add-TouchedFile -Path "AGENTS.md"
     Write-Host "Created AGENTS.md"
 }
 
@@ -71,6 +80,7 @@ function Copy-IfMissing {
 
     if (-not (Test-Path -LiteralPath $Destination)) {
         Copy-Item -LiteralPath $Source -Destination $Destination
+        Add-TouchedFile -Path $Destination
         Write-Host "Created $Label"
     } else {
         Write-Host "$Label already exists - skipping (review manually)"
@@ -97,6 +107,7 @@ function Install-RepoSkill {
 
     New-Item -ItemType Directory -Path (Split-Path -Parent $repoSkillTarget) -Force | Out-Null
     Copy-Item -LiteralPath $repoSkillSource -Destination $repoSkillTarget
+    Add-TouchedFile -Path ".agents/skills/$Name/SKILL.md"
     Write-Host "Installed $repoSkillTarget"
 }
 
@@ -390,10 +401,21 @@ function Write-ModelProfile {
     }
 
     $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath ".codex-sdlc\model-profile.json"
+    Add-TouchedFile -Path ".codex-sdlc/model-profile.json"
     Write-Host "Wrote .codex-sdlc/model-profile.json ($Profile)"
 }
 
 Assert-Gpt56CodexVersion
+
+$hooksPath = ".codex\hooks.json"
+$hooksTemplate = Join-Path $scriptDir ".codex\windows-hooks.json"
+$hooksMergeStatus = (& node (Join-Path $scriptDir "lib\merge-hooks.cjs") --status $hooksPath $hooksTemplate | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to inspect .codex/hooks.json"
+}
+if ($hooksMergeStatus -eq "target-broken") {
+    throw ".codex/hooks.json must contain a valid hooks object before baseline installation"
+}
 
 Write-Host "Installing SDLC Wizard for Codex CLI..."
 
@@ -410,23 +432,47 @@ New-Item -ItemType Directory -Path ".codex\hooks" -Force | Out-Null
 
 $configPath = ".codex\config.toml"
 Merge-CodexModelConfig -ConfigPath $configPath -Profile $ModelProfile
+Add-TouchedFile -Path ".codex/config.toml"
 Write-Host "Merged repo-local Codex config for model profile '$ModelProfile'"
 Write-ModelProfile -Profile $ModelProfile
 
-$hooksPath = ".codex\hooks.json"
 if (Test-Path -LiteralPath $hooksPath) {
     $timestamp = Get-Date -Format "yyyyMMddHHmmss"
     Copy-Item -LiteralPath $hooksPath -Destination ".codex\hooks.json.bak.$timestamp"
     Write-Host "Backed up existing hooks.json"
 }
 
-Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\windows-hooks.json") -Destination $hooksPath
+& node (Join-Path $scriptDir "lib\merge-hooks.cjs") $hooksPath $hooksTemplate
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to merge .codex/hooks.json"
+}
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\git-guard.cjs") -Destination ".codex\hooks\git-guard.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\session-start.cjs") -Destination ".codex\hooks\session-start.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\compact-guard.cjs") -Destination ".codex\hooks\compact-guard.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\git-guard.ps1") -Destination ".codex\hooks\git-guard.ps1"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\session-start.ps1") -Destination ".codex\hooks\session-start.ps1"
 Remove-Item -LiteralPath ".codex\hooks\git-guard.js", ".codex\hooks\session-start.js" -ErrorAction SilentlyContinue
+Add-TouchedFile -Path ".codex/hooks/git-guard.js"
+Add-TouchedFile -Path ".codex/hooks/session-start.js"
+
+foreach ($touchedHook in @(
+    ".codex/hooks/git-guard.cjs",
+    ".codex/hooks/session-start.cjs",
+    ".codex/hooks/compact-guard.cjs",
+    ".codex/hooks/git-guard.ps1",
+    ".codex/hooks/session-start.ps1"
+)) {
+    Add-TouchedFile -Path $touchedHook
+}
+if ($hooksMergeStatus -eq "merge") {
+    Add-TouchedFile -Path ".codex/hooks.json"
+}
+
+$touchedFileArgs = $touchedFiles.ToArray()
+& node (Join-Path $scriptDir "lib\refresh-manifest-hashes.cjs") ".codex-sdlc\manifest.json" @touchedFileArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to refresh .codex-sdlc/manifest.json hashes"
+}
 
 Write-Host "Installed .codex/hooks.json (universal Node hooks)"
 Write-Host "Installed Node and PowerShell hook scripts"
