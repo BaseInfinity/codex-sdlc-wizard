@@ -83,15 +83,22 @@ copy_static_file() {
     esac
 }
 
+backup_hooks_config() {
+    if [ -e ".codex/hooks.json" ] && [ -z "$HOOKS_BACKUP_PATH" ]; then
+        HOOKS_BACKUP_PATH=".codex/hooks.json.bak.$(date +%Y%m%d%H%M%S).$$"
+        cp ".codex/hooks.json" "$HOOKS_BACKUP_PATH"
+    fi
+}
+
 repair_hooks_config() {
     if [ "$HOOKS_MERGE_STATUS" = "target-broken" ]; then
-        if [ -z "$HOOKS_BACKUP_PATH" ]; then
-            HOOKS_BACKUP_PATH=".codex/hooks.json.bak.$(date +%Y%m%d%H%M%S).$$"
-            cp ".codex/hooks.json" "$HOOKS_BACKUP_PATH"
-        fi
+        backup_hooks_config
         cp "$HOOKS_TEMPLATE" ".codex/hooks.json"
         HOOKS_MERGE_STATUS="match"
     else
+        if [ "$HOOKS_MERGE_STATUS" = "merge" ]; then
+            backup_hooks_config
+        fi
         node "$SCRIPT_DIR/lib/merge-hooks.cjs" ".codex/hooks.json" "$HOOKS_TEMPLATE"
     fi
 }
