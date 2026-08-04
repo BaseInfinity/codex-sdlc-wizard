@@ -1659,17 +1659,94 @@ test_config_enables_hooks() {
 }
 
 test_install_preserves_agents_md() {
-    local tmpdir
+    local tmpdir output
     tmpdir=$(mktemp -d)
     echo "CUSTOM AGENTS CONTENT" > "$tmpdir/AGENTS.md"
-    (cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
+    output=$(cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" 2>&1)
     local content
     content=$(cat "$tmpdir/AGENTS.md")
     rm -rf "$tmpdir"
-    if [ "$content" = "CUSTOM AGENTS CONTENT" ]; then
-        pass "install.sh preserves existing AGENTS.md"
+    if [ "$content" = "CUSTOM AGENTS CONTENT" ] \
+        && echo "$output" | grep -Fq 'AGENTS.md is user-owned or customized - preserving it' \
+        && ! echo "$output" | grep -Fq 'AGENTS.md already exists - skipping (review manually)'; then
+        pass "install.sh preserves and accurately reports customized AGENTS.md"
     else
-        fail "install.sh overwrote existing AGENTS.md"
+        fail "install.sh overwrote or ambiguously reported customized AGENTS.md"
+    fi
+}
+
+test_install_reports_current_agents_baseline() {
+    local tmpdir output
+    tmpdir=$(mktemp -d)
+    sed \
+        -e 's|{{MODEL_PROFILE}}|maximum|g' \
+        -e 's|{{REASONING_BASELINE}}|high|g' \
+        "$REPO_DIR/templates/AGENTS.baseline.md" > "$tmpdir/AGENTS.md"
+
+    output=$(cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" 2>&1)
+    rm -rf "$tmpdir"
+
+    if echo "$output" | grep -Fq 'AGENTS.md already matches the wizard baseline - keeping it' \
+        && ! echo "$output" | grep -Fq 'AGENTS.md already exists - skipping (review manually)'; then
+        pass "install.sh distinguishes an already-current AGENTS.md baseline"
+    else
+        fail "install.sh did not identify an already-current AGENTS.md baseline"
+    fi
+}
+
+test_install_omits_inactive_prompt_hook() {
+    local tmpdir custom_tmpdir
+    tmpdir=$(mktemp -d)
+    custom_tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.codex/hooks" "$custom_tmpdir/.codex/hooks"
+    for target in "$tmpdir/.codex/hooks/sdlc-prompt-check.sh" "$custom_tmpdir/.codex/hooks/sdlc-prompt-check.sh"; do
+        printf '%s\n' \
+            '#!/bin/bash' \
+            "cat << 'EOF'" \
+            'SDLC BASELINE:' \
+            '1. Plan before coding — state confidence level' \
+            '2. TDD: Write failing test FIRST, then implement' \
+            '3. ALL tests must pass before commit' \
+            '4. Self-review before presenting to user' \
+            'EOF' > "$target"
+    done
+    printf '%s\n' '# user customization' >> "$custom_tmpdir/.codex/hooks/sdlc-prompt-check.sh"
+
+    (cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
+    (cd "$custom_tmpdir" && CODEX_HOME="$custom_tmpdir/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
+
+    local valid=true
+    [ ! -e "$REPO_DIR/.codex/hooks/sdlc-prompt-check.sh" ] || valid=false
+    [ ! -e "$tmpdir/.codex/hooks/sdlc-prompt-check.sh" ] || valid=false
+    grep -Fq '# user customization' "$custom_tmpdir/.codex/hooks/sdlc-prompt-check.sh" || valid=false
+    grep -Fq 'sdlc-prompt-check.sh' "$REPO_DIR/install.sh" && valid=false
+    grep -Fq 'remove-retired-files.cjs' "$REPO_DIR/install.sh" || valid=false
+    grep -Fq 'remove-retired-files.cjs' "$REPO_DIR/install.ps1" || valid=false
+    grep -Fq 'remove-retired-files.cjs' "$REPO_DIR/update.sh" || valid=false
+    rm -rf "$tmpdir" "$custom_tmpdir"
+
+    if [ "$valid" = "true" ]; then
+        pass "installers remove only the unchanged retired prompt hook"
+    else
+        fail "installers retained the wizard-owned prompt hook or removed a customization"
+    fi
+}
+
+test_installers_share_agents_ownership_messages() {
+    local valid=true
+    for installer in "$REPO_DIR/install.sh" "$REPO_DIR/install.ps1"; do
+        grep -Fq 'CODEX_SDLC_SETUP_GENERATED_AGENTS' "$installer" || valid=false
+        grep -Fq 'AGENTS.md generated earlier in this setup - keeping it' "$installer" || valid=false
+        grep -Fq 'AGENTS.md already matches the wizard baseline - keeping it' "$installer" || valid=false
+        grep -Fq 'AGENTS.md is wizard-managed - keeping it; profile guidance will be refreshed if needed' "$installer" || valid=false
+        grep -Fq 'AGENTS.md is user-owned or customized - preserving it' "$installer" || valid=false
+    done
+    grep -Fq ') -ceq $content)' "$REPO_DIR/install.ps1" || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "shell and PowerShell installers share explicit AGENTS.md ownership messages"
+    else
+        fail "shell and PowerShell installers do not share AGENTS.md ownership semantics"
     fi
 }
 
@@ -2155,7 +2232,7 @@ test_install_rejects_malformed_hooks_without_overwrite() {
 }
 
 test_install_refreshes_unmodified_agents_for_profile_switch() {
-    local tmpdir output valid=true
+    local tmpdir install_output output valid=true
     tmpdir=$(mktemp -d)
     echo '{"name":"profile-switch","scripts":{"test":"jest"}}' > "$tmpdir/package.json"
     mkdir -p "$tmpdir/src"
@@ -2181,16 +2258,18 @@ manifest.managed_files["AGENTS.md"] = `sha256:${crypto.createHash("sha256").upda
 fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE
 
-    (
+    install_output=$(
         umask 077 && cd "$tmpdir" && \
         CODEX_HOME="$tmpdir/.codex-home" \
-        bash "$REPO_DIR/install.sh" --model-profile maximum >/dev/null 2>&1
+        bash "$REPO_DIR/install.sh" --model-profile maximum 2>&1
     ) || valid=false
     output=$(cd "$tmpdir" && bash "$REPO_DIR/check.sh" 2>/dev/null)
 
     grep -Fq -- '- Selected profile: `maximum`' "$tmpdir/AGENTS.md" || valid=false
     grep -Fq -- '- Baseline reasoning: `high`' "$tmpdir/AGENTS.md" || valid=false
     ! grep -Fq -- '- Selected profile: mixed' "$tmpdir/AGENTS.md" || valid=false
+    echo "$install_output" | grep -Fq 'AGENTS.md is wizard-managed - keeping it; profile guidance will be refreshed if needed' || valid=false
+    echo "$install_output" | grep -Fq 'AGENTS.md is user-owned or customized - preserving it' && valid=false
     CHECK_OUTPUT="$output" node <<'NODE' || valid=false
 const data = JSON.parse(process.env.CHECK_OUTPUT);
 if (data.managed_files?.["AGENTS.md"]?.status !== "match") process.exit(1);
@@ -3084,6 +3163,23 @@ test_readme_mentions_npx_entrypoint() {
     fi
 }
 
+test_readme_explains_plugin_to_daily_workflow() {
+    local readme="$REPO_DIR/README.md"
+    local valid=true
+
+    grep -Fq '## Which entry point should I use?' "$readme" || valid=false
+    grep -Fq '`/plugins`' "$readme" || valid=false
+    grep -Fq '`$codex-sdlc-wizard`' "$readme" || valid=false
+    grep -Fq '`$sdlc`' "$readme" || valid=false
+    grep -Fq 'Ordinary Chat' "$readme" || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "README explains plugin installation, repo setup, and daily SDLC as separate steps"
+    else
+        fail "README lacks a concise plugin-to-installer-to-daily-workflow decision path"
+    fi
+}
+
 test_e2e_requires_explicit_token_opt_in() {
     if grep -q 'CODEX_E2E:-0' "$REPO_DIR/tests/test-e2e.sh" \
         && grep -q 'CODEX_E2E=1 bash tests/test-e2e.sh' "$REPO_DIR/README.md" \
@@ -3154,6 +3250,9 @@ test_live_hooks_file_uses_universal_node_hooks
 test_live_hooks_file_is_windows_safe
 test_config_enables_hooks
 test_install_preserves_agents_md
+test_install_reports_current_agents_baseline
+test_install_omits_inactive_prompt_hook
+test_installers_share_agents_ownership_messages
 test_install_creates_sdlc_docs
 test_install_creates_skill
 test_install_keeps_skill_backups_out_of_skills_and_prunes_legacy_sdlc
@@ -3195,6 +3294,7 @@ test_package_cli_help_mentions_update
 test_package_cli_runs_check_command
 test_package_cli_runs_update_command
 test_readme_mentions_npx_entrypoint
+test_readme_explains_plugin_to_daily_workflow
 test_e2e_requires_explicit_token_opt_in
 test_e2e_bypasses_hook_trust_only_for_ephemeral_automation
 test_docs_document_proof_stamp_gate

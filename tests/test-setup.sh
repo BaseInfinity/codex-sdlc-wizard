@@ -426,6 +426,25 @@ test_setup_generates_sdlc_md() {
     fi
 }
 
+test_setup_reports_agents_generated_in_same_transaction() {
+    local ws output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    output=$(run_setup "$ws")
+    [ -f "$ws/AGENTS.md" ] || valid=false
+    echo "$output" | grep -Fq 'AGENTS.md generated earlier in this setup - keeping it' || valid=false
+    echo "$output" | grep -Fq 'AGENTS.md already exists - skipping (review manually)' && valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup reports AGENTS.md generated earlier in the same transaction"
+    else
+        fail "setup misleadingly reports its newly generated AGENTS.md as pre-existing"
+    fi
+}
+
 # ---- Test 16: optional GOALS.md active-scope contract ----
 test_setup_goals_template_is_explicit_opt_in() {
     local default_ws preexisting_ws goals_ws
@@ -1691,6 +1710,7 @@ test_template_testing_md_domain
 test_generated_no_placeholders
 test_agents_md_read_directives
 test_setup_generates_sdlc_md
+test_setup_reports_agents_generated_in_same_transaction
 test_setup_goals_template_is_explicit_opt_in
 test_setup_rejects_unknown_arguments
 test_setup_generates_demo_runtime_claim_gate
