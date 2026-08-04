@@ -21,6 +21,8 @@ Use the default `maximum` profile for normal work: GPT-5.6 Sol at `high`. The `m
 
 These workflows work in Codex Desktop, Codex CLI, and ChatGPT Work when the active project can access the repository and a shell. Ordinary Chat can display the installed plugin in its directory but cannot invoke repo-local skills; switch to Work or Codex for installation and delivery work.
 
+For a Claude-driven Windows adoption test against a real product repository, use the [Windows Codex Desktop real-install E2E](WINDOWS-CODEX-DESKTOP-E2E.md) runbook.
+
 ## Quick Start
 
 ```bash

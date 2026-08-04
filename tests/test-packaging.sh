@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
+WINDOWS_E2E_RUNBOOK="$REPO_DIR/WINDOWS-CODEX-DESKTOP-E2E.md"
+GIT_ATTRIBUTES="$REPO_DIR/.gitattributes"
 ROADMAP="$REPO_DIR/ROADMAP.md"
 GOALS_TEMPLATE="$REPO_DIR/templates/GOALS.md.tmpl"
 PACKAGE_JSON="$REPO_DIR/package.json"
@@ -1201,6 +1203,170 @@ test_consumer_bug_report_template_exists() {
     fi
 }
 
+test_windows_desktop_real_install_runbook_exists() {
+    local has_file=true
+    local is_linked=true
+    local identifies_real_install=true
+    local protects_wizard_source=true
+    local preserves_existing_work=true
+    local prefers_plugin=true
+    local keeps_verified_checkout_fallback=true
+    local enforces_lf_shell_checkouts=true
+    local accepts_crlf_gitattributes=true
+    local executes_verified_package=true
+    local executes_verified_plugin_root=true
+    local converts_plugin_root_for_git_bash=true
+    local branches_after_npx_fallback=true
+    local hashes_every_dirty_path=true
+    local hashes_managed_and_installer_targets=true
+    local separates_preservation_from_customized=true
+    local preflights_conflicting_hook_scripts=true
+    local routes_initialized_repos_to_update=true
+    local preflights_bash_on_windows=true
+    local baselines_codex_home_skills=true
+    local redacts_all_report_evidence=true
+    local updates_initialized_verified_fallback=true
+    local enables_available_plugin=true
+    local baselines_legacy_installer_migration=true
+    local preflights_all_hook_collisions_before_fallback=true
+    local requires_hook_approval=true
+    local enforces_minimum_versions=true
+    local distinguishes_git_bash_from_wsl=true
+    local preflights_bash_before_fallback_download=true
+    local preserves_initialized_profile=true
+    local requires_current_plugin_version=true
+    local avoids_hardcoded_release_identity=true
+    local validates_preserved_profile_driver=true
+    local preflights_retired_hook_collisions=true
+    local stops_on_invalid_manifest=true
+    local stops_on_invalid_hooks_document=true
+    local preflights_model_profile_collision=true
+    local fingerprints_exact_candidate_bundle=true
+    local rejects_crlf_shell_payloads=true
+    local canonicalizes_generated_plugin_version=true
+    local retains_verified_package_through_verification=true
+    local reports_verified_package_fallback=true
+    local requires_restart_and_sdlc=true
+    local produces_issue_ready_report=true
+    local avoids_remote_mutation=true
+
+    [ -f "$WINDOWS_E2E_RUNBOOK" ] || has_file=false
+    grep -Fq '[Windows Codex Desktop real-install E2E](WINDOWS-CODEX-DESKTOP-E2E.md)' "$README" || is_linked=false
+    grep -Eqi 'authorized real installation|real product repo' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || identifies_real_install=false
+    grep -Eqi 'stop.*codex-sdlc-wizard.*source repo|codex-sdlc-wizard.*source repo.*stop' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || protects_wizard_source=false
+    grep -Eqi 'preserve.*existing|existing.*preserve' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || preserves_existing_work=false
+    grep -Eqi 'Plugins.*(Personal|Installed)|Personal.*Installed' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || prefers_plugin=false
+    grep -Fq 'npm pack "<verified-head-export>"' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || keeps_verified_checkout_fallback=false
+    grep -Fq 'npm pack codex-sdlc-wizard@latest' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null && keeps_verified_checkout_fallback=false
+    [ -f "$GIT_ATTRIBUTES" ] || enforces_lf_shell_checkouts=false
+    grep -Eq '^\*\.sh[[:space:]]+text[[:space:]]+eol=lf[[:space:]]*$' "$GIT_ATTRIBUTES" 2>/dev/null || enforces_lf_shell_checkouts=false
+    printf '%s\r\n' '*.sh text eol=lf' | grep -Eq '^\*\.sh[[:space:]]+text[[:space:]]+eol=lf[[:space:]]*$' || accepts_crlf_gitattributes=false
+    grep -Eqi 'git .*archive.*HEAD|committed HEAD.*(export|archive)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || enforces_lf_shell_checkouts=false
+    grep -Eqi 'verified.*(extracted|package).*(bin[\\/]codex-sdlc-wizard\.js)|(bin[\\/]codex-sdlc-wizard\.js).*(verified|extracted)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || executes_verified_package=false
+    grep -Eq 'npx codex-sdlc-wizard@latest (setup|update|check)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null && executes_verified_package=false
+    grep -Fq 'bash "<verified-plugin-root>/update.sh"' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || executes_verified_plugin_root=false
+    grep -Fq 'bash "<verified-plugin-root>/check.sh"' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || executes_verified_plugin_root=false
+    grep -Fq 'cygpath -u' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || converts_plugin_root_for_git_bash=false
+    grep -Eqi 'npm fallback.*skip.*Phase 3|skip.*Phase 3.*npm fallback' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || branches_after_npx_fallback=false
+    grep -Eqi 'hash every pre-existing (modified|untracked).*path|every pre-existing (modified|untracked).*hash' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || hashes_every_dirty_path=false
+    grep -Eqi 'manifest-managed.*installer-targeted.*regardless of Git status|regardless of Git status.*manifest-managed.*installer-targeted' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || hashes_managed_and_installer_targets=false
+    grep -Eqi 'preserved.*(may|can).*report.*match|customized.*drift.*manifest' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || separates_preservation_from_customized=false
+    grep -Eqi 'uninitialized.*stop.*hook|uninitialized.*(wizard-named|existing).*hook.*stop|stop.*uninitialized.*hook' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || preflights_conflicting_hook_scripts=false
+    grep -Eqi 'initialized.*(use|route|run).*update|update.*initialized' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || routes_initialized_repos_to_update=false
+    grep -Eqi 'bash --version|Get-Command bash' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || preflights_bash_on_windows=false
+    grep -Eqi 'CODEX_HOME.*(feedback|setup-wizard|update-wizard)|Codex-home.*skill' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || baselines_codex_home_skills=false
+    grep -Eqi 'redact.*(every|all).*(warning|error|transcript|screenshot)|every.*(warning|error|transcript|screenshot).*redact' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || redacts_all_report_evidence=false
+    grep -Eqi 'initialized.*verified.*update|verified.*update.*initialized' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || updates_initialized_verified_fallback=false
+    grep -Eqi '(not installed|disabled|not enabled).*(Install|Enable)|(Install|Enable).*(not installed|disabled|not enabled)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || enables_available_plugin=false
+    grep -Fq 'skills\codex-sdlc-wizard' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || baselines_legacy_installer_migration=false
+    grep -Fq 'skill-backups' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || baselines_legacy_installer_migration=false
+    grep -Eqi 'bash-guard.*git-guard.*session-start.*compact-guard|compact-guard.*session-start.*git-guard.*bash-guard' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || preflights_all_hook_collisions_before_fallback=false
+    grep -Eqi '/hooks.*(approved|active)|approved.*active.*hooks' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || requires_hook_approval=false
+    grep -Eqi 'Codex CLI.*0\.144\.0|0\.144\.0.*Codex CLI' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || enforces_minimum_versions=false
+    grep -Eqi 'Node(\.js)?.*18|18.*Node(\.js)?' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || enforces_minimum_versions=false
+    grep -Eqi 'MINGW|MSYS|CYGWIN' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || distinguishes_git_bash_from_wsl=false
+    bash_preflight_line="$(grep -n -m1 'Get-Command bash' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null | cut -d: -f1 || true)"
+    fallback_download_line="$(grep -n -m1 'npm pack "<verified-head-export>" --pack-destination' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null | cut -d: -f1 || true)"
+    if [ -z "$bash_preflight_line" ] || [ -z "$fallback_download_line" ] || [ "$bash_preflight_line" -ge "$fallback_download_line" ]; then
+        preflights_bash_before_fallback_download=false
+    fi
+    grep -Eqi 'initialized.*preserve.*(selected|existing).*profile|(selected|existing).*profile.*preserve.*initialized' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || preserves_initialized_profile=false
+    grep -Eqi '(plugin|wizard).*version.*(match|equal).*(package\.json|checkout)|(package\.json|checkout).*version.*(match|equal).*(plugin|wizard)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || requires_current_plugin_version=false
+    grep -Eqi '(stale|older|mismatch).*(npm fallback|stop)|(npm fallback|stop).*(stale|older|mismatch)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || requires_current_plugin_version=false
+    grep -Eq 'matching `[0-9]+\.[0-9]+\.[0-9]+` label' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null && avoids_hardcoded_release_identity=false
+    grep -Eqi 'maximum.*gpt-5\.6-sol.*high|gpt-5\.6-sol.*high.*maximum' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || validates_preserved_profile_driver=false
+    grep -Eqi 'mixed.*gpt-5\.6-terra.*medium|gpt-5\.6-terra.*medium.*mixed' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || validates_preserved_profile_driver=false
+    grep -Fq '.codex/hooks/git-guard.js' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || preflights_retired_hook_collisions=false
+    grep -Fq '.codex/hooks/session-start.js' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || preflights_retired_hook_collisions=false
+    grep -Eqi 'manifest.*exists.*invalid.*stop|stop.*manifest.*invalid' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || stops_on_invalid_manifest=false
+    grep -Eqi 'hooks\.json.*invalid.*stop|stop.*hooks\.json.*invalid|validate.*hooks\.json.*before.*(setup|mutation)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || stops_on_invalid_hooks_document=false
+    grep -Eqi 'uninitialized.*stop.*model-profile|model-profile.*destructive collision' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || preflights_model_profile_collision=false
+    grep -Eqi '(exact|all).*(hash|fingerprint).*(match|equal)|(match|equal).*(exact|all).*(hash|fingerprint)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || fingerprints_exact_candidate_bundle=false
+    grep -Eqi 'package\.json.*files|files.*package\.json' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || fingerprints_exact_candidate_bundle=false
+    grep -Eqi '(every|complete|all).*(shipped|payload|package).*(file|path)|(shipped|payload|package).*(every|complete|all).*(file|path)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || fingerprints_exact_candidate_bundle=false
+    grep -Eqi 'CRLF.*LF|line endings?.*normaliz|normaliz.*line endings?' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || fingerprints_exact_candidate_bundle=false
+    grep -Eqi '(reject|stop).*(CRLF|carriage return).*\.sh|\.sh.*(CRLF|carriage return).*(reject|stop)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || rejects_crlf_shell_payloads=false
+    grep -Eqi '\.sh.*(raw|unchanged|exact).*bytes|(raw|unchanged|exact).*bytes.*\.sh' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || rejects_crlf_shell_payloads=false
+    grep -Eqi '\+codex.*(canonical|normaliz)|(canonical|normaliz).*\+codex' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || canonicalizes_generated_plugin_version=false
+    grep -Eqi 'keep.*verified package.*(through|until).*Phase 4|verified package.*(through|until).*Phase 4' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || retains_verified_package_through_verification=false
+    grep -Eqi 'restart|fresh.*session' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || requires_restart_and_sdlc=false
+    grep -Fq '$sdlc' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || requires_restart_and_sdlc=false
+    grep -Eqi 'GitHub-issue-ready|issue-ready' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || produces_issue_ready_report=false
+    grep -Eqi 'installation path used:.*verified-package fallback' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || reports_verified_package_fallback=false
+    grep -Eqi 'installation path used:.*npx fallback' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null && reports_verified_package_fallback=false
+    grep -Eqi 'do not commit.*push|do not.*(commit|push|tag|publish)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || avoids_remote_mutation=false
+
+    if [ "$has_file" = "true" ] &&
+       [ "$is_linked" = "true" ] &&
+       [ "$identifies_real_install" = "true" ] &&
+       [ "$protects_wizard_source" = "true" ] &&
+       [ "$preserves_existing_work" = "true" ] &&
+       [ "$prefers_plugin" = "true" ] &&
+       [ "$keeps_verified_checkout_fallback" = "true" ] &&
+       [ "$enforces_lf_shell_checkouts" = "true" ] &&
+       [ "$accepts_crlf_gitattributes" = "true" ] &&
+       [ "$executes_verified_package" = "true" ] &&
+       [ "$executes_verified_plugin_root" = "true" ] &&
+       [ "$converts_plugin_root_for_git_bash" = "true" ] &&
+       [ "$branches_after_npx_fallback" = "true" ] &&
+       [ "$hashes_every_dirty_path" = "true" ] &&
+       [ "$hashes_managed_and_installer_targets" = "true" ] &&
+       [ "$separates_preservation_from_customized" = "true" ] &&
+       [ "$preflights_conflicting_hook_scripts" = "true" ] &&
+       [ "$routes_initialized_repos_to_update" = "true" ] &&
+       [ "$preflights_bash_on_windows" = "true" ] &&
+       [ "$baselines_codex_home_skills" = "true" ] &&
+       [ "$redacts_all_report_evidence" = "true" ] &&
+       [ "$updates_initialized_verified_fallback" = "true" ] &&
+       [ "$enables_available_plugin" = "true" ] &&
+       [ "$baselines_legacy_installer_migration" = "true" ] &&
+       [ "$preflights_all_hook_collisions_before_fallback" = "true" ] &&
+       [ "$requires_hook_approval" = "true" ] &&
+       [ "$enforces_minimum_versions" = "true" ] &&
+       [ "$distinguishes_git_bash_from_wsl" = "true" ] &&
+       [ "$preflights_bash_before_fallback_download" = "true" ] &&
+       [ "$preserves_initialized_profile" = "true" ] &&
+       [ "$requires_current_plugin_version" = "true" ] &&
+       [ "$avoids_hardcoded_release_identity" = "true" ] &&
+       [ "$validates_preserved_profile_driver" = "true" ] &&
+       [ "$preflights_retired_hook_collisions" = "true" ] &&
+       [ "$stops_on_invalid_manifest" = "true" ] &&
+       [ "$stops_on_invalid_hooks_document" = "true" ] &&
+       [ "$preflights_model_profile_collision" = "true" ] &&
+       [ "$fingerprints_exact_candidate_bundle" = "true" ] &&
+       [ "$rejects_crlf_shell_payloads" = "true" ] &&
+       [ "$canonicalizes_generated_plugin_version" = "true" ] &&
+       [ "$retains_verified_package_through_verification" = "true" ] &&
+       [ "$reports_verified_package_fallback" = "true" ] &&
+       [ "$requires_restart_and_sdlc" = "true" ] &&
+       [ "$produces_issue_ready_report" = "true" ] &&
+       [ "$avoids_remote_mutation" = "true" ]; then
+        pass "Windows Desktop runbook covers a safe real-repo install and issue-ready E2E report"
+    else
+        fail "Windows Desktop real-install E2E runbook is missing or incomplete"
+    fi
+}
+
 test_installer_smoke_test_clean_project
 test_installer_scaffolds_only_default_repo_scope_sdlc_skill
 test_installer_uses_canonical_sdlc_skill_name
@@ -1238,6 +1404,7 @@ test_readme_has_consumer_parity_sections_without_ecosystem_reveal
 test_readme_documents_official_codex_distribution_status
 test_sponsor_metadata_exists
 test_consumer_bug_report_template_exists
+test_windows_desktop_real_install_runbook_exists
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

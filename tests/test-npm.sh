@@ -95,6 +95,7 @@ test_npm_pack_includes_runtime_files() {
     local has_openai_yaml=true
     local has_repo_sdlc_skill=true
     local has_repo_adlc_skill=false
+    local has_windows_e2e_runbook=true
 
     if [ -z "$tarball_name" ] || [ ! -f "$pack_dir/$tarball_name" ]; then
         has_tarball=false
@@ -110,6 +111,7 @@ test_npm_pack_includes_runtime_files() {
         has_openai_yaml=false
         has_repo_sdlc_skill=false
         has_repo_adlc_skill=true
+        has_windows_e2e_runbook=false
     else
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "install.sh") ? "yes" : ""')" = "yes" ] || has_install=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "setup.sh") ? "yes" : ""')" = "yes" ] || has_setup=false
@@ -131,6 +133,7 @@ test_npm_pack_includes_runtime_files() {
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/codex-sdlc-wizard/agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_openai_yaml=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_sdlc_skill=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/adlc/SKILL.md") ? "yes" : ""')" = "yes" ] && has_repo_adlc_skill=true
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "WINDOWS-CODEX-DESKTOP-E2E.md") ? "yes" : ""')" = "yes" ] || has_windows_e2e_runbook=false
     fi
 
     rm -rf "$pack_dir" "$npm_cache"
@@ -149,8 +152,9 @@ test_npm_pack_includes_runtime_files() {
        [ "$has_legacy_sdlc_skill" = "false" ] &&
        [ "$has_openai_yaml" = "true" ] &&
        [ "$has_repo_sdlc_skill" = "true" ] &&
-       [ "$has_repo_adlc_skill" = "false" ]; then
-        pass "npm pack includes the CLI, installer, plugin manifest, and skill runtime files"
+       [ "$has_repo_adlc_skill" = "false" ] &&
+       [ "$has_windows_e2e_runbook" = "true" ]; then
+        pass "npm pack includes the CLI, installer, plugin manifest, skill runtime, and Windows E2E runbook"
     else
         fail "npm pack is missing required runtime files"
     fi
