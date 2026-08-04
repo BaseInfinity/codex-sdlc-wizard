@@ -80,13 +80,13 @@ for required in \
   ".codex/windows-hooks.json" \
   ".codex/hooks/bash-guard.sh" \
   ".codex/hooks/session-start.sh" \
-  ".codex/hooks/sdlc-prompt-check.sh" \
   ".codex/hooks/git-guard.cjs" \
   ".codex/hooks/session-start.cjs" \
   ".codex/hooks/compact-guard.cjs" \
   ".codex/hooks/git-guard.ps1" \
   ".codex/hooks/session-start.ps1" \
   "lib/merge-hooks.cjs" \
+  "lib/remove-retired-files.cjs" \
   "lib/refresh-manifest-hashes.cjs" \
   ".agents/skills/sdlc/SKILL.md"; do
   require_bundle_file "$SCRIPT_DIR/$required" "$required"
@@ -236,12 +236,38 @@ install_agents_baseline() {
   local target="AGENTS.md"
   local reasoning_baseline
 
+  reasoning_baseline="$(profile_reasoning "$MODEL_PROFILE")"
+
   if [ -f "$target" ]; then
-    echo "AGENTS.md already exists - skipping (review manually)"
+    if [ "${CODEX_SDLC_SETUP_GENERATED_AGENTS:-false}" = "true" ]; then
+      echo "AGENTS.md generated earlier in this setup - keeping it"
+    elif cmp -s "$target" <(sed \
+      -e "s|{{MODEL_PROFILE}}|$MODEL_PROFILE|g" \
+      -e "s|{{REASONING_BASELINE}}|$reasoning_baseline|g" \
+      "$source"); then
+      echo "AGENTS.md already matches the wizard baseline - keeping it"
+    elif [ -f ".codex-sdlc/manifest.json" ] && \
+      AGENTS_TARGET="$target" node - <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+try {
+  const manifest = JSON.parse(fs.readFileSync(".codex-sdlc/manifest.json", "utf8"));
+  const expected = manifest.managed_files?.[process.env.AGENTS_TARGET];
+  const actual = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(process.env.AGENTS_TARGET)).digest("hex")}`;
+  process.exit(expected === actual ? 0 : 1);
+} catch {
+  process.exit(1);
+}
+NODE
+    then
+      echo "AGENTS.md is wizard-managed - keeping it; profile guidance will be refreshed if needed"
+    else
+      echo "AGENTS.md is user-owned or customized - preserving it"
+    fi
     return 0
   fi
 
-  reasoning_baseline="$(profile_reasoning "$MODEL_PROFILE")"
   sed \
     -e "s|{{MODEL_PROFILE}}|$MODEL_PROFILE|g" \
     -e "s|{{REASONING_BASELINE}}|$reasoning_baseline|g" \
@@ -276,6 +302,7 @@ remove_wizard_managed_global_skill "sdlc" "repo-scoped .agents/skills/sdlc is th
 prune_legacy_global_skill "codex-sdlc" "sdlc"
 
 mkdir -p .codex/hooks
+node "$SCRIPT_DIR/lib/remove-retired-files.cjs"
 
 merge_codex_config_profile ".codex/config.toml" "$MODEL_PROFILE"
 mark_install_touched ".codex/config.toml"

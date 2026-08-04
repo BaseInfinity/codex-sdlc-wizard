@@ -4,6 +4,23 @@ A **self-evolving Software Development Life Cycle (SDLC) enforcement system for 
 
 This adapter brings the [SDLC Wizard](https://github.com/BaseInfinity/agentic-ai-sdlc-wizard) discipline into Codex projects with Codex-native skills, `.codex/` hooks, `AGENTS.md`, adaptive setup/update, and proof-aware git gates.
 
+## Which entry point should I use?
+
+Think of the plugin, installer skill, and repo skill as three consecutive layers:
+
+| What you are doing | Use | How often |
+|---|---|---|
+| Install or enable the package | **Codex SDLC Wizard** in the Desktop Plugins Directory, or `/plugins` in Codex CLI | Once per supported surface |
+| Set up or repair the current repository | `$codex-sdlc-wizard` with the target repo selected | Once per repo, then whenever setup needs repair |
+| Plan, implement, test, and review normal repo work | `$sdlc` | Every meaningful delivery task after setup |
+| Pull the newest npm release and update repo artifacts before the public listing is available | `npx codex-sdlc-wizard@latest update` | When you intentionally want the newest published package |
+
+The plugin is the installable container; `$` opens the skill picker, so it should show the plugin's **Install SDLC Guardrails** skill rather than a second plugin row. After setup, restart or reopen Codex in the repository before invoking `$sdlc` so the repo-local config, hooks, docs, and skill are loaded.
+
+Use the default `maximum` profile for normal work: GPT-5.6 Sol at `high`. The `mixed` profile is an experimental explicit opt-in using Terra at `medium` with a Sol `high` review. Luna is currently a bounded support option, not an install-time profile.
+
+These workflows work in Codex Desktop, Codex CLI, and ChatGPT Work when the active project can access the repository and a shell. Ordinary Chat can display the installed plugin in its directory but cannot invoke repo-local skills; switch to Work or Codex for installation and delivery work.
+
 ## Quick Start
 
 ```bash

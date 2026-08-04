@@ -1529,6 +1529,184 @@ NODE
     fi
 }
 
+test_update_removes_only_unmodified_retired_prompt_hook() {
+    local ws custom_ws referenced_ws missing_ws missing_referenced_ws valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    custom_ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    referenced_ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    missing_ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    missing_referenced_ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+
+    for target_ws in "$ws" "$custom_ws" "$referenced_ws" "$missing_ws" "$missing_referenced_ws"; do
+        echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$target_ws/package.json"
+        mkdir -p "$target_ws/src"
+        run_setup_local "$target_ws"
+        printf '%s\n' \
+            '#!/bin/bash' \
+            "cat << 'EOF'" \
+            'SDLC BASELINE:' \
+            '1. Plan before coding — state confidence level' \
+            '2. TDD: Write failing test FIRST, then implement' \
+            '3. ALL tests must pass before commit' \
+            '4. Self-review before presenting to user' \
+            'EOF' > "$target_ws/.codex/hooks/sdlc-prompt-check.sh"
+        MANIFEST_PATH="$target_ws/.codex-sdlc/manifest.json" node <<'NODE'
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+manifest.managed_files[".codex/hooks/sdlc-prompt-check.sh"] =
+  "sha256:84ba0abfdf7b55849dd925a726c5de77d713d83efd9c50b19dfa06ff38f28112";
+fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    done
+    printf '%s\n' '# user customization' >> "$custom_ws/.codex/hooks/sdlc-prompt-check.sh"
+    if [ "$IS_WINDOWS" = "false" ] && [ ! -e "$referenced_ws/.Codex" ]; then
+        ln -s .codex "$referenced_ws/.Codex"
+    fi
+    HOOKS_PATH="$referenced_ws/.codex/hooks.json" node <<'NODE'
+const fs = require("fs");
+const hooks = JSON.parse(fs.readFileSync(process.env.HOOKS_PATH, "utf8"));
+hooks.hooks.UserPromptSubmit = [{
+  hooks: [{ type: "command", command: "bash -x .Codex/hooks/sdlc-prompt-check.sh" }],
+}];
+fs.writeFileSync(process.env.HOOKS_PATH, `${JSON.stringify(hooks, null, 2)}\n`);
+NODE
+    HOOKS_PATH="$referenced_ws/.codex/hooks.json" node <<'NODE'
+const fs = require("fs");
+fs.writeFileSync(process.env.HOOKS_PATH, `\uFEFF${fs.readFileSync(process.env.HOOKS_PATH, "utf8")}`);
+NODE
+    rm -f "$custom_ws/TESTING.md"
+    rm -f "$missing_ws/.codex/hooks/sdlc-prompt-check.sh"
+    HOOKS_PATH="$missing_referenced_ws/.codex/hooks.json" node <<'NODE'
+const fs = require("fs");
+const hooks = JSON.parse(fs.readFileSync(process.env.HOOKS_PATH, "utf8"));
+hooks.hooks.UserPromptSubmit = [{
+  hooks: [{ type: "command", command: "bash -x .codex/hooks/sdlc-prompt-check.sh" }],
+}];
+fs.writeFileSync(process.env.HOOKS_PATH, `${JSON.stringify(hooks, null, 2)}\n`);
+NODE
+    rm -f "$missing_referenced_ws/.codex/hooks/sdlc-prompt-check.sh"
+    if [ "$IS_WINDOWS" = "false" ]; then
+        chmod 664 "$missing_ws/.codex-sdlc/manifest.json"
+    fi
+
+    local custom_plan referenced_plan referenced_second_plan missing_referenced_plan missing_referenced_status second_output check_output custom_check_output referenced_check_output
+    custom_plan=$(run_update "$custom_ws" check-only) || valid=false
+    echo "$custom_plan" | grep -Fq '.codex/hooks/sdlc-prompt-check.sh: retired manifest ownership -> remove ownership (preserve file)' || valid=false
+    echo "$custom_plan" | grep -Fq '.codex/hooks/sdlc-prompt-check.sh: retired wizard file -> remove' && valid=false
+    referenced_plan=$(run_update "$referenced_ws" check-only) || valid=false
+    echo "$referenced_plan" | grep -Fq '.codex/hooks/sdlc-prompt-check.sh: retired manifest ownership -> remove ownership (preserve file)' || valid=false
+    echo "$referenced_plan" | grep -Fq '.codex/hooks/sdlc-prompt-check.sh: retired wizard file -> remove' && valid=false
+    run_update "$ws" >/dev/null || valid=false
+    run_update "$custom_ws" >/dev/null || valid=false
+    run_update "$referenced_ws" >/dev/null || valid=false
+    referenced_second_plan=$(run_update "$referenced_ws" check-only) || valid=false
+    echo "$referenced_second_plan" | grep -Fq 'Check only: no changes applied.' || valid=false
+    echo "$referenced_second_plan" | grep -Fq '.codex/hooks/sdlc-prompt-check.sh:' && valid=false
+    set +e
+    missing_referenced_plan=$(run_update "$missing_referenced_ws" check-only)
+    missing_referenced_status=$?
+    set -e
+    [ "$missing_referenced_status" -ne 0 ] || valid=false
+    echo "$missing_referenced_plan" | grep -Fq '.codex/hooks/sdlc-prompt-check.sh: retained hook target missing -> manual repair required' || valid=false
+    (umask 077; run_update "$missing_ws" >/dev/null) || valid=false
+    second_output=$(run_update "$ws") || valid=false
+    check_output=$(cd "$ws" && bash "$CHECK_SH") || valid=false
+    custom_check_output=$(cd "$custom_ws" && bash "$CHECK_SH") || valid=false
+    referenced_check_output=$(cd "$referenced_ws" && bash "$CHECK_SH") || valid=false
+
+    [ ! -e "$ws/.codex/hooks/sdlc-prompt-check.sh" ] || valid=false
+    grep -Fq '# user customization' "$custom_ws/.codex/hooks/sdlc-prompt-check.sh" || valid=false
+    [ -f "$referenced_ws/.codex/hooks/sdlc-prompt-check.sh" ] || valid=false
+    grep -Fq 'bash -x .Codex/hooks/sdlc-prompt-check.sh' "$referenced_ws/.codex/hooks.json" || valid=false
+    echo "$second_output" | grep -Fq 'No changes applied.' || valid=false
+    for manifest_path in "$ws/.codex-sdlc/manifest.json" "$custom_ws/.codex-sdlc/manifest.json" "$referenced_ws/.codex-sdlc/manifest.json" "$missing_ws/.codex-sdlc/manifest.json"; do
+        MANIFEST_PATH="$manifest_path" node <<'NODE' || valid=false
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+if (Object.prototype.hasOwnProperty.call(manifest.managed_files, ".codex/hooks/sdlc-prompt-check.sh")) process.exit(1);
+NODE
+    done
+    MANIFEST_PATH="$missing_referenced_ws/.codex-sdlc/manifest.json" node <<'NODE' || valid=false
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+if (!Object.prototype.hasOwnProperty.call(manifest.managed_files, ".codex/hooks/sdlc-prompt-check.sh")) process.exit(1);
+NODE
+    if [ "$IS_WINDOWS" = "false" ]; then
+        MANIFEST_PATH="$missing_ws/.codex-sdlc/manifest.json" node <<'NODE' || valid=false
+const fs = require("fs");
+if ((fs.statSync(process.env.MANIFEST_PATH).mode & 0o777) !== 0o664) process.exit(1);
+NODE
+    fi
+    CHECK_OUTPUT="$check_output" CUSTOM_CHECK_OUTPUT="$custom_check_output" REFERENCED_CHECK_OUTPUT="$referenced_check_output" node <<'NODE' || valid=false
+for (const value of [process.env.CHECK_OUTPUT, process.env.CUSTOM_CHECK_OUTPUT, process.env.REFERENCED_CHECK_OUTPUT]) {
+  const data = JSON.parse(value);
+  if (data.summary?.missing !== 0 || data.summary?.["drift / broken"] !== 0) process.exit(1);
+}
+NODE
+    rm -rf "$ws" "$custom_ws" "$referenced_ws" "$missing_ws" "$missing_referenced_ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update retires legacy prompt-hook files and manifest ownership safely"
+    else
+        fail "update left retired prompt-hook drift or removed a customization"
+    fi
+}
+
+test_update_rejects_dangling_retained_prompt_hook_symlink() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "dangling retained prompt-hook symlink check is POSIX-only"
+        return
+    fi
+
+    local ws status_output mutation_status valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    mkdir -p "$ws/.codex/hooks" "$ws/.codex-sdlc"
+    ln -s missing-custom-target "$ws/.codex/hooks/sdlc-prompt-check.sh"
+    cat > "$ws/.codex/hooks.json" <<'JSON'
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -x .codex/hooks/sdlc-prompt-check.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+JSON
+    cat > "$ws/.codex-sdlc/manifest.json" <<'JSON'
+{
+  "managed_files": {
+    ".codex/hooks/sdlc-prompt-check.sh": "sha256:84ba0abfdf7b55849dd925a726c5de77d713d83efd9c50b19dfa06ff38f28112"
+  }
+}
+JSON
+
+    status_output=$(cd "$ws" && node "$REPO_DIR/lib/remove-retired-files.cjs" --status) || valid=false
+    echo "$status_output" | grep -Fq $'.codex/hooks/sdlc-prompt-check.sh\tretained-missing' || valid=false
+    set +e
+    (cd "$ws" && node "$REPO_DIR/lib/remove-retired-files.cjs" >/dev/null 2>&1)
+    mutation_status=$?
+    set -e
+    [ "$mutation_status" -ne 0 ] || valid=false
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node <<'NODE' || valid=false
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+if (!Object.prototype.hasOwnProperty.call(manifest.managed_files, ".codex/hooks/sdlc-prompt-check.sh")) process.exit(1);
+NODE
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update rejects dangling retained prompt-hook symlinks as missing targets"
+    else
+        fail "update accepted a dangling retained prompt-hook symlink"
+    fi
+}
+
 test_update_reports_uninitialized_repo
 test_update_check_only_reports_missing_without_repair
 test_update_repairs_missing_generated_docs
@@ -1559,6 +1737,8 @@ test_update_refreshes_generated_policy_when_profile_metadata_is_missing
 test_update_refreshes_legacy_policy_surfaces_without_overwriting_customizations
 test_update_migrates_legacy_policy_around_customized_profile_metadata
 test_update_records_schema_only_migration_when_all_policy_surfaces_are_customized
+test_update_removes_only_unmodified_retired_prompt_hook
+test_update_rejects_dangling_retained_prompt_hook_symlink
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
