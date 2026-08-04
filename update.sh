@@ -447,6 +447,26 @@ declare -a REGENERATE_EXISTING_DOCS=()
 CHANGES_PENDING=false
 RUN_REGENERATE=false
 REGENERATE_FORCE=false
+RETIRED_PROMPT_HOOK_STATUS="$(
+    node "$SCRIPT_DIR/lib/remove-retired-files.cjs" --status |
+        awk -F '\t' '$1 == ".codex/hooks/sdlc-prompt-check.sh" { print $2 }'
+)"
+RETIRED_PROMPT_HOOK_BLOCKED=false
+
+case "$RETIRED_PROMPT_HOOK_STATUS" in
+    wizard-managed)
+        PLAN_LINES+=(".codex/hooks/sdlc-prompt-check.sh|retired wizard file|remove")
+        CHANGES_PENDING=true
+        ;;
+    tracked-retired)
+        PLAN_LINES+=(".codex/hooks/sdlc-prompt-check.sh|retired manifest ownership|remove ownership (preserve file)")
+        CHANGES_PENDING=true
+        ;;
+    retained-missing)
+        PLAN_LINES+=(".codex/hooks/sdlc-prompt-check.sh|retained hook target missing|manual repair required")
+        RETIRED_PROMPT_HOOK_BLOCKED=true
+        ;;
+esac
 
 array_contains() {
     local needle="$1"
@@ -500,6 +520,7 @@ queue_regenerate_existing_doc() {
 for line in "${STATUS_LINES[@]}"; do
     IFS=$'\t' read -r relative_path status <<< "$line"
     [ -n "$relative_path" ] || continue
+    [ "$relative_path" != ".codex/hooks/sdlc-prompt-check.sh" ] || continue
 
     action="keep"
     if [ "$relative_path" = ".codex/hooks.json" ]; then
@@ -715,6 +736,13 @@ for plan_line in "${PLAN_LINES[@]}"; do
     echo "- $relative_path: $status -> $action"
 done
 
+if [ "$RETIRED_PROMPT_HOOK_BLOCKED" = "true" ]; then
+    echo ""
+    echo "Update cannot continue: a retained custom hook references missing .codex/hooks/sdlc-prompt-check.sh." >&2
+    echo "Restore that customized target or remove the retained hook command, then rerun update." >&2
+    exit 1
+fi
+
 if [ "$CHECK_ONLY" = "true" ]; then
     echo ""
     echo "Check only: no changes applied."
@@ -731,6 +759,9 @@ require_gpt56_codex_version
 
 echo ""
 echo "Applying planned updates..."
+if [ "$RETIRED_PROMPT_HOOK_STATUS" = "wizard-managed" ] || [ "$RETIRED_PROMPT_HOOK_STATUS" = "tracked-retired" ]; then
+    node "$SCRIPT_DIR/lib/remove-retired-files.cjs"
+fi
 if [ "${#STATIC_REPAIRS[@]}" -gt 0 ]; then
     for relative_path in "${STATIC_REPAIRS[@]}"; do
         repair_managed_file "$relative_path"

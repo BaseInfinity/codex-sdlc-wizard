@@ -58,17 +58,47 @@ function Install-AgentsBaseline {
         [string]$Profile
     )
 
-    if (Test-Path -LiteralPath "AGENTS.md") {
-        Write-Host "AGENTS.md already exists - skipping (review manually)"
-        return
-    }
-
     $reasoningBaseline = if ($Profile -eq "mixed") { "medium" } else { "high" }
     $content = Get-Content -LiteralPath $Source -Raw
     $content = $content.Replace("{{MODEL_PROFILE}}", $Profile).Replace("{{REASONING_BASELINE}}", $reasoningBaseline)
+
+    if (Test-Path -LiteralPath "AGENTS.md") {
+        if ($env:CODEX_SDLC_SETUP_GENERATED_AGENTS -eq "true") {
+            Write-Host "AGENTS.md generated earlier in this setup - keeping it"
+        } elseif ((Get-Content -LiteralPath "AGENTS.md" -Raw) -ceq $content) {
+            Write-Host "AGENTS.md already matches the wizard baseline - keeping it"
+        } elseif (Test-AgentsManifestMatch -Path "AGENTS.md") {
+            Write-Host "AGENTS.md is wizard-managed - keeping it; profile guidance will be refreshed if needed"
+        } else {
+            Write-Host "AGENTS.md is user-owned or customized - preserving it"
+        }
+        return
+    }
+
     Set-Content -LiteralPath "AGENTS.md" -Value $content -NoNewline
     Add-TouchedFile -Path "AGENTS.md"
     Write-Host "Created AGENTS.md"
+}
+
+function Test-AgentsManifestMatch {
+    param([string]$Path)
+
+    $manifestPath = ".codex-sdlc\manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        return $false
+    }
+
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $expected = $manifest.managed_files.$Path
+        if (-not $expected) {
+            return $false
+        }
+        $actual = "sha256:" + (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        return $actual -eq $expected
+    } catch {
+        return $false
+    }
 }
 
 function Copy-IfMissing {
@@ -429,6 +459,10 @@ Install-RepoSkill -SourceRoot $scriptDir -Name "sdlc"
 
 New-Item -ItemType Directory -Path ".codex" -Force | Out-Null
 New-Item -ItemType Directory -Path ".codex\hooks" -Force | Out-Null
+& node (Join-Path $scriptDir "lib\remove-retired-files.cjs")
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to inspect retired wizard files"
+}
 
 $configPath = ".codex\config.toml"
 Merge-CodexModelConfig -ConfigPath $configPath -Profile $ModelProfile

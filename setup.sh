@@ -1125,6 +1125,7 @@ substitute_template() {
 }
 
 # Generate AGENTS.md
+SETUP_GENERATED_AGENTS=false
 generate_file() {
     local target="$1"
     local template="$2"
@@ -1140,6 +1141,9 @@ generate_file() {
         return
     fi
     substitute_template "$template" > "$target"
+    if [ "$target" = "AGENTS.md" ]; then
+        SETUP_GENERATED_AGENTS=true
+    fi
     echo "Generated $label"
 }
 
@@ -1175,7 +1179,8 @@ generate_testing_md
 # ---- Step 4: Run install.sh (hooks + config) ----
 if [ "$SETUP_MODE" != "regenerate" ]; then
     echo ""
-    bash "$SCRIPT_DIR/install.sh" --model-profile "$MODEL_PROFILE"
+    CODEX_SDLC_SETUP_GENERATED_AGENTS="$SETUP_GENERATED_AGENTS" \
+        bash "$SCRIPT_DIR/install.sh" --model-profile "$MODEL_PROFILE"
 fi
 
 # ---- Step 5: Write manifest ----
