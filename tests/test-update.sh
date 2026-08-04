@@ -574,7 +574,7 @@ NODE
 }
 
 test_update_repairs_managed_hook_drift_without_overwriting_host_hooks() {
-    local ws output precheck_output check_output host_hook_command host_hook_with_wizard_argument wizard_drift_command valid=true
+    local ws output precheck_output check_output backup_count backup_path original_hooks_path host_hook_command host_hook_with_wizard_argument wizard_drift_command valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
     mkdir -p "$ws/src"
@@ -604,14 +604,20 @@ data.hooks.PostToolUse = [{
   hooks: [
     { type: "command", command: process.env.HOST_HOOK_COMMAND },
     { type: "command", command: process.env.HOST_HOOK_WITH_WIZARD_ARGUMENT },
+    { type: "command", command: "node vendor/.codex/hooks/git-guard.cjs" },
+    { type: "command", command: "pwsh -File sibling/.codex/hooks/git-guard.ps1" },
   ],
 }];
 fs.writeFileSync(hooksPath, `${JSON.stringify(data, null, 2)}\n`);
 NODE
 
+    original_hooks_path="$ws/hooks.json.before-update"
+    cp "$ws/.codex/hooks.json" "$original_hooks_path"
     precheck_output=$(run_check "$ws")
     output=$(run_update "$ws" 2>&1) || valid=false
     check_output=$(run_check "$ws")
+    backup_count=$(find "$ws/.codex" -maxdepth 1 -name 'hooks.json.bak.*' -print | wc -l | tr -d '[:space:]')
+    backup_path=$(find "$ws/.codex" -maxdepth 1 -name 'hooks.json.bak.*' -print -quit)
 
     HOOKS_PATH="$ws/.codex/hooks.json" HOST_HOOK_COMMAND="$host_hook_command" HOST_HOOK_WITH_WIZARD_ARGUMENT="$host_hook_with_wizard_argument" node <<'NODE' || valid=false
 const fs = require("fs");
@@ -623,18 +629,23 @@ if (data.customSetting !== "keep-me") process.exit(1);
 if (!commands.includes("node .custom/guard.cjs")) process.exit(1);
 if (!commands.includes(process.env.HOST_HOOK_COMMAND)) process.exit(1);
 if (!commands.includes(process.env.HOST_HOOK_WITH_WIZARD_ARGUMENT)) process.exit(1);
+if (!commands.includes("node vendor/.codex/hooks/git-guard.cjs")) process.exit(1);
+if (!commands.includes("pwsh -File sibling/.codex/hooks/git-guard.ps1")) process.exit(1);
 if (commands.includes(".codex/hooks/bash-guard.sh")) process.exit(1);
 if (commands.filter((command) => command === "node .codex/hooks/git-guard.cjs").length !== 1) process.exit(1);
 NODE
+    [ "$backup_count" = "1" ] || valid=false
+    [ -n "$backup_path" ] || valid=false
+    [ -n "$backup_path" ] && cmp -s "$backup_path" "$original_hooks_path" || valid=false
     json_text_equals "$precheck_output" 'data.managed_files[".codex/hooks.json"].status' "drift / broken" || valid=false
     json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "match" || valid=false
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
-        pass "update repairs wizard hook drift while preserving host hooks"
+        pass "update backs up hook drift while preserving nested host hooks"
     else
         echo "$output" >&2
-        fail "update overwrote host hooks while repairing wizard hook drift"
+        fail "update did not back up hook drift or preserve nested host hooks"
     fi
 }
 
