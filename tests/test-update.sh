@@ -869,6 +869,51 @@ NODE
     fi
 }
 
+test_update_upgrades_unmodified_outdated_managed_files_only() {
+    local ws output check_output custom_before manifest_hash package_hash valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    cat > "$ws/.codex/hooks/git-guard.cjs" <<'EOF'
+#!/usr/bin/env node
+// Legacy unmodified guard without the current package fixes.
+process.exit(0);
+EOF
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" GUARD_PATH="$ws/.codex/hooks/git-guard.cjs" node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+manifest.managed_files[".codex/hooks/git-guard.cjs"] =
+  `sha256:${crypto.createHash("sha256").update(fs.readFileSync(process.env.GUARD_PATH)).digest("hex")}`;
+fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+    printf '%s\n' '// USER CUSTOM SESSION HOOK' >> "$ws/.codex/hooks/session-start.cjs"
+    custom_before=$(cat "$ws/.codex/hooks/session-start.cjs")
+
+    output=$(run_update "$ws") || valid=false
+    check_output=$(run_check "$ws") || valid=false
+    cmp -s "$ws/.codex/hooks/git-guard.cjs" "$REPO_DIR/.codex/hooks/git-guard.cjs" || valid=false
+    [ "$(cat "$ws/.codex/hooks/session-start.cjs")" = "$custom_before" ] || valid=false
+    echo "$output" | grep -Fq '.codex/hooks/git-guard.cjs: match -> upgrade from invoked package' || valid=false
+    echo "$output" | grep -Fq '.codex/hooks/session-start.cjs: customized -> skip (preserve customization)' || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/git-guard.cjs"].status' "match" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/session-start.cjs"].status' "customized" || valid=false
+    manifest_hash=$(json_eval_stdin 'data.managed_files[".codex/hooks/git-guard.cjs"]' < "$ws/.codex-sdlc/manifest.json" || true)
+    package_hash=$(node "$REPO_DIR/lib/managed-file-hash.cjs" hash "$REPO_DIR/.codex/hooks/git-guard.cjs")
+    [ "$manifest_hash" = "$package_hash" ] || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update upgrades unmodified outdated managed files and preserves customizations"
+    else
+        printf '%s\n' "$output" >&2
+        printf '%s\n' "$check_output" >&2
+        fail "update kept an outdated managed file or overwrote a customization"
+    fi
+}
+
 test_update_replaces_and_backs_up_malformed_hooks() {
     local ws output check_output backup_path valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -1889,6 +1934,7 @@ test_check_treats_bom_prefixed_hooks_as_customized
 test_check_warns_when_managed_hook_event_is_disabled
 test_check_canonicalizes_text_eol_but_keeps_shell_raw
 test_update_migrates_legacy_eol_hashes_and_merges_gitattributes
+test_update_upgrades_unmodified_outdated_managed_files_only
 test_update_replaces_and_backs_up_malformed_hooks
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills

@@ -244,3 +244,66 @@ shell payload remains raw-byte drift and is classified broken. Setup and update 
 merge the narrow `.codex/hooks/*.sh text eol=lf` rule into consumer `.gitattributes`,
 preserving every existing consumer entry without imposing LF on unrelated shell files
 or other managed content.
+
+## 13. Proof runner sends PowerShell cmdlets to `cmd.exe` — HIGH
+
+The m180 consumer manifest correctly records its PowerShell test command as:
+
+    Invoke-Pester -Path tests
+
+But `.codex/hooks/git-guard.cjs` reads that string from `scan` / `resolved_values`
+and executes it with `childProcess.spawnSync(check, { shell: true })`. On Windows,
+Node resolves that shell through `ComSpec`; the observed value is
+`C:\WINDOWS\system32\cmd.exe`. `Invoke-Pester` is a function exported by the Pester
+PowerShell module, not a standalone executable visible to `cmd.exe`.
+
+The mandatory reviewed proof command therefore fails before running any test:
+
+    Running SDLC proof check: Invoke-Pester -Path tests
+    'Invoke-Pester' is not recognized as an internal or external command,
+    operable program or batch file.
+    SDLC proof check failed: Invoke-Pester -Path tests
+
+PowerShell itself resolves the same command successfully as
+`CommandType: Function`, `ModuleName: Pester`. This is not a missing-Pester or PATH
+problem; the proof runner selected the wrong command interpreter.
+
+**Impact:** every Windows PowerShell consumer whose manifest stores a PowerShell
+cmdlet or function as its proof command is blocked at the mandatory commit/push proof
+gate. m180 is a direct production-shaped reproduction. Changing an individual
+consumer manifest or passing an ad hoc `--check` would only bypass the product defect.
+
+**Fix:** make the proof runner execute PowerShell-repo proof commands inside an
+explicit PowerShell host, for example
+`pwsh -NoProfile -Command "Invoke-Pester -Path tests"`, while preserving the child
+exit status. Add a Windows regression fixture whose manifest contains the bare
+`Invoke-Pester -Path tests` command and assert that the proof runner selects `pwsh`,
+runs the check, and writes a proof only after the check succeeds.
+
+## 14. Update trusts an old consumer manifest instead of the invoked package — HIGH
+
+The updated checker proved that m180's `.codex/hooks/git-guard.cjs` still matched its
+consumer manifest, so `update.sh` classified it as `match -> keep`. But the file was
+not current relative to the package performing the update:
+
+| Source | SHA-256 |
+|---|---|
+| m180 consumer and its manifest | `3c2fb558edd07c82e1331106998d1c5c27bb9bbd122555ba23b5dd35e03bf705` |
+| invoked wizard package | `be6172d293af10e2f469acb24a03ea25922206329241d1eedefb4e795bf1e785` |
+
+The byte difference was the `79a00b9` Windows workspace-fingerprint repair that
+normalizes the repository root with `path.resolve()`. Because consumer bytes still
+matched their old recorded hash, the update never installed that fix. This affects
+the normal case: an untouched managed file remains permanently pinned to whichever
+package version first wrote its manifest entry.
+
+**Impact:** hook and helper fixes can ship successfully yet never reach existing
+consumers. A stale proof implementation may continue approving or rejecting commits
+with already-fixed logic while update reports it healthy.
+
+**Fix:** use a three-way decision for directly shipped managed artifacts: compare the
+consumer's current hash with both its recorded manifest hash and the invoked package's
+current hash. Upgrade when current still matches the old manifest but differs from the
+package; preserve when current differs from both; and only refresh manifest ownership
+when current already equals the package. Reuse canonical text hashes and raw `.sh`
+hashes so line endings cannot disguise any of those relations.

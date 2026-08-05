@@ -96,24 +96,54 @@ function safeProofCommand(value) {
   return command;
 }
 
-function configuredProofCommands(root) {
+function configuredProofConfiguration(root) {
   const manifestPath = path.join(root, ".codex-sdlc", "manifest.json");
   if (!fs.existsSync(manifestPath)) {
-    return [];
+    return { checks: [], language: "" };
   }
 
   try {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     const values = { ...(manifest.scan || {}), ...(manifest.resolved_values || {}) };
-    return [
-      safeProofCommand(values.test_command),
-      safeProofCommand(values.lint_command),
-      safeProofCommand(values.typecheck_command),
-      safeProofCommand(values.build_command),
-    ].filter(Boolean);
+    return {
+      checks: [
+        safeProofCommand(values.test_command),
+        safeProofCommand(values.lint_command),
+        safeProofCommand(values.typecheck_command),
+        safeProofCommand(values.build_command),
+      ].filter(Boolean),
+      language: String(values.language || manifest.scan?.language || ""),
+    };
   } catch {
-    return [];
+    return { checks: [], language: "" };
   }
+}
+
+function configuredProofCommands(root) {
+  return configuredProofConfiguration(root).checks;
+}
+
+function isPowerShellShapedCommand(command) {
+  return /^(?:&\s*)?[A-Za-z]+-[A-Za-z][A-Za-z0-9-]*(?:\s|$)/.test(command.trim());
+}
+
+function runPowerShellProofCommand(command, root) {
+  for (const host of ["pwsh", "powershell.exe"]) {
+    const result = childProcess.spawnSync(host, ["-NoProfile", "-Command", command], {
+      cwd: root,
+      stdio: "inherit",
+    });
+    if (result.error?.code === "ENOENT") {
+      continue;
+    }
+    return { ...result, host };
+  }
+
+  return {
+    status: null,
+    error: new Error("neither pwsh nor powershell.exe is available"),
+    host: "",
+  };
 }
 
 function proofHelp() {
@@ -278,7 +308,8 @@ function runProofCli(args) {
     return 2;
   }
 
-  const checks = parsed.checks.length > 0 ? parsed.checks : configuredProofCommands(root);
+  const configured = configuredProofConfiguration(root);
+  const checks = parsed.checks.length > 0 ? parsed.checks : configured.checks;
   if (checks.length === 0) {
     process.stderr.write("No proof checks configured. Pass --check <command> or run setup first.\n");
     return 2;
@@ -286,11 +317,20 @@ function runProofCli(args) {
 
   for (const check of checks) {
     process.stdout.write(`Running SDLC proof check: ${check}\n`);
-    const result = childProcess.spawnSync(check, {
-      cwd: root,
-      shell: true,
-      stdio: "inherit",
-    });
+    const usePowerShell = /powershell/i.test(configured.language) || isPowerShellShapedCommand(check);
+    const result = usePowerShell
+      ? runPowerShellProofCommand(check, root)
+      : childProcess.spawnSync(check, {
+        cwd: root,
+        shell: true,
+        stdio: "inherit",
+      });
+
+    if (result.error) {
+      const prefix = usePowerShell ? "Cannot run PowerShell proof check" : "Cannot run SDLC proof check";
+      process.stderr.write(`${prefix}: ${result.error.message}\n`);
+      return 1;
+    }
 
     if (result.status !== 0) {
       process.stderr.write(`SDLC proof check failed: ${check}\n`);
