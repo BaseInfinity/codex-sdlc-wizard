@@ -2755,16 +2755,21 @@ test_sdlc_skill_has_docsync_learning_and_merge_guard() {
     fi
 }
 
-test_repo_separates_consumer_high_default_from_maintainer_xhigh_exception() {
+test_repo_defaults_consumer_and_maintainer_work_to_sol_high() {
     local all_passed=true
 
-    if ! grep -Eiq 'gpt-5\.6-sol.*xhigh|xhigh.*gpt-5\.6-sol' "$REPO_DIR/AGENTS.md"; then
-        fail "AGENTS.md does not keep this high-blast-radius wizard repo on gpt-5.6 Sol xhigh"
+    if ! grep -Fq 'use `gpt-5.6-sol` with `high` reasoning for this repo' "$REPO_DIR/AGENTS.md"; then
+        fail "AGENTS.md does not default this wizard repo to gpt-5.6 Sol high"
         all_passed=false
     fi
 
-    if ! grep -q '^model_reasoning_effort = "xhigh"' "$REPO_DIR/.codex/config.toml"; then
-        fail "repo-local config does not preserve the wizard maintainer xhigh exception"
+    if ! grep -q '^model_reasoning_effort = "high"' "$REPO_DIR/.codex/config.toml"; then
+        fail "repo-local config does not default wizard maintenance to high"
+        all_passed=false
+    fi
+
+    if grep -Eiq 'gpt-5\.6-sol.*xhigh|xhigh.*gpt-5\.6-sol|xhigh.*throughout|standing.*xhigh' "$REPO_DIR/AGENTS.md"; then
+        fail "AGENTS.md still defines xhigh as the standing wizard-repo baseline"
         all_passed=false
     fi
 
@@ -2894,7 +2899,7 @@ test_repo_separates_consumer_high_default_from_maintainer_xhigh_exception() {
     fi
 
     if [ "$all_passed" = "true" ]; then
-        pass "consumer guidance defaults to high while this wizard repo preserves its xhigh exception"
+        pass "consumer guidance and wizard maintenance default to Sol high with task-scoped xhigh escalation"
     fi
 }
 
@@ -3283,7 +3288,7 @@ test_setup_docs_include_codex_desktop_handoff
 test_setup_docs_include_m365_auth_lane_guidance
 test_setup_docs_include_task_routing_gate
 test_sdlc_skill_has_docsync_learning_and_merge_guard
-test_repo_separates_consumer_high_default_from_maintainer_xhigh_exception
+test_repo_defaults_consumer_and_maintainer_work_to_sol_high
 test_repo_documents_max_ultra_reasoning_boundary
 test_package_has_npm_release_surface
 test_package_uses_single_canonical_sdlc_skill_name

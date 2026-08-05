@@ -308,8 +308,8 @@ Bootstrap recommendation:
 
 Repo-specific maintainer rule:
 - consumer repos can choose `mixed` or `maximum`
-- this repo always stays on `maximum` (`gpt-5.6-sol` at `xhigh` throughout); do not switch `codex-sdlc-wizard` maintenance to `mixed`, Terra, Luna, or lower-reasoning profiles because it is unusually meta and high-blast-radius
-- Sol `high` is the consumer default but remains a measured candidate for this repo's narrow `xhigh` maintainer exception; require at least 20 representative slices, at least 95% end-to-end success, follow-up rate <= 10%, and at least 15% cycle-time or cost improvement versus Sol `xhigh` before changing this repo's exception
+- this repo stays on `maximum` (`gpt-5.6-sol` at `high`); do not switch `codex-sdlc-wizard` maintenance to `mixed`, Terra, Luna, or lower-tier profiles because it is unusually meta and high-blast-radius
+- escalate only difficult or high-risk slices to `xhigh` when `high` leaves unresolved risk
 
 ## Native Codex Review
 

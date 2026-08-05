@@ -95,9 +95,9 @@ This decision is quality-based, not pricing-only:
 - the local [`benchmarks/model-experiment.csv`](benchmarks/model-experiment.csv) ledger must contain representative completed slices before `mixed` can become a recommendation
 - until that gate passes, Sol `high` remains the default and `mixed` remains experimental
 
-## Maintainer Exception
+## Maintainer Baseline
 
-The `codex-sdlc-wizard` repository itself remains on `gpt-5.6-sol` at `xhigh` while its Sol `high` benchmark is unfinished. This is a narrow repo-maintainer exception for unusually meta, downstream-enforcement work; it is not the consumer default.
+The `codex-sdlc-wizard` repository itself uses the same `gpt-5.6-sol` `high` baseline. Because the work is unusually meta and affects downstream enforcement, keep the Sol `maximum` profile and escalate difficult or high-risk slices to `xhigh` when `high` leaves unresolved risk.
 
 ## See Also
 

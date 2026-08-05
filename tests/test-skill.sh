@@ -13,6 +13,7 @@ REPO_SDLC_SKILL="$REPO_DIR/.agents/skills/sdlc/SKILL.md"
 REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
 GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
 REPO_AGENTS="$REPO_DIR/AGENTS.md"
+REPO_CODEX_CONFIG="$REPO_DIR/.codex/config.toml"
 PASSED=0
 FAILED=0
 
@@ -278,28 +279,35 @@ test_skill_documents_model_profiles() {
     fi
 }
 
-test_repo_contract_keeps_this_repo_on_maximum() {
+test_repo_contract_defaults_this_repo_to_sol_high() {
     local has_maximum_rule=true
-    local has_sol_xhigh_rule=true
+    local has_sol_high_rule=true
+    local has_repo_config=true
     local has_no_downgrade_rule=true
     local has_meta_reason=true
-    local has_high_measurement_gate=true
+    local has_task_scoped_xhigh_rule=true
+    local avoids_standing_xhigh=true
 
     grep -Eqi 'this repo.*maximum|codex-sdlc-wizard itself.*maximum|maintaining this wizard repo.*maximum' "$REPO_AGENTS" || has_maximum_rule=false
-    grep -Eqi 'gpt-5\.6-sol.*xhigh|xhigh.*gpt-5\.6-sol' "$REPO_AGENTS" || has_sol_xhigh_rule=false
-    grep -Eqi 'do not.*(downgrade|switch).*(mixed|terra|luna|lower)|always.*gpt-5\.6-sol.*xhigh|gpt-5\.6-sol.*xhigh.*always' "$REPO_AGENTS" || has_no_downgrade_rule=false
+    grep -Eqi 'gpt-5\.6-sol.*high|high.*gpt-5\.6-sol' "$REPO_AGENTS" || has_sol_high_rule=false
+    grep -qx 'model = "gpt-5.6-sol"' "$REPO_CODEX_CONFIG" || has_repo_config=false
+    grep -qx 'model_reasoning_effort = "high"' "$REPO_CODEX_CONFIG" || has_repo_config=false
+    grep -Eqi 'do not.*(downgrade|switch).*(mixed|terra|luna|lower)|always.*gpt-5\.6-sol.*high|gpt-5\.6-sol.*high.*always' "$REPO_AGENTS" || has_no_downgrade_rule=false
     grep -Eqi 'explicitly asks for less|asks for less' "$REPO_AGENTS" && has_no_downgrade_rule=false
     grep -Eqi 'meta|high-blast-radius|too meta' "$REPO_AGENTS" || has_meta_reason=false
-    grep -Eqi 'measure.*high|compare.*high|high.*candidate|one level lower' "$REPO_AGENTS" || has_high_measurement_gate=false
+    grep -Eqi 'xhigh.*(security|migration|destructive|long-running|difficult|high-risk)|(security|migration|destructive|long-running|difficult|high-risk).*xhigh' "$REPO_AGENTS" || has_task_scoped_xhigh_rule=false
+    grep -Eqi 'gpt-5\.6-sol.*xhigh|xhigh.*gpt-5\.6-sol|xhigh.*throughout|standing.*xhigh' "$REPO_AGENTS" && avoids_standing_xhigh=false
 
     if [ "$has_maximum_rule" = "true" ] &&
-       [ "$has_sol_xhigh_rule" = "true" ] &&
+       [ "$has_sol_high_rule" = "true" ] &&
+       [ "$has_repo_config" = "true" ] &&
        [ "$has_no_downgrade_rule" = "true" ] &&
        [ "$has_meta_reason" = "true" ] &&
-       [ "$has_high_measurement_gate" = "true" ]; then
-        pass "AGENTS.md keeps this wizard repo on gpt-5.6 Sol xhigh maximum because the work is meta/high-blast-radius"
+       [ "$has_task_scoped_xhigh_rule" = "true" ] &&
+       [ "$avoids_standing_xhigh" = "true" ]; then
+        pass "Repo contract defaults this wizard repo to gpt-5.6 Sol high with task-scoped xhigh escalation"
     else
-        fail "AGENTS.md does not keep this wizard repo on gpt-5.6 Sol xhigh maximum clearly enough"
+        fail "Repo contract does not default this wizard repo to gpt-5.6 Sol high clearly enough"
     fi
 }
 
@@ -454,7 +462,7 @@ test_readme_documents_dual_distribution
 test_readme_recommends_current_codex_startup
 test_skill_recommends_current_codex_after_install
 test_skill_documents_model_profiles
-test_repo_contract_keeps_this_repo_on_maximum
+test_repo_contract_defaults_this_repo_to_sol_high
 test_default_repo_scoped_skill_surface_is_sdlc_only
 test_plugin_skill_bundle_avoids_duplicate_helper_discovery
 test_repo_scoped_skills_are_codex_native

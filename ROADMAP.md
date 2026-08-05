@@ -15,7 +15,7 @@
 - the model-profile toggle is now shipped as a user choice:
   - `mixed`: `gpt-5.6-terra` `medium` main pass + `gpt-5.6-sol` review with an explicit `high` effort override
   - `maximum`: `gpt-5.6-sol` / `high` throughout
-- researched GPT-5.6 reasoning policy now uses `high` as the consumer agentic-coding default, adapts `xhigh` escalation scopes to detected repo risks, preserves this repo's measured Sol `xhigh` maintainer exception, and keeps Max/Ultra as explicit escalations instead of defaults
+- researched GPT-5.6 reasoning policy now uses `high` as the consumer and maintainer agentic-coding default, adapts `xhigh` escalation scopes to detected repo risks, and keeps Max/Ultra as explicit escalations instead of defaults
 - setup/install now offer issue-ready feedback for obvious wizard-level failures instead of only failing vaguely
 - install/setup/update now use `maximum` as the standing Sol `high` default; `mixed` is an experimental explicit opt-in that update preserves only when already selected
 - setup/update guidance now treats verification as diagnostic for product failures and stops before editing application code or application tests without explicit user consent
@@ -125,7 +125,7 @@ The creator-tool investigation is complete for the distribution decision: `Plugi
   - `maximum`: `gpt-5.6-sol` / `high` for the whole slice
 - require a sample of 20 slices before considering whether `mixed` should stop being experimental and become a normal-work recommendation
 - numeric target for recommending the mixed mode: at least 95% end-to-end success, follow-up rate <= 10%, and at least a 15% improvement in cycle time versus `maximum`
-- separately measure Sol `high` vs Sol `xhigh` before lowering this repo's maintainer exception; preserve this repo's current `xhigh` baseline until Sol `high` meets the same sample, success, follow-up, and improvement gate
+- separately measure Sol `high` vs Sol `xhigh` to validate task-scoped escalation triggers while keeping this repo's standing Sol `high` baseline
 - keep Max as a single-task reasoning escalation and Ultra as a subagent-backed parallel-work escalation; most tasks do not need Max or Ultra, and neither becomes a default wizard profile without separate evidence
 - escalate abstract, complex, security-sensitive, or high-blast-radius slices to `xhigh` when `high` leaves unresolved risk; do not make every consumer task pay that cost
 - keep this behind the active workload so it does not compete with the active pilot-rollout and stabilization backlog
