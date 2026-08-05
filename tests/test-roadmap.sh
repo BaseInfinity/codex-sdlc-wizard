@@ -234,7 +234,7 @@ test_roadmap_sets_numeric_model_profile_targets() {
     local has_reopen_rate=true
     local has_complex_xhigh_rule=true
     local has_high_vs_xhigh_gate=true
-    local preserves_xhigh_baseline=true
+    local defaults_high_baseline=true
 
     grep -Eqi '20 slices|sample of 20|n=20' "$ROADMAP" || has_sample_size=false
     grep -Eqi '95%|>= ?95%' "$ROADMAP" || has_success_rate=false
@@ -242,7 +242,7 @@ test_roadmap_sets_numeric_model_profile_targets() {
     grep -Eqi '10% reopen|<= ?10%|follow-up rate <= ?10%' "$ROADMAP" || has_reopen_rate=false
     grep -Eqi 'abstract|complex|high-blast-radius' "$ROADMAP" || has_complex_xhigh_rule=false
     grep -Eqi 'Sol `?high`?.*Sol `?xhigh`?|high-vs-xhigh|high vs xhigh|one level lower' "$ROADMAP" || has_high_vs_xhigh_gate=false
-    grep -Eqi 'preserve.*xhigh|keep.*xhigh.*baseline|do not.*switch.*high|do not.*downgrade.*high' "$ROADMAP" || preserves_xhigh_baseline=false
+    grep -Eqi 'standing.*Sol `?high`?.*baseline|keep.*Sol `?high`?.*baseline|maintainer.*default.*high' "$ROADMAP" || defaults_high_baseline=false
 
     if [ "$has_sample_size" = "true" ] &&
        [ "$has_success_rate" = "true" ] &&
@@ -250,8 +250,8 @@ test_roadmap_sets_numeric_model_profile_targets() {
        [ "$has_reopen_rate" = "true" ] &&
        [ "$has_complex_xhigh_rule" = "true" ] &&
        [ "$has_high_vs_xhigh_gate" = "true" ] &&
-       [ "$preserves_xhigh_baseline" = "true" ]; then
-        pass "Roadmap sets numeric targets for profile measurement and preserves the maintainer high-versus-xhigh gate"
+       [ "$defaults_high_baseline" = "true" ]; then
+        pass "Roadmap sets numeric targets for profile measurement and keeps the maintainer Sol-high baseline"
     else
         fail "Roadmap does not set numeric targets for model-profile measurement clearly enough"
     fi
