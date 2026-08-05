@@ -188,14 +188,7 @@ config_needs_repair() {
 
 file_sha256() {
     local file_path="$1"
-
-    FILE_PATH="$file_path" node -e '
-const crypto = require("crypto");
-const fs = require("fs");
-const content = fs.readFileSync(process.env.FILE_PATH, "utf8").replace(/\r\n/g, "\n");
-const hash = crypto.createHash("sha256").update(content).digest("hex");
-process.stdout.write(`sha256:${hash}`);
-'
+    node "$SCRIPT_DIR/lib/managed-file-hash.cjs" hash "$file_path"
 }
 
 legacy_core_skill_hash() {
@@ -421,6 +414,7 @@ fi
 HOOKS_MERGE_STATUS="$(
     node "$SCRIPT_DIR/lib/merge-hooks.cjs" --status ".codex/hooks.json" "$HOOKS_TEMPLATE"
 )"
+GITATTRIBUTES_STATUS="$(node "$SCRIPT_DIR/lib/merge-gitattributes.cjs" --status .gitattributes)"
 
 STATUS_LINES=()
 while IFS= read -r status_line; do
@@ -430,7 +424,7 @@ done < <(
 const data = JSON.parse(process.env.UPDATE_CHECK_JSON || "{}");
 
 for (const [relativePath, info] of Object.entries(data.managed_files || {}).sort((a, b) => a[0].localeCompare(b[0]))) {
-  process.stdout.write(`${relativePath}\t${info.status || ""}\n`);
+  process.stdout.write(`${relativePath}\t${info.status || ""}\t${info.manifest_hash_migration ? "true" : "false"}\n`);
 }
 '
 )
@@ -445,6 +439,7 @@ declare -a SKIPPED_UNTRACKED_PATHS=()
 declare -a MATCHED_GENERATED_DOCS=()
 declare -a REGENERATE_EXISTING_DOCS=()
 CHANGES_PENDING=false
+HASH_MIGRATION_PENDING=false
 RUN_REGENERATE=false
 REGENERATE_FORCE=false
 RETIRED_PROMPT_HOOK_STATUS="$(
@@ -452,6 +447,11 @@ RETIRED_PROMPT_HOOK_STATUS="$(
         awk -F '\t' '$1 == ".codex/hooks/sdlc-prompt-check.sh" { print $2 }'
 )"
 RETIRED_PROMPT_HOOK_BLOCKED=false
+
+if [ "$GITATTRIBUTES_STATUS" = "merge" ]; then
+    PLAN_LINES+=(".gitattributes|hook shell EOL rule missing|merge")
+    CHANGES_PENDING=true
+fi
 
 case "$RETIRED_PROMPT_HOOK_STATUS" in
     wizard-managed)
@@ -518,7 +518,7 @@ queue_regenerate_existing_doc() {
 }
 
 for line in "${STATUS_LINES[@]}"; do
-    IFS=$'\t' read -r relative_path status <<< "$line"
+    IFS=$'\t' read -r relative_path status hash_migration <<< "$line"
     [ -n "$relative_path" ] || continue
     [ "$relative_path" != ".codex/hooks/sdlc-prompt-check.sh" ] || continue
 
@@ -561,8 +561,14 @@ for line in "${STATUS_LINES[@]}"; do
                 RUN_REGENERATE=true
                 queue_static_repair "$relative_path"
             else
-                action="keep"
-                if is_generated_doc "$relative_path"; then
+                if [ "$hash_migration" = "true" ]; then
+                    action="migrate manifest to canonical hash"
+                    CHANGES_PENDING=true
+                    HASH_MIGRATION_PENDING=true
+                else
+                    action="keep"
+                fi
+                if [ "$action" = "keep" ] && is_generated_doc "$relative_path"; then
                     MATCHED_GENERATED_DOCS+=("$relative_path")
                 fi
             fi
@@ -601,7 +607,11 @@ for line in "${STATUS_LINES[@]}"; do
       esac
     fi
 
-    PLAN_LINES+=("$relative_path|$status|$action")
+    if [ "$action" = "migrate manifest to canonical hash" ]; then
+        PLAN_LINES+=("$relative_path|legacy EOL hash|$action")
+    else
+        PLAN_LINES+=("$relative_path|$status|$action")
+    fi
 done
 
 if [ "$RECORD_MODEL_POLICY_MIGRATION" = "true" ]; then
@@ -759,6 +769,10 @@ require_gpt56_codex_version
 
 echo ""
 echo "Applying planned updates..."
+if [ "$GITATTRIBUTES_STATUS" = "merge" ]; then
+    node "$SCRIPT_DIR/lib/merge-gitattributes.cjs" .gitattributes
+    echo "Applied: .gitattributes (merged hook shell LF rule)"
+fi
 if [ "$RETIRED_PROMPT_HOOK_STATUS" = "wizard-managed" ] || [ "$RETIRED_PROMPT_HOOK_STATUS" = "tracked-retired" ]; then
     node "$SCRIPT_DIR/lib/remove-retired-files.cjs"
 fi
@@ -814,6 +828,11 @@ fi
 if [ "$RECORD_MODEL_POLICY_MIGRATION" = "true" ]; then
     record_model_policy_migration
     echo "Applied: .codex-sdlc/manifest.json (recorded model policy migration completion)"
+fi
+
+if [ "$HASH_MIGRATION_PENDING" = "true" ]; then
+    node "$SCRIPT_DIR/lib/managed-file-hash.cjs" migrate-manifest .codex-sdlc/manifest.json >/dev/null
+    echo "Applied: .codex-sdlc/manifest.json (migrated legacy EOL hashes)"
 fi
 
 echo ""

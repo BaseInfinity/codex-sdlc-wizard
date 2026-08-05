@@ -86,6 +86,8 @@ for required in \
   ".codex/hooks/git-guard.ps1" \
   ".codex/hooks/session-start.ps1" \
   "lib/merge-hooks.cjs" \
+  "lib/merge-gitattributes.cjs" \
+  "lib/managed-file-hash.cjs" \
   "lib/remove-retired-files.cjs" \
   "lib/refresh-manifest-hashes.cjs" \
   ".agents/skills/sdlc/SKILL.md"; do
@@ -288,6 +290,11 @@ if [ "$HOOKS_MERGE_STATUS" = "target-broken" ]; then
 fi
 
 echo "Installing SDLC Wizard for Codex CLI..."
+GITATTRIBUTES_STATUS="$(node "$SCRIPT_DIR/lib/merge-gitattributes.cjs" --status .gitattributes)"
+node "$SCRIPT_DIR/lib/merge-gitattributes.cjs" .gitattributes
+if [ "$GITATTRIBUTES_STATUS" = "merge" ]; then
+  echo "Merged .gitattributes hook shell LF rule"
+fi
 
 install_agents_baseline
 copy_if_missing "$SCRIPT_DIR/SDLC-LOOP.md" "SDLC-LOOP.md" "SDLC-LOOP.md"

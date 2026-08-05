@@ -743,6 +743,27 @@ test_manifest_created() {
     fi
 }
 
+test_setup_merges_hook_gitattributes_rule() {
+    local ws valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+    printf '%s\n' '*.ps1 text eol=crlf' > "$ws/.gitattributes"
+
+    run_setup "$ws"
+
+    grep -Fxq '*.ps1 text eol=crlf' "$ws/.gitattributes" 2>/dev/null || valid=false
+    [ "$(grep -Fxc '.codex/hooks/*.sh text eol=lf' "$ws/.gitattributes" 2>/dev/null || true)" = "1" ] || valid=false
+    grep -Fxq '*.sh text eol=lf' "$ws/.gitattributes" 2>/dev/null && valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "setup merges the narrow hook LF rule into existing .gitattributes"
+    else
+        fail "setup overwrote consumer attributes or omitted the narrow hook LF rule"
+    fi
+}
+
 # ---- Test 21: setup.sh repairs stale Bash hook wiring on Windows ----
 test_setup_repairs_stale_windows_hooks() {
     if [ "$IS_WINDOWS" != "true" ]; then
@@ -1720,6 +1741,7 @@ test_setup_interactive_asks_missing_core_facts
 test_setup_interactive_ci_shepherd_is_conditional
 test_setup_interactive_shows_inferred_values
 test_manifest_created
+test_setup_merges_hook_gitattributes_rule
 test_setup_repairs_stale_windows_hooks
 test_check_reports_uninitialized
 test_check_rejects_unknown_arguments

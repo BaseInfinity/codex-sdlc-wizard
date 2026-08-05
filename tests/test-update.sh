@@ -775,6 +775,100 @@ NODE
     fi
 }
 
+test_check_canonicalizes_text_eol_but_keeps_shell_raw() {
+    local ws check_output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    ROOT_PATH="$ws" node <<'NODE'
+const fs = require("fs");
+const path = require("path");
+const root = process.env.ROOT_PATH;
+for (const relativePath of [".codex/config.toml", ".codex-sdlc/model-profile.json", ".codex/hooks/bash-guard.sh"]) {
+  const filePath = path.join(root, relativePath);
+  const content = fs.readFileSync(filePath, "utf8").replace(/\r\n|\r/g, "\n");
+  fs.writeFileSync(filePath, content.replace(/\n/g, "\r\n"));
+}
+const agentsPath = path.join(root, "AGENTS.md");
+fs.writeFileSync(agentsPath, fs.readFileSync(agentsPath, "utf8").replace(/\r\n|\r/g, "\n").replace(/\n/g, "\r"));
+NODE
+
+    check_output=$(run_check "$ws") || valid=false
+    for relative_path in '.codex/config.toml' '.codex-sdlc/model-profile.json'; do
+        json_text_equals "$check_output" "data.managed_files[\"$relative_path\"].status" "match" || valid=false
+        json_text_equals "$check_output" "data.managed_files[\"$relative_path\"].hash_mode" "canonical-text" || valid=false
+        json_text_equals "$check_output" "data.managed_files[\"$relative_path\"].canonical_hash === data.managed_files[\"$relative_path\"].expected_hash" "true" || valid=false
+        json_text_equals "$check_output" "data.managed_files[\"$relative_path\"].actual_hash !== data.managed_files[\"$relative_path\"].expected_hash" "true" || valid=false
+    done
+    json_text_equals "$check_output" 'data.managed_files["AGENTS.md"].status' "match" || valid=false
+    json_text_equals "$check_output" 'data.managed_files["AGENTS.md"].canonical_hash === data.managed_files["AGENTS.md"].expected_hash' "true" || valid=false
+    json_text_equals "$check_output" 'data.managed_files["AGENTS.md"].actual_hash !== data.managed_files["AGENTS.md"].expected_hash' "true" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/bash-guard.sh"].status' "drift / broken" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/bash-guard.sh"].hash_mode' "raw" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/bash-guard.sh"].canonical_hash === data.managed_files[".codex/hooks/bash-guard.sh"].actual_hash' "true" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/bash-guard.sh"].carriage_returns > 0' "true" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "check canonicalizes CRLF and lone-CR text drift but treats CR-bearing shell payloads as broken"
+    else
+        printf '%s\n' "$check_output" >&2
+        fail "check conflated text line-ending noise with shell payload corruption"
+    fi
+}
+
+test_update_migrates_legacy_eol_hashes_and_merges_gitattributes() {
+    local ws output check_output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    printf '%s\n' '*.ps1 text eol=crlf' > "$ws/.gitattributes"
+    ROOT_PATH="$ws" node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const root = process.env.ROOT_PATH;
+const configPath = path.join(root, ".codex/config.toml");
+const manifestPath = path.join(root, ".codex-sdlc/manifest.json");
+const content = fs.readFileSync(configPath, "utf8").replace(/\r\n|\r/g, "\n").replace(/\n/g, "\r\n");
+fs.writeFileSync(configPath, content);
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+manifest.managed_files[".codex/config.toml"] = `sha256:${crypto.createHash("sha256").update(content).digest("hex")}`;
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    output=$(run_update "$ws") || valid=false
+    check_output=$(run_check "$ws") || valid=false
+    grep -Fxq '*.ps1 text eol=crlf' "$ws/.gitattributes" 2>/dev/null || valid=false
+    [ "$(grep -Fxc '.codex/hooks/*.sh text eol=lf' "$ws/.gitattributes" 2>/dev/null || true)" = "1" ] || valid=false
+    echo "$output" | grep -Fq '.codex/config.toml: legacy EOL hash -> migrate manifest to canonical hash' || valid=false
+    echo "$output" | grep -Fq '.gitattributes: hook shell EOL rule missing -> merge' || valid=false
+    ROOT_PATH="$ws" node <<'NODE' || valid=false
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const root = process.env.ROOT_PATH;
+const content = fs.readFileSync(path.join(root, ".codex/config.toml"), "utf8").replace(/\r\n|\r/g, "\n");
+const expected = `sha256:${crypto.createHash("sha256").update(content).digest("hex")}`;
+const manifest = JSON.parse(fs.readFileSync(path.join(root, ".codex-sdlc/manifest.json"), "utf8"));
+if (manifest.managed_files[".codex/config.toml"] !== expected) process.exit(1);
+NODE
+    json_text_equals "$check_output" 'data.managed_files[".codex/config.toml"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update migrates legacy EOL hashes and merges consumer .gitattributes"
+    else
+        printf '%s\n' "$output" >&2
+        printf '%s\n' "$check_output" >&2
+        fail "update invalidated an EOL-only install or overwrote consumer attributes"
+    fi
+}
+
 test_update_replaces_and_backs_up_malformed_hooks() {
     local ws output check_output backup_path valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -1793,6 +1887,8 @@ test_update_repairs_managed_hook_drift_without_overwriting_host_hooks
 test_update_merges_hook_config_without_overwriting_customized_hook_scripts
 test_check_treats_bom_prefixed_hooks_as_customized
 test_check_warns_when_managed_hook_event_is_disabled
+test_check_canonicalizes_text_eol_but_keeps_shell_raw
+test_update_migrates_legacy_eol_hashes_and_merges_gitattributes
 test_update_replaces_and_backs_up_malformed_hooks
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills

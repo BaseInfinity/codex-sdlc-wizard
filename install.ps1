@@ -448,6 +448,13 @@ if ($hooksMergeStatus -eq "target-broken") {
 }
 
 Write-Host "Installing SDLC Wizard for Codex CLI..."
+$gitAttributesStatus = (& node (Join-Path $scriptDir "lib\merge-gitattributes.cjs") --status ".gitattributes").Trim()
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& node (Join-Path $scriptDir "lib\merge-gitattributes.cjs") ".gitattributes"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($gitAttributesStatus -eq "merge") {
+    Write-Host "Merged .gitattributes hook shell LF rule"
+}
 
 Install-AgentsBaseline -Source (Join-Path $scriptDir "templates\AGENTS.baseline.md") -Profile $ModelProfile
 Copy-IfMissing -Source (Join-Path $scriptDir "SDLC-LOOP.md") -Destination "SDLC-LOOP.md" -Label "SDLC-LOOP.md"

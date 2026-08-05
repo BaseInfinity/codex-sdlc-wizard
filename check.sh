@@ -25,24 +25,18 @@ for arg in "$@"; do
     esac
 done
 
-node - "$SCRIPT_DIR/lib/merge-hooks.cjs" <<'NODE'
-const crypto = require("crypto");
+node - "$SCRIPT_DIR/lib/merge-hooks.cjs" "$SCRIPT_DIR/lib/managed-file-hash.cjs" <<'NODE'
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { directoryFoldsCase, validateHooksDocument, wizardCommandPath } = require(process.argv[2]);
+const { inspectManagedFile } = require(process.argv[3]);
 
 const cwd = process.cwd();
 const manifestPath = path.join(cwd, ".codex-sdlc", "manifest.json");
 
 function printJson(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
-}
-
-function sha256File(filePath) {
-  const hash = crypto.createHash("sha256");
-  hash.update(fs.readFileSync(filePath));
-  return `sha256:${hash.digest("hex")}`;
 }
 
 if (!fs.existsSync(manifestPath)) {
@@ -291,16 +285,27 @@ for (const [relativePath, expectedHash] of Object.entries(manifest.managed_files
 
   const absolutePath = path.join(cwd, relativePath);
   let actualHash = "";
+  let canonicalHash = "";
+  let hashMode = "";
+  let carriageReturns = 0;
+  let manifestHashMigration = false;
   let contentStatus;
   let status;
 
   if (!fs.existsSync(absolutePath)) {
     status = "missing";
   } else {
-    actualHash = sha256File(absolutePath);
-    if (isRetiredManagedPath(relativePath) || hasPlatformHookDrift(relativePath, absolutePath)) {
+    const hashInfo = inspectManagedFile(absolutePath, expectedHash);
+    actualHash = hashInfo.raw_hash;
+    canonicalHash = hashInfo.canonical_hash;
+    hashMode = hashInfo.hash_mode;
+    carriageReturns = hashInfo.carriage_returns;
+    manifestHashMigration = hashInfo.manifest_hash_migration;
+    if (hashMode === "raw" && relativePath.toLowerCase().endsWith(".sh") && carriageReturns > 0) {
       status = "drift / broken";
-    } else if (actualHash === expectedHash) {
+    } else if (isRetiredManagedPath(relativePath) || hasPlatformHookDrift(relativePath, absolutePath)) {
+      status = "drift / broken";
+    } else if (hashInfo.matches_expected) {
       status = hasManagedHookSurfaceDrift(relativePath, absolutePath) ? "drift / broken" : "match";
     } else {
       status = "customized";
@@ -326,7 +331,11 @@ for (const [relativePath, expectedHash] of Object.entries(manifest.managed_files
     } : {}),
     ...(documentPolicyWarnings.length > 0 ? { policy_warnings: documentPolicyWarnings } : {}),
     expected_hash: expectedHash,
-    actual_hash: actualHash
+    actual_hash: actualHash,
+    canonical_hash: canonicalHash,
+    hash_mode: hashMode,
+    carriage_returns: carriageReturns,
+    ...(manifestHashMigration ? { manifest_hash_migration: true } : {})
   };
 
   summary[status] += 1;
