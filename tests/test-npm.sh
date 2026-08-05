@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 PACKAGE_JSON="$REPO_DIR/package.json"
 ROADMAP="$REPO_DIR/ROADMAP.md"
+CI_WORKFLOW="$REPO_DIR/.github/workflows/test.yml"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
 source "$JSON_HELPERS"
 require_node
@@ -67,6 +68,20 @@ test_package_version_matches_roadmap_current_release() {
         pass "package.json version matches the roadmap current-release state"
     else
         fail "package.json version does not match the roadmap current-release state"
+    fi
+}
+
+test_ci_runs_npm_suite_on_windows() {
+    local valid=true
+
+    [ -f "$CI_WORKFLOW" ] || valid=false
+    grep -q 'windows-latest' "$CI_WORKFLOW" 2>/dev/null || valid=false
+    grep -q 'bash tests/test-npm.sh' "$CI_WORKFLOW" 2>/dev/null || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "CI runs the npm integration suite on Windows"
+    else
+        fail "CI does not run the npm integration suite on Windows"
     fi
 }
 
@@ -370,6 +385,7 @@ test_packed_tarball_scratch_smoke() {
 
 test_default_interactive_hands_off_to_codex() {
     local ws fakebin fakebin_win codex_bin codex_path_entry codex_home args_file input_file output
+    local args_file_env ws_win
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -408,12 +424,14 @@ if not "%FAKE_CODEX_ARGS_FILE%"=="" (
 exit /b 0
 EOF
 
-    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null) && ws_win=$(cd "$ws" && pwd -W 2>/dev/null); then
         codex_bin="$fakebin_win\\codex.cmd"
         codex_path_entry="$fakebin_win"
+        args_file_env="$ws_win\\codex-args.txt"
     else
         codex_bin="$fakebin/codex"
         codex_path_entry="$fakebin"
+        args_file_env="$args_file"
     fi
 
     output=$(
@@ -421,7 +439,7 @@ EOF
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
-        FAKE_CODEX_ARGS_FILE="$args_file" \
+        FAKE_CODEX_ARGS_FILE="$args_file_env" \
         PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" 2>&1
     ) || true
@@ -446,6 +464,14 @@ EOF
     ! echo "$output" | grep -Fq 'DEP0190' || valid=false
     ! echo "$output" | grep -Fq 'Scanning project...' || valid=false
 
+    if [ "$valid" != "true" ]; then
+        printf '%s\n' "--- default interactive handoff output ---" "$output" >&2
+        if [ -f "$args_file" ]; then
+            printf '%s\n' "--- captured Codex args ---" >&2
+            sed -n '1,40p' "$args_file" >&2
+        fi
+    fi
+
     rm -rf "$ws" "$fakebin" "$codex_home"
 
     if [ "$valid" = "true" ]; then
@@ -456,7 +482,7 @@ EOF
 }
 
 test_failed_optional_handoff_keeps_successful_install_successful() {
-    local ws fakebin codex_home input_file output package_version status valid=true
+    local ws fakebin fakebin_win codex_bin codex_path_entry codex_home input_file output package_version status valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -476,13 +502,31 @@ exit 42
 EOF
     chmod +x "$fakebin/codex"
 
+    cat > "$fakebin/codex.cmd" <<'EOF'
+@echo off
+if "%~1"=="--version" (
+  echo codex-cli 0.144.0
+  exit /b 0
+)
+echo Error loading config.toml: unrelated user config failure 1>&2
+exit /b 42
+EOF
+
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+        codex_bin="$fakebin_win\\codex.cmd"
+        codex_path_entry="$fakebin_win"
+    else
+        codex_bin="$fakebin/codex"
+        codex_path_entry="$fakebin"
+    fi
+
     set +e
     output=$(
         cd "$ws" && \
         CODEX_HOME="$codex_home" \
-        CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
-        PATH="$fakebin:$PATH" \
+        PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" --model-profile mixed --goals < "$input_file" 2>&1
     )
     status=$?
@@ -493,8 +537,12 @@ EOF
     [ -f "$ws/.agents/skills/sdlc/SKILL.md" ] || valid=false
     echo "$output" | grep -Eqi 'artifacts.*installed|install.*succeeded' || valid=false
     echo "$output" | grep -Eqi 'handoff.*failed|could not.*handoff|Codex.*exited' || valid=false
-    package_version=$(node -p "require('$REPO_DIR/package.json').version")
+    package_version=$(json_get_file "$PACKAGE_JSON" 'data.version')
     echo "$output" | grep -Fq "npx codex-sdlc-wizard@$package_version setup --yes --model-profile mixed --goals" || valid=false
+
+    if [ "$valid" != "true" ]; then
+        printf '%s\n' "--- failed optional handoff output ---" "$output" >&2
+    fi
 
     rm -rf "$ws" "$fakebin" "$codex_home"
 
@@ -655,6 +703,7 @@ EOF
 
 test_interactive_handoff_preserves_goals_request() {
     local ws fakebin fakebin_win codex_bin codex_path_entry codex_home args_file input_file output
+    local args_file_env ws_win
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -693,12 +742,14 @@ if not "%FAKE_CODEX_ARGS_FILE%"=="" (
 exit /b 0
 EOF
 
-    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null) && ws_win=$(cd "$ws" && pwd -W 2>/dev/null); then
         codex_bin="$fakebin_win\\codex.cmd"
         codex_path_entry="$fakebin_win"
+        args_file_env="$ws_win\\codex-args.txt"
     else
         codex_bin="$fakebin/codex"
         codex_path_entry="$fakebin"
+        args_file_env="$args_file"
     fi
 
     output=$(
@@ -706,7 +757,7 @@ EOF
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
-        FAKE_CODEX_ARGS_FILE="$args_file" \
+        FAKE_CODEX_ARGS_FILE="$args_file_env" \
         PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" --goals < "$input_file" 2>&1
     ) || true
@@ -732,6 +783,7 @@ EOF
 
 test_full_trust_handoff_choice_is_explicit() {
     local ws fakebin fakebin_win codex_bin codex_path_entry codex_home args_file input_file output
+    local args_file_env ws_win
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -770,12 +822,14 @@ if not "%FAKE_CODEX_ARGS_FILE%"=="" (
 exit /b 0
 EOF
 
-    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null) && ws_win=$(cd "$ws" && pwd -W 2>/dev/null); then
         codex_bin="$fakebin_win\\codex.cmd"
         codex_path_entry="$fakebin_win"
+        args_file_env="$ws_win\\codex-args.txt"
     else
         codex_bin="$fakebin/codex"
         codex_path_entry="$fakebin"
+        args_file_env="$args_file"
     fi
 
     output=$(
@@ -783,7 +837,7 @@ EOF
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
-        FAKE_CODEX_ARGS_FILE="$args_file" \
+        FAKE_CODEX_ARGS_FILE="$args_file_env" \
         PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" 2>&1
     ) || true
@@ -820,7 +874,7 @@ test_codex_handoff_watchdog_timeout_is_opt_in() {
 
 test_codex_handoff_watchdog_times_out_and_terminates_child() {
     local ws fakebin fakebin_win codex_bin codex_path_entry codex_home input_file output started_file killed_file completed_file status
-    local started_file_env killed_file_env completed_file_env ws_win
+    local started_file_env killed_file_env completed_file_env ws_win handoff_timeout_ms=150
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -866,6 +920,7 @@ EOF
         started_file_env="$ws_win\\codex-started.txt"
         killed_file_env="$ws_win\\codex-killed.txt"
         completed_file_env="$ws_win\\codex-completed.txt"
+        handoff_timeout_ms=750
     else
         codex_bin="$fakebin/codex"
         codex_path_entry="$fakebin"
@@ -880,7 +935,7 @@ EOF
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
-        CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS=150 \
+        CODEX_SDLC_CODEX_HANDOFF_TIMEOUT_MS="$handoff_timeout_ms" \
         FAKE_CODEX_STARTED_FILE="$started_file_env" \
         FAKE_CODEX_KILLED_FILE="$killed_file_env" \
         FAKE_CODEX_COMPLETED_FILE="$completed_file_env" \
@@ -1359,6 +1414,7 @@ EOF
 
 test_ci_mode_keeps_shell_setup_path() {
     local ws fakebin fakebin_win codex_bin codex_path_entry codex_home args_file prompts_file output
+    local args_file_env ws_win
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -1397,12 +1453,14 @@ if not "%FAKE_CODEX_ARGS_FILE%"=="" (
 exit /b 0
 EOF
 
-    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null) && ws_win=$(cd "$ws" && pwd -W 2>/dev/null); then
         codex_bin="$fakebin_win\\codex.cmd"
         codex_path_entry="$fakebin_win;$PATH"
+        args_file_env="$ws_win\\codex-args.txt"
     else
         codex_bin="$fakebin/codex"
         codex_path_entry="$fakebin:$PATH"
+        args_file_env="$args_file"
     fi
 
     output=$(
@@ -1411,7 +1469,7 @@ EOF
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
-        FAKE_CODEX_ARGS_FILE="$args_file" \
+        FAKE_CODEX_ARGS_FILE="$args_file_env" \
         PATH="$codex_path_entry" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$prompts_file" 2>&1
     ) || true
@@ -1471,6 +1529,7 @@ test_cli_help_explains_update_version_boundary() {
 
 test_package_metadata_exists
 test_package_version_matches_roadmap_current_release
+test_ci_runs_npm_suite_on_windows
 test_npm_pack_includes_runtime_files
 test_local_npx_installs_into_clean_repo
 test_local_npx_setup_honors_model_profile_flag

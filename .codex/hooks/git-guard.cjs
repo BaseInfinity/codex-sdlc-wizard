@@ -69,7 +69,7 @@ function repositoryRoot(cwd = process.cwd()) {
     return "";
   }
 
-  return result.stdout.trim();
+  return path.resolve(result.stdout.trim());
 }
 
 function proofPath(root) {

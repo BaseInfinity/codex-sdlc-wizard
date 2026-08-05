@@ -9,11 +9,9 @@ require_gpt56_codex_version() {
     local parsed_version=""
     local codex_bin="${CODEX_SDLC_CODEX_BIN:-codex}"
 
-    if ! command -v "$codex_bin" >/dev/null 2>&1; then
-        echo "GPT-5.6 profiles require Codex CLI $MINIMUM_GPT56_CODEX_VERSION or newer (Codex CLI is not installed or is unavailable: $codex_bin)." >&2
-        echo "Update with: npm install -g @openai/codex@latest" >&2
-        return 1
-    fi
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) codex_bin="${codex_bin//\\//}" ;;
+    esac
 
     if ! version_output=$("$codex_bin" --version 2>&1); then
         echo "GPT-5.6 profiles require Codex CLI $MINIMUM_GPT56_CODEX_VERSION or newer (the configured Codex binary could not report its version: $codex_bin)." >&2

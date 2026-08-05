@@ -17,7 +17,7 @@ If Codex Desktop is not already open to the intended product repository, Claude 
 ## Operating contract
 
 - Use Claude Desktop only as the external computer-use operator. Perform the repository work through the visible Codex Desktop user interface.
-- Use GPT-5.6 Sol at `high` reasoning. Do not use `xhigh` for this consumer-repository installation.
+- After the Phase 1 profile inspection, use GPT-5.6 Sol at `high` reasoning. If an initialized repository still pins an older driver or `xhigh`, the repository pin wins and cannot be overridden from the picker: use that pinned model only to run the verified update, then restart and enforce the migrated post-update profile in Phase 4.
 - Preserve every existing source file, document, hook, configuration file, customization, and uncommitted change.
 - Do not clean, stash, reset, discard, or commit existing work.
 - Do not commit, push, tag, publish, deploy, or open a pull request during this run.
@@ -36,13 +36,15 @@ If Codex Desktop is not already open to the intended product repository, Claude 
 5. Confirm the separate `codex-sdlc-wizard` checkout is at the intended committed candidate and has no modified, staged, or untracked files. Stop if it is dirty. Export its committed `HEAD` without changing the checkout: run `git -C "<wizard-checkout>" archive --format=zip --output="<temporary-directory>\wizard-head.zip" HEAD`, expand that archive outside both repositories, and record the expanded directory as `<verified-head-export>`. The repository's `.gitattributes` pins `*.sh` to LF for normal checkouts; the committed export additionally avoids treating a pre-existing CRLF working tree as candidate payload.
 6. In Codex, run read-only inspection commands to record:
    - Windows version and architecture
-   - Codex Desktop and Codex CLI versions
+   - Codex Desktop package version, plus the Codex CLI version and executable path returned by `Get-Command codex` and `codex --version`
+   - whether another global npm shim or executable shadows the Desktop installation on `PATH`
+   - the Desktop-bundled CLI version when it can be obtained without bypassing Windows security; WindowsApps may prevent direct execution, so record `bundled CLI version unavailable` and the exact redacted error when it cannot be executed. Do not fail the run merely because this separate bundled version is unavailable; the Desktop package version is not a substitute CLI version.
    - Node.js and Git versions
    - repository root, branch, and `git status --short --branch`
    - configured remotes without contacting or changing them
    - the expected Codex SDLC Wizard release version from `<verified-head-export>\package.json`
    - an exact canonical candidate-payload manifest for every shipped file selected by the committed export's `package.json` `files` plus automatically included `package.json`; derive the path list with `npm pack "<verified-head-export>" --dry-run --json` and sort paths ordinally. In the committed export and every plugin or extracted-package source being compared, inspect each shipped `.sh` file as raw bytes before hashing: stop if it contains any carriage-return byte (including CRLF), and hash accepted `.sh` bytes exactly unchanged. Git Bash requires LF-only shell payloads. For other UTF-8 text, normalize CRLF and lone CR to LF before SHA-256 hashing; hash binary bytes unchanged. For `.codex-plugin/plugin.json`, parse JSON, canonicalize only the platform-generated `+codex...` suffix out of the top-level `version`, recursively sort object keys, and serialize compact UTF-8 JSON before hashing in every compared source; still record and compare the visible full plugin version separately.
-7. Stop before plugin or npm work if Codex CLI is older than `0.144.0` or Node.js is older than 18. Report the unsupported prerequisite; do not let an update mutate the repository first.
+7. Stop before plugin or npm work if the PATH-resolved Codex CLI returned by `Get-Command codex` is older than `0.144.0` or Node.js is older than 18. Report the resolved executable and unsupported prerequisite; do not let an update mutate the repository first. The `0.144.0` floor applies to this resolved PATH Codex CLI because it is the CLI the Phase 2 npm fallback and its handoff invoke, even when a global npm shim shadows Codex Desktop. It does not apply to an inaccessible WindowsApps executable whose bundled version is unavailable.
 
 Before continuing, run `Get-Command bash -ErrorAction SilentlyContinue`, `bash --version`, and `bash -lc 'uname -s'` in PowerShell. Continue only when `uname` identifies an MSYS, MINGW, or CYGWIN environment. A WSL launcher named `bash.exe` is not Git Bash and cannot safely consume the Windows package paths used here. If compatible Bash is unavailable on `PATH`, stop before plugin mutation or npm fallback and report that this adaptive E2E requires Git Bash.
 
@@ -57,10 +59,10 @@ Before continuing, run `Get-Command bash -ErrorAction SilentlyContinue`, `bash -
    - `ARCHITECTURE.md`
 9. If `.codex-sdlc/manifest.json` exists but is invalid JSON or lacks the expected manifest object, stop before plugin inspection, setup, or update. A broken manifest is neither initialized nor safely uninitialized, and setup can partially mutate the repository before failing.
 10. If `.codex/hooks.json` exists, parse and validate it before any setup, update, plugin mutation, or fallback execution. Require a JSON object; when `hooks` exists, require it to be an object whose event values are arrays, whose entries contain `hooks` arrays, and whose hook entries are objects with string `command` values when present. If `.codex/hooks.json` is invalid, stop before setup or mutation. Do not let setup create documents before discovering malformed hook configuration.
-11. If `.codex-sdlc/manifest.json` is valid, record the repository as initialized and record its existing selected profile. An initialized update must preserve that selected profile unless the user separately authorizes migration.
-12. If the repository is uninitialized, stop when any unconditional installer target already exists: `.codex-sdlc/model-profile.json`, `.codex/hooks/bash-guard.sh`, `.codex/hooks/session-start.sh`, `.codex/hooks/git-guard.cjs`, `.codex/hooks/session-start.cjs`, `.codex/hooks/compact-guard.cjs`, `.codex/hooks/git-guard.ps1`, `.codex/hooks/session-start.ps1`, `.codex/hooks/git-guard.js`, or `.codex/hooks/session-start.js`. The model-profile file is an unconditional destructive collision because setup rewrites it, while the two `.js` names are retired targets that current setup removes. Perform this collision preflight before either the plugin path or npm fallback.
-13. Hash every pre-existing modified or untracked path reported by Git, recursively hashing files inside dirty directories. Record deleted paths as absent. Also hash every pre-existing manifest-managed path and every pre-existing installer-targeted path named in steps 8 and 12, regardless of Git status; this includes ignored wizard files that update may rewrite. If every dirty, managed, and installer-targeted path cannot be captured, stop rather than claim preservation from Git status alone.
-14. Resolve the active Codex home (normally `%USERPROFILE%\.codex`) and record existence plus recursive file hashes—never file contents—for its `skills\feedback`, `skills\setup-wizard`, `skills\update-wizard`, `skills\sdlc`, `skills\codex-sdlc`, `skills\codex-sdlc-wizard`, `backups\skills`, and `skill-backups` paths. The last two backup locations are distinct. These user-level mutations and legacy-installer migrations do not appear in repository Git status.
+11. Before enforcing or validating the model contract, read `.codex-sdlc/model-profile.json` and `.codex/config.toml`. If `.codex-sdlc/manifest.json` is valid, record the repository as initialized, its existing selected profile, and its pre-update driver and reasoning effort. An initialized update must preserve that selected profile unless the user separately authorizes migration. When the existing repo pin conflicts with the current consumer default, do not fight the picker: run the update under the preserved repo-pinned model, then verify the migrated post-update driver and effort separately in Phase 4.
+12. If the repository is uninitialized, stop when any unconditional installer target already exists: `.codex-sdlc/model-profile.json`, `.codex/hooks/bash-guard.sh`, `.codex/hooks/session-start.sh`, `.codex/hooks/git-guard.cjs`, `.codex/hooks/session-start.cjs`, `.codex/hooks/compact-guard.cjs`, `.codex/hooks/git-guard.ps1`, `.codex/hooks/session-start.ps1`, `.codex/hooks/git-guard.js`, `.codex/hooks/session-start.js`, or `.codex/hooks/sdlc-prompt-check.sh`. The model-profile file is an unconditional destructive collision because setup rewrites it, while the `.js` names and `sdlc-prompt-check.sh` are retired targets that current setup removes. Perform this collision preflight before either the plugin path or npm fallback.
+13. Hash every pre-existing modified or untracked path reported by Git, recursively hashing files inside dirty directories. Record deleted paths as absent. Also hash every pre-existing manifest-managed path and every pre-existing installer-targeted path named in steps 8 and 12, regardless of Git status; this explicitly includes `.codex-sdlc/manifest.json`, `.codex/hooks/sdlc-prompt-check.sh`, and all other retired names known to the candidate's `lib/remove-retired-files.cjs`. These include ignored wizard files that update may rewrite or remove. If every dirty, managed, retired, and installer-targeted path cannot be captured, stop rather than claim preservation from Git status alone.
+14. Resolve the active Codex home (normally `%USERPROFILE%\.codex`) and record existence plus recursive file hashes—never file contents—for its `skills\feedback`, `skills\setup-wizard`, `skills\update-wizard`, `skills\sdlc`, `skills\codex-sdlc`, `skills\codex-sdlc-wizard`, `backups\skills`, and `skill-backups` paths. The last two backup locations are distinct. `feedback`, `setup-wizard`, and `update-wizard` are supported global helper skills and are expected to be refreshed with recoverable backups. The `codex-sdlc-wizard` installer skill is plugin-owned and must not be copied into global `skills\codex-sdlc-wizard`; report a pre-existing standalone copy as legacy and preserve it unless the user authorizes the documented cleanup. These user-level mutations and legacy-installer migrations do not appear in repository Git status.
 15. Preserve the complete baseline output for the final comparison.
 
 ## Phase 2: Inspect the plugin before changing it
@@ -86,6 +88,8 @@ Execute the already verified extracted package directly; do not use `npx` after 
 - Initialized repository (a valid `.codex-sdlc/manifest.json` exists): `node "<verified-package>\bin\codex-sdlc-wizard.js" update`
 - Uninitialized repository: `node "<verified-package>\bin\codex-sdlc-wizard.js" setup --yes --model-profile maximum`
 
+For an initialized repository with a pre-update model conflict recorded in Phase 1, run this update under the preserved repo-pinned model; do not claim the current model contract is active until the update finishes and a restarted session verifies the post-update configuration.
+
 Do not install the npm package globally. Record that the verified-package fallback was required. When the selected command finishes, run `node "<verified-package>\bin\codex-sdlc-wizard.js" check` and capture the result. Keep the verified package through Phase 4 so the same trusted check command remains available, and remove its temporary directory only after the preservation comparison in Phase 5. Restart Codex Desktop in the same target repository, skip Phase 3, and continue with Phase 4. This npm fallback performs the repo operation directly and does not make the plugin-only `$codex-sdlc-wizard` installer entry available.
 
 ## Phase 3: Install or repair the real product repository
@@ -109,8 +113,8 @@ Skip this phase when the npm fallback completed successfully; it already perform
 ## Phase 4: Verify the installed workflow
 
 1. Confirm Codex reopens the target repository without a hook, configuration, locale, or startup error.
-2. Open `/hooks`. Review any pending repository hooks and confirm the wizard hooks are approved and active before relying on enforcement or declaring the install ready.
-3. Confirm `$sdlc` appears exactly once and is scoped to the target repository.
+2. Open `/hooks`. Review any pending repository hooks and confirm the wizard hooks are approved and active before relying on enforcement or declaring the install ready. Inspect the stored enabled state as well as approval/trust: require the repository `PreToolUse` event to be explicitly enabled, and treat `enabled = false` or a wizard-check `hook_activation.disabled_events` entry as a warning that commit/push enforcement is not ready. Approval alone is insufficient.
+3. Confirm exactly one repo-scoped `$sdlc` appears for the target repository. Report and preserve any separate user-owned global `$sdlc`; do not count it as a second repository-scoped entry and do not delete or rewrite it without permission. Also confirm the supported global helper skills `feedback`, `setup-wizard`, and `update-wizard` are expected user-level entries, while `codex-sdlc-wizard` remains plugin-owned rather than copied into the global skills directory.
 4. Invoke `$sdlc` with this read-only request:
 
    ```text
@@ -121,7 +125,7 @@ Skip this phase when the npm fallback completed successfully; it already perform
 6. Confirm all of the following:
    - repository state is initialized
    - an uninitialized installation selected `maximum`; an initialized update preserved the selected profile recorded in Phase 1
-   - the driver matches the preserved/selected profile: `maximum` uses `gpt-5.6-sol` at `high`; an explicitly preserved `mixed` profile uses `gpt-5.6-terra` at `medium` with `gpt-5.6-sol` review explicitly set to `high`
+   - pre-update model values remain historical evidence only; after the update and restart, the driver matches the preserved/selected profile: `maximum` uses `gpt-5.6-sol` at `high`; an explicitly preserved `mixed` profile uses `gpt-5.6-terra` at `medium` with `gpt-5.6-sol` review explicitly set to `high`
    - required managed artifacts are present
    - no managed artifact is missing or drifted/broken
    - existing customizations are preserved according to the complete baseline comparison; preserved files may report as `match` when first recorded in a new manifest, while `customized` is reserved for drift from an existing manifest
@@ -133,10 +137,10 @@ Skip this phase when the npm fallback completed successfully; it already perform
 1. Re-run the baseline Git status and file hashes.
 2. Compare every pre-existing modified/untracked path against the baseline.
 3. Compare the recorded Codex-home skill and backup paths, and disclose every user-level skill replacement, backup, migration, or removal.
-4. Explain every new or changed wizard-managed path.
+4. Explain every new, changed, or removed wizard-managed path, including deletion of any retired file captured from `lib/remove-retired-files.cjs`.
 5. Treat an unexplained change to application code, an existing customization, or a user-level Codex skill as a failure.
 6. Do not repair a preservation failure locally. Preserve evidence for the upstream issue.
-7. After all comparisons and evidence capture finish, remove any temporary verified-package extraction outside the target repository.
+7. After all comparisons and evidence capture finish, remove only the exact temporary verified-package files and extraction directory outside the target repository. If PowerShell `Remove-Item` is blocked, use Windows-native cleanup with explicit resolved paths: `cmd /c del /f /q "<temporary-package-file>"` for files and `cmd /c rmdir /s /q "<temporary-extraction-directory>"` for directories. Verify each target is the previously recorded temporary path and is outside both repositories before deletion, then confirm it is absent.
 
 ## Required final report
 
@@ -146,13 +150,13 @@ Include:
 
 - target repository name and absolute path
 - Windows version and architecture
-- Codex Desktop, Codex CLI, Node.js, Git, expected checkout, plugin, npm package, and adapter versions, including whether the plugin release version matched the checkout
+- Codex Desktop package, PATH-resolved Codex CLI (with executable path), Node.js, Git, expected checkout, plugin, npm package, and adapter versions, including whether the plugin release version matched the checkout; report the Desktop-bundled CLI as unavailable when Windows prevents obtaining it
 - installation path used: plugin UI or verified-package fallback
 - before/after Git status
 - files created, updated, preserved, customized, missing, or drifted/broken
 - complete wizard check counts and repository/profile state
 - whether restart succeeded cleanly
-- whether `$sdlc` appeared exactly once and answered correctly
+- whether exactly one repo-scoped `$sdlc` appeared and answered correctly, plus any preserved user-owned global `$sdlc`
 - every warning or error with diagnostic wording preserved but all sensitive values redacted
 - redacted screenshots or visible transcript evidence
 - confirmation that no commit, push, tag, publish, deployment, or PR occurred

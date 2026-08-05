@@ -1249,6 +1249,14 @@ test_windows_desktop_real_install_runbook_exists() {
     local requires_restart_and_sdlc=true
     local produces_issue_ready_report=true
     local avoids_remote_mutation=true
+    local resolves_path_codex_binary=true
+    local allows_unavailable_bundled_version=true
+    local has_cleanup_fallback=true
+    local handles_preupdate_profile_pin=true
+    local captures_manifest_and_retired_prompt_hook=true
+    local requires_hook_enabled_state=true
+    local requires_one_repo_scoped_sdlc=true
+    local documents_supported_global_helpers=true
 
     [ -f "$WINDOWS_E2E_RUNBOOK" ] || has_file=false
     grep -Fq '[Windows Codex Desktop real-install E2E](WINDOWS-CODEX-DESKTOP-E2E.md)' "$README" || is_linked=false
@@ -1315,6 +1323,19 @@ test_windows_desktop_real_install_runbook_exists() {
     grep -Eqi 'installation path used:.*verified-package fallback' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || reports_verified_package_fallback=false
     grep -Eqi 'installation path used:.*npx fallback' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null && reports_verified_package_fallback=false
     grep -Eqi 'do not commit.*push|do not.*(commit|push|tag|publish)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || avoids_remote_mutation=false
+    grep -Fq 'Get-Command codex' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || resolves_path_codex_binary=false
+    grep -Eqi '0\.144\.0.*(resolved|PATH).*Codex CLI|(resolved|PATH).*Codex CLI.*0\.144\.0' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || resolves_path_codex_binary=false
+    grep -Eqi 'bundled.*(version unavailable|version unobtainable|cannot be executed).*(do not fail|not.*failure)|do not fail.*bundled.*version' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || allows_unavailable_bundled_version=false
+    grep -Eqi 'cmd /c del.*cmd /c rmdir|cmd /c rmdir.*cmd /c del' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || has_cleanup_fallback=false
+    grep -Eqi 'before.*(enforc|validat).*model.*read.*model-profile|read.*model-profile.*before.*(enforc|validat).*model' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || handles_preupdate_profile_pin=false
+    grep -Eqi 'run.*update.*(preserved|pinned|existing).*model|update.*under.*(preserved|pinned|existing).*model' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || handles_preupdate_profile_pin=false
+    grep -Fq '.codex-sdlc/manifest.json' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || captures_manifest_and_retired_prompt_hook=false
+    grep -Fq '.codex/hooks/sdlc-prompt-check.sh' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || captures_manifest_and_retired_prompt_hook=false
+    grep -Eqi '(hooks|PreToolUse).*(enabled = false|enabled state|explicitly enabled)|(enabled = false|enabled state|explicitly enabled).*(hooks|PreToolUse)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || requires_hook_enabled_state=false
+    grep -Eqi 'exactly one repo(\-| )scoped.*\$sdlc|\$sdlc.*exactly one repo(\-| )scoped' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || requires_one_repo_scoped_sdlc=false
+    grep -Eqi 'preserve.*user-owned global.*\$sdlc|user-owned global.*\$sdlc.*preserve' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || requires_one_repo_scoped_sdlc=false
+    grep -Eqi '(feedback|setup-wizard|update-wizard).*(supported|expected).*(global|user-level)|(supported|expected).*(global|user-level).*(feedback|setup-wizard|update-wizard)' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || documents_supported_global_helpers=false
+    grep -Eqi 'codex-sdlc-wizard.*plugin-owned|plugin-owned.*codex-sdlc-wizard' "$WINDOWS_E2E_RUNBOOK" 2>/dev/null || documents_supported_global_helpers=false
 
     if [ "$has_file" = "true" ] &&
        [ "$is_linked" = "true" ] &&
@@ -1360,7 +1381,15 @@ test_windows_desktop_real_install_runbook_exists() {
        [ "$reports_verified_package_fallback" = "true" ] &&
        [ "$requires_restart_and_sdlc" = "true" ] &&
        [ "$produces_issue_ready_report" = "true" ] &&
-       [ "$avoids_remote_mutation" = "true" ]; then
+       [ "$avoids_remote_mutation" = "true" ] &&
+       [ "$resolves_path_codex_binary" = "true" ] &&
+       [ "$allows_unavailable_bundled_version" = "true" ] &&
+       [ "$has_cleanup_fallback" = "true" ] &&
+       [ "$handles_preupdate_profile_pin" = "true" ] &&
+       [ "$captures_manifest_and_retired_prompt_hook" = "true" ] &&
+       [ "$requires_hook_enabled_state" = "true" ] &&
+       [ "$requires_one_repo_scoped_sdlc" = "true" ] &&
+       [ "$documents_supported_global_helpers" = "true" ]; then
         pass "Windows Desktop runbook covers a safe real-repo install and issue-ready E2E report"
     else
         fail "Windows Desktop real-install E2E runbook is missing or incomplete"
