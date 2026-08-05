@@ -215,3 +215,32 @@ a Windows lane to CI so this is caught there rather than on a laptop.
 **Combined impact with defect 10:** a Windows contributor hits the missing
 `TESTING.md` error first; supply that and the mandatory proof suite then fails on
 this path bug. There is no legitimate route to a commit from Windows today.
+
+## 12. Managed-file hashes mistake Git EOL conversion for customization — HIGH
+
+The update wrote `.codex/config.toml` and `.codex-sdlc/model-profile.json` with LF
+line endings and recorded hashes of those LF bytes. After commit `3bf9956`, native
+Windows Git kept LF in the index but materialized CRLF in the working tree because
+the system configuration has `core.autocrlf=true` and the consumer repo had no
+`.gitattributes` protection. Both paths remained Git-clean, but `check.sh` hashed
+their raw working-tree bytes and reported them as `customized`.
+
+Raw-byte evidence from `C:\Users\stefa\m180-jumpseat`:
+
+| Managed file | Worktree bytes / CR count | Raw worktree SHA-256 | LF canonical bytes / SHA-256 |
+|---|---:|---|---|
+| `.codex/config.toml` | 116 / 7 | `68b0d71cc4d9145285fbff9af0d02d741529a869be49ebd8bee0c58c9d80d43f` | 109 / `38d92aee716039309cb7d3e8c3a2c79e6e1a10885d75747e45ea87b3c0cbf276` |
+| `.codex-sdlc/model-profile.json` | 1955 / 36 | `96463ae6ba64664e44d31942903bb464ba18e6d9afd0369ffa8a9d249098490d` | 1919 / `e6281a2714a64dabd866607d0b4e296dd2d907a0c367b3e4b37fdf530a8fa977` |
+
+Each file contained only CRLF pairs (no lone CR or lone LF). Normalizing CRLF to LF
+reproduced the manifest's `expected_hash` exactly. `git ls-files --eol` reported
+`i/lf w/crlf attr/` for both files, while the `3bf9956` blobs contained zero CR bytes.
+This confirms line-ending conversion, not content customization.
+
+**Fix:** canonicalize CRLF and lone CR to LF before hashing text managed files, retain
+the raw hash separately for diagnostics, and migrate EOL-equivalent legacy manifest
+hashes to the canonical value. Never canonicalize `.sh`: any CR byte in a managed
+shell payload remains raw-byte drift and is classified broken. Setup and update also
+merge the narrow `.codex/hooks/*.sh text eol=lf` rule into consumer `.gitattributes`,
+preserving every existing consumer entry without imposing LF on unrelated shell files
+or other managed content.
