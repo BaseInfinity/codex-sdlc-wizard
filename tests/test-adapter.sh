@@ -191,6 +191,62 @@ test_universal_pretool_allows_commit_with_fresh_proof() {
     fi
 }
 
+test_universal_proof_runs_powershell_manifest_commands_in_pwsh() {
+    if [ "$IS_WINDOWS" != "true" ]; then
+        pass "PowerShell proof dispatch regression is Windows-only"
+        return
+    fi
+    if ! command -v pwsh >/dev/null 2>&1; then
+        fail "Windows PowerShell proof dispatch regression requires pwsh"
+        return
+    fi
+
+    local ws module_root marker output status win_module_root win_marker valid=true
+    ws=$(mktemp -d)
+    module_root="$ws/modules"
+    marker="$ws/powershell-proof.txt"
+    mkdir -p "$ws/.codex/hooks" "$ws/.codex-sdlc" "$module_root/Pester"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    cat > "$module_root/Pester/Pester.psm1" <<'EOF'
+function Invoke-Pester {
+    param([string]$Path)
+    Set-Content -LiteralPath $env:CODEX_SDLC_TEST_MARKER -Value "$($PSVersionTable.PSEdition)|$Path"
+}
+Export-ModuleMember -Function Invoke-Pester
+EOF
+    cat > "$ws/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "scan": {
+    "language": "PowerShell",
+    "test_command": "Invoke-Pester -Path tests"
+  }
+}
+EOF
+    printf '%s\n' 'proof-target' > "$ws/app.txt"
+    (cd "$ws" && git init -q && git add app.txt)
+    win_module_root=$(cygpath -w "$module_root")
+    win_marker=$(cygpath -w "$marker")
+
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MARKER="$win_marker" PSModulePath="$win_module_root;$PSModulePath" \
+        node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    grep -Fxq 'Core|tests' "$marker" 2>/dev/null || valid=false
+    echo "$output" | grep -Fq 'Running SDLC proof check: Invoke-Pester -Path tests' || valid=false
+    echo "$output" | grep -Fq 'Wrote SDLC proof:' || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof runs PowerShell manifest commands through pwsh instead of cmd.exe"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof sent a PowerShell manifest command to the wrong interpreter"
+    fi
+}
+
 test_universal_pretool_blocks_stale_proof() {
     local ws
     local output
@@ -3239,6 +3295,7 @@ test_session_warns_missing
 test_session_silent_when_present
 test_universal_pretool_blocks_commit
 test_universal_pretool_allows_commit_with_fresh_proof
+test_universal_proof_runs_powershell_manifest_commands_in_pwsh
 test_universal_pretool_blocks_stale_proof
 test_universal_pretool_blocks_cross_repo_proof_reuse
 test_universal_pretool_blocks_cd_proof_reuse

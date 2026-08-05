@@ -191,6 +191,31 @@ file_sha256() {
     node "$SCRIPT_DIR/lib/managed-file-hash.cjs" hash "$file_path"
 }
 
+package_source_for_managed_file() {
+    local relative_path="$1"
+
+    case "$relative_path" in
+        .agents/skills/sdlc/SKILL.md|SDLC-LOOP.md|START-SDLC.md|PROVE-IT.md|.codex/hooks/*.cjs|.codex/hooks/*.ps1|.codex/hooks/*.sh)
+            [ -f "$SCRIPT_DIR/$relative_path" ] || return 1
+            printf '%s\n' "$SCRIPT_DIR/$relative_path"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+managed_file_package_relation() {
+    local relative_path="$1"
+    local package_source
+
+    [ -f "$relative_path" ] || return 1
+    package_source="$(package_source_for_managed_file "$relative_path")" || return 1
+    if [ "$(file_sha256 "$relative_path")" = "$(file_sha256 "$package_source")" ]; then
+        printf '%s\n' "package-current"
+    else
+        printf '%s\n' "package-differs"
+    fi
+}
+
 legacy_core_skill_hash() {
     case "$1" in
         feedback) printf '%s\n' "$LEGACY_FEEDBACK_SKILL_HASH" ;;
@@ -438,6 +463,7 @@ declare -a SKIPPED_CUSTOMIZED_PATHS=()
 declare -a SKIPPED_UNTRACKED_PATHS=()
 declare -a MATCHED_GENERATED_DOCS=()
 declare -a REGENERATE_EXISTING_DOCS=()
+declare -a MANIFEST_REFRESH_PATHS=()
 CHANGES_PENDING=false
 HASH_MIGRATION_PENDING=false
 RUN_REGENERATE=false
@@ -517,12 +543,31 @@ queue_regenerate_existing_doc() {
     fi
 }
 
+queue_manifest_refresh() {
+    local relative_path="$1"
+    if [ "${#MANIFEST_REFRESH_PATHS[@]}" -eq 0 ] || ! array_contains "$relative_path" "${MANIFEST_REFRESH_PATHS[@]}"; then
+        MANIFEST_REFRESH_PATHS+=("$relative_path")
+    fi
+}
+
 for line in "${STATUS_LINES[@]}"; do
     IFS=$'\t' read -r relative_path status hash_migration <<< "$line"
     [ -n "$relative_path" ] || continue
     [ "$relative_path" != ".codex/hooks/sdlc-prompt-check.sh" ] || continue
 
     action="keep"
+    package_relation="$(managed_file_package_relation "$relative_path" || true)"
+    if [ "$status" = "match" ] && [ "$package_relation" = "package-differs" ]; then
+        action="upgrade from invoked package"
+        CHANGES_PENDING=true
+        RUN_REGENERATE=true
+        queue_static_repair "$relative_path"
+    elif [ "$status" = "customized" ] && [ "$package_relation" = "package-current" ]; then
+        action="record invoked package hash"
+        CHANGES_PENDING=true
+        queue_manifest_refresh "$relative_path"
+    fi
+
     if [ "$relative_path" = ".codex/hooks.json" ]; then
         if [ "$HOOKS_MERGE_STATUS" = "merge" ]; then
             action="merge wizard hooks (preserve host hooks)"
@@ -833,6 +878,12 @@ fi
 if [ "$HASH_MIGRATION_PENDING" = "true" ]; then
     node "$SCRIPT_DIR/lib/managed-file-hash.cjs" migrate-manifest .codex-sdlc/manifest.json >/dev/null
     echo "Applied: .codex-sdlc/manifest.json (migrated legacy EOL hashes)"
+fi
+
+if [ "${#MANIFEST_REFRESH_PATHS[@]}" -gt 0 ]; then
+    node "$SCRIPT_DIR/lib/refresh-manifest-hashes.cjs" \
+        .codex-sdlc/manifest.json "${MANIFEST_REFRESH_PATHS[@]}"
+    echo "Applied: .codex-sdlc/manifest.json (recorded invoked package hashes)"
 fi
 
 echo ""
