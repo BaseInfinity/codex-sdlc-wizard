@@ -247,6 +247,108 @@ EOF
     fi
 }
 
+test_universal_proof_ignores_placeholder_manifest_commands() {
+    local ws fakebin output status valid=true
+    ws=$(mktemp -d)
+    fakebin=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks" "$ws/.codex-sdlc"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    cat > "$ws/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "scan": {
+    "test_command": "none configured",
+    "lint_command": "\"  NOT   APPLICABLE  \".",
+    "typecheck_command": "<todo>;",
+    "build_command": "--"
+  }
+}
+EOF
+    if [ "$IS_WINDOWS" = "true" ]; then
+        cat > "$fakebin/none.cmd" <<'EOF'
+@echo off
+echo PLACEHOLDER_COMMAND_EXECUTED
+EOF
+    else
+        cat > "$fakebin/none" <<'EOF'
+#!/bin/sh
+echo PLACEHOLDER_COMMAND_EXECUTED
+EOF
+        chmod +x "$fakebin/none"
+    fi
+    (cd "$ws" && git init -q)
+
+    set +e
+    output=$(cd "$ws" && PATH="$fakebin:$PATH" node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 2 ] || valid=false
+    echo "$output" | grep -Fq 'No proof checks configured. Pass --check <command> or run setup first.' || valid=false
+    echo "$output" | grep -Fq 'Running SDLC proof check:' && valid=false
+    echo "$output" | grep -Fq 'PLACEHOLDER_COMMAND_EXECUTED' && valid=false
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof treats placeholder manifest commands as unconfigured without executing them"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof executed a placeholder manifest command"
+    fi
+}
+
+test_universal_proof_preserves_commands_that_begin_with_none() {
+    local ws fakebin output status valid=true
+    ws=$(mktemp -d)
+    fakebin=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks" "$ws/.codex-sdlc"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    cat > "$ws/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "scan": {
+    "test_command": "none-cli --version"
+  }
+}
+EOF
+    if [ "$IS_WINDOWS" = "true" ]; then
+        cat > "$fakebin/none-cli.cmd" <<'EOF'
+@echo off
+echo none-cli regression sentinel
+EOF
+    else
+        cat > "$fakebin/none-cli" <<'EOF'
+#!/bin/sh
+echo none-cli regression sentinel
+EOF
+        cat > "$fakebin/pwsh" <<'EOF'
+#!/bin/sh
+[ "$1" = "-NoProfile" ] || exit 97
+[ "$2" = "-Command" ] || exit 98
+exec sh -c "$3"
+EOF
+        chmod +x "$fakebin/none-cli" "$fakebin/pwsh"
+    fi
+    printf '%s\n' 'proof-target' > "$ws/app.txt"
+    (cd "$ws" && git init -q && git add app.txt)
+
+    set +e
+    output=$(cd "$ws" && PATH="$fakebin:$PATH" node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    echo "$output" | grep -Fq 'Running SDLC proof check: none-cli --version' || valid=false
+    echo "$output" | grep -Fq 'none-cli regression sentinel' || valid=false
+    echo "$output" | grep -Fq 'Wrote SDLC proof:' || valid=false
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof preserves genuine commands that begin with none"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof swallowed a genuine command that begins with none"
+    fi
+}
+
 test_universal_pretool_blocks_stale_proof() {
     local ws
     local output
@@ -3296,6 +3398,8 @@ test_session_silent_when_present
 test_universal_pretool_blocks_commit
 test_universal_pretool_allows_commit_with_fresh_proof
 test_universal_proof_runs_powershell_manifest_commands_in_pwsh
+test_universal_proof_ignores_placeholder_manifest_commands
+test_universal_proof_preserves_commands_that_begin_with_none
 test_universal_pretool_blocks_stale_proof
 test_universal_pretool_blocks_cross_repo_proof_reuse
 test_universal_pretool_blocks_cd_proof_reuse

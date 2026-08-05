@@ -1,7 +1,7 @@
 # Windows Codex Desktop E2E — findings, 2026-08-04
 
 Run of `WINDOWS-CODEX-DESKTOP-E2E.md` @ `04d8b94` against product repo `m180-jumpseat`.
-Verdict: **PASS WITH FOLLOW-UP**. Nine defects below.
+Verdict: **PASS WITH FOLLOW-UP**. Sixteen defects below.
 
 ## Environment
 
@@ -307,3 +307,51 @@ current hash. Upgrade when current still matches the old manifest but differs fr
 package; preserve when current differs from both; and only refresh manifest ownership
 when current already equals the package. Reuse canonical text hashes and raw `.sh`
 hashes so line endings cannot disguise any of those relations.
+
+## 15. Proof runner executes placeholder phrases as commands — HIGH
+
+The m180 consumer manifest records `test_command` as `none configured`. The proof
+runner's `safeProofCommand()` recognized only the exact tokens `none`, `n/a`, `unknown`,
+and `<none>`, so the longer placeholder survived validation and was handed to the shell:
+
+    Running SDLC proof check: none configured
+    none: The term 'none' is not recognized as a name of a cmdlet
+    SDLC proof check failed: none configured
+
+**Impact:** a consumer with no configured proof commands is hard-blocked by an attempted
+placeholder execution instead of receiving the actionable exit-2 guidance:
+
+    No proof checks configured. Pass --check <command> or run setup first.
+
+**Fix:** normalize candidate values for comparison by trimming, lowercasing, collapsing
+internal whitespace, stripping paired angle brackets or quotes, and removing trailing
+punctuation. Match only an explicit placeholder phrase set: `none`, `none configured`,
+`not configured`, `none required`, `none needed`, `not applicable`, `n/a`, `na`,
+`unknown`, `tbd`, `todo`, `no tests`, `-`, and `--`. Do not use prefix matching: a real
+command such as `none-cli --version` must still execute. Regression fixtures prove both
+that `none configured` reaches the existing no-checks path without executing a sentinel
+and that `none-cli --version` remains a genuine command.
+
+## 16. `Invoke-Pester` hides failed tests from the process exit code without `-EnableExit` — HIGH
+
+Verified independently with Pester 5.7.1 and a one-test suite that deliberately fails.
+This invocation reported `Tests Passed: 0, Failed: 1` but the `pwsh` process returned
+exit code 0:
+
+    Invoke-Pester -Path <failing-suite>
+
+Running the same suite with `-EnableExit` reported the same failed test and returned exit
+code 1:
+
+    Invoke-Pester -Path <failing-suite> -EnableExit
+
+This confirms the mechanism behind m180's proof run accepting a suite with 46 failures
+and continuing to the next check: the proof runner correctly trusts the child process
+status, but bare `Invoke-Pester` does not translate failed-test count into a failing
+process status.
+
+**Future fix (not implemented in the Defect 15 change):** ensure detected or generated
+Pester proof commands opt into a failing process exit, using `-EnableExit` or the native
+Pester 5 configuration equivalent. Add coverage that a failing Pester suite stops proof
+execution before any later check. No Defect 16 product-code change was made in this
+slice.
