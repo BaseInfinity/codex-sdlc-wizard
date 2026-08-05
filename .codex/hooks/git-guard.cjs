@@ -8,6 +8,22 @@ const PROOF_TTL_MS = 4 * 60 * 60 * 1000;
 const PROOF_RELATIVE_PATH = "codex-sdlc/proof.json";
 const WORKTREE_PROOF_PATH = ".codex-sdlc/proof.json";
 const GIT_REPOSITORY_ENV_NAMES = new Set(["GIT_COMMON_DIR", "GIT_DIR", "GIT_WORK_TREE"]);
+const UNCONFIGURED_PROOF_COMMANDS = new Set([
+  "none",
+  "none configured",
+  "not configured",
+  "none required",
+  "none needed",
+  "not applicable",
+  "n/a",
+  "na",
+  "unknown",
+  "tbd",
+  "todo",
+  "no tests",
+  "-",
+  "--",
+]);
 
 if (process.argv[2] === "prove") {
   process.exit(runProofCli(process.argv.slice(3)));
@@ -81,13 +97,36 @@ function proofPath(root) {
   return path.join(root, ".git", PROOF_RELATIVE_PATH);
 }
 
+function normalizedProofCommand(value) {
+  let normalized = String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  const wrappers = [
+    ["<", ">"],
+    ['"', '"'],
+    ["'", "'"],
+    ["`", "`"],
+    ["“", "”"],
+    ["‘", "’"],
+  ];
+
+  let previous = "";
+  while (normalized !== previous) {
+    previous = normalized;
+    normalized = normalized.replace(/[.,;:!?]+$/u, "").trim();
+    for (const [opening, closing] of wrappers) {
+      if (normalized.startsWith(opening) && normalized.endsWith(closing)) {
+        normalized = normalized.slice(opening.length, -closing.length).trim();
+        break;
+      }
+    }
+  }
+
+  return normalized.replace(/\s+/g, " ");
+}
+
 function safeProofCommand(value) {
   const command = String(value ?? "").trim();
   const missingCommand = command === ""
-    || /^none$/i.test(command)
-    || /^n\/a$/i.test(command)
-    || /^unknown$/i.test(command)
-    || /^<none>$/i.test(command);
+    || UNCONFIGURED_PROOF_COMMANDS.has(normalizedProofCommand(command));
 
   if (missingCommand) {
     return "";
