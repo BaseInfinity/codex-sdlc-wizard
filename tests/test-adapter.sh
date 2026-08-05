@@ -116,6 +116,14 @@ payload_for_command_with_workdir() {
     MSYS_NO_PATHCONV=1 COMMAND_TEXT="$1" WORKDIR_TEXT="$workdir_text" node -e 'process.stdout.write(JSON.stringify({ tool_input: { command: process.env.COMMAND_TEXT, workdir: process.env.WORKDIR_TEXT } }));'
 }
 
+native_command_path() {
+    if [ "$IS_WINDOWS" = "true" ]; then
+        cygpath -w "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
+
 deep_nested_eval_command() {
     COMMAND_TEXT="git push origin main" node -e '
         let command = process.env.COMMAND_TEXT;
@@ -168,6 +176,8 @@ test_pretool_blocks_push() {
 test_universal_pretool_allows_commit_with_fresh_proof() {
     local ws
     local output
+    local option_output
+    local assignment_output
 
     ws=$(mktemp -d)
     mkdir -p "$ws/.codex/hooks"
@@ -182,12 +192,14 @@ test_universal_pretool_allows_commit_with_fresh_proof() {
     )
 
     output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    option_output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "git --no-pager commit -m test")" ".codex/hooks/git-guard.cjs")
+    assignment_output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "FOO=bar git commit -m test")" ".codex/hooks/git-guard.cjs")
     rm -rf "$ws"
 
-    if [ -z "$output" ]; then
-        pass "universal pre-tool hook allows git commit with fresh SDLC proof"
+    if [ -z "$output" ] && [ -z "$option_output" ] && [ -z "$assignment_output" ]; then
+        pass "universal pre-tool hook preserves current-repo commit forms with fresh SDLC proof"
     else
-        fail "universal pre-tool hook blocked git commit despite fresh proof (output: $output)"
+        fail "universal pre-tool hook blocked a current-repo commit form despite fresh proof (plain: $output; option: $option_output; assignment: $assignment_output)"
     fi
 }
 
@@ -400,6 +412,7 @@ test_universal_pretool_blocks_cross_repo_proof_reuse() {
         git init -q
         printf '%s\n' "target-change" > app.txt
         git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
     )
 
     output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C $target_ws commit -m test")" ".codex/hooks/git-guard.cjs")
@@ -623,6 +636,1095 @@ test_universal_pretool_allows_workdir_with_fresh_proof() {
         pass "universal pre-tool hook allows Bash workdir with fresh SDLC proof"
     else
         fail "universal pre-tool hook blocked Bash workdir despite fresh proof (output: $output)"
+    fi
+}
+
+test_universal_pretool_allows_linked_worktree_with_fresh_proof() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local linked_command_path
+    local commit_output
+    local push_output
+    local option_output
+    local config_output
+    local newline_output
+    local terminator_output
+    local heredoc_command
+    local heredoc_output
+    local null_device="/dev/null"
+    local msys_output=""
+
+    trusted_ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    linked_command_path=$(native_command_path "$linked_ws")
+    if [ "$IS_WINDOWS" = "true" ]; then
+        null_device="NUL"
+    fi
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+    )
+
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    commit_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m test")" ".codex/hooks/git-guard.cjs")
+    push_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" push origin HEAD")" ".codex/hooks/git-guard.cjs")
+    option_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git --no-pager -C \"$linked_command_path\" commit -m test")" ".codex/hooks/git-guard.cjs")
+    config_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" -c core.hooksPath=$null_device -c core.fsmonitor=false -c commit.gpgSign=false commit -m test")" ".codex/hooks/git-guard.cjs")
+    newline_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "$(printf 'git -C \"%s\" commit -m test\r\n' "$linked_command_path")")" ".codex/hooks/git-guard.cjs")
+    terminator_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m test;")" ".codex/hooks/git-guard.cjs")
+    heredoc_command=$(printf "git -C \"%s\" commit -F - <<'EOF'\nmessage\nEOF\n" "$linked_command_path")
+    heredoc_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "$heredoc_command")" ".codex/hooks/git-guard.cjs")
+    if [ "$IS_WINDOWS" = "true" ]; then
+        msys_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$(cygpath -u "$linked_ws")\" commit -m test")" ".codex/hooks/git-guard.cjs")
+    fi
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$linked_parent"
+
+    if [ -z "$commit_output" ] && [ -z "$push_output" ] \
+        && [ -z "$option_output" ] && [ -z "$config_output" ] \
+        && [ -z "$newline_output" ] && [ -z "$terminator_output" ] \
+        && [ -z "$heredoc_output" ] \
+        && [ -z "$msys_output" ]; then
+        pass "universal pre-tool hook allows linked-worktree commit and push with fresh target proof"
+    else
+        fail "universal pre-tool hook blocked a linked worktree despite fresh proof (commit: $commit_output; push: $push_output; option: $option_output; config: $config_output; newline: $newline_output; terminator: $terminator_output; heredoc: $heredoc_output; MSYS: $msys_output)"
+    fi
+}
+
+test_universal_pretool_supports_git_without_path_format() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local linked_command_path
+    local fakebin
+    local real_git
+    local output
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "legacy Git path-format fallback coverage is Unix-only"
+        return
+    fi
+
+    trusted_ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    linked_command_path=$(native_command_path "$linked_ws")
+    fakebin="$linked_parent/fakebin"
+    real_git=$(command -v git)
+    mkdir -p "$trusted_ws/.codex/hooks" "$fakebin"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        'for argument in "$@"; do' \
+        '    if [ "$argument" = "--path-format=absolute" ]; then' \
+        '        echo "unknown option: --path-format=absolute" >&2' \
+        '        exit 129' \
+        '    fi' \
+        'done' \
+        'exec "$REAL_GIT" "$@"' > "$fakebin/git"
+    chmod +x "$fakebin/git"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+    )
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    output=$(cd "$trusted_ws" && PATH="$fakebin:$PATH" REAL_GIT="$real_git" run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m test")" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$linked_parent"
+
+    if [ -z "$output" ]; then
+        pass "universal pre-tool hook supports Git without --path-format"
+    else
+        fail "universal pre-tool hook requires Git 2.31 path formatting (output: $output)"
+    fi
+}
+
+test_universal_pretool_reports_git_context_inspection_failure() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local linked_command_path
+    local fakebin
+    local real_git
+    local output
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "Git context timeout diagnostic coverage is Unix-only"
+        return
+    fi
+
+    trusted_ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    linked_command_path=$(native_command_path "$linked_ws")
+    fakebin="$linked_parent/fakebin"
+    real_git=$(command -v git)
+    mkdir -p "$trusted_ws/.codex/hooks" "$fakebin"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        'for argument in "$@"; do' \
+        '    if [ "$argument" = "rev-parse" ]; then' \
+        '        sleep 3' \
+        '        exit 1' \
+        '    fi' \
+        'done' \
+        'exec "$REAL_GIT" "$@"' > "$fakebin/git"
+    chmod +x "$fakebin/git"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+    )
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    output=$(cd "$trusted_ws" && PATH="$fakebin:$PATH" REAL_GIT="$real_git" run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m test")" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$linked_parent"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'cannot inspect target Git context'; then
+        pass "universal pre-tool hook reports Git context inspection failures"
+    else
+        fail "universal pre-tool hook misreported an inspection failure as another repo (output: $output)"
+    fi
+}
+
+test_universal_pretool_preserves_builtin_git_action_precedence() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local linked_command_path
+    local commit_output
+    local push_output
+    local status_output
+    local browser_output
+    local browser_marker
+    local browser_script
+    local viewer_output
+    local viewer_marker
+    local probe_output
+    local probe_marker
+    local alias_failure_output
+    local failing_git_dir
+    local failing_git
+    local fake_git
+    local real_git
+
+    trusted_ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    linked_command_path=$(native_command_path "$linked_ws")
+    browser_marker="$linked_parent/browser-opened"
+    browser_script="$linked_parent/browser"
+    viewer_marker="$linked_parent/man-viewer-ran"
+    probe_marker="$linked_parent/help-probe-unpinned"
+    failing_git_dir="$linked_parent/failing-git"
+    failing_git="$failing_git_dir/git"
+    fake_git="$linked_parent/git"
+    real_git=$(command -v git)
+    printf '%s\n' '#!/bin/sh' ': > "$BROWSER_MARKER"' > "$browser_script"
+    chmod +x "$browser_script"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        'for argument in "$@"; do' \
+        '    if [ "$argument" = "help.format=man" ]; then' \
+        '        exec "$REAL_GIT" "$@"' \
+        '    fi' \
+        'done' \
+        'case " $* " in' \
+        '    *" help --exclude-guides "*) : > "$PROBE_MARKER"; exit 0 ;;' \
+        'esac' \
+        'exec "$REAL_GIT" "$@"' > "$fake_git"
+    chmod +x "$fake_git"
+    mkdir -p "$failing_git_dir"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        'case " $* " in' \
+        '    *" config --null --get-regexp "*) exit 2 ;;' \
+        'esac' \
+        'exec "$REAL_GIT" "$@"' > "$failing_git"
+    chmod +x "$failing_git"
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+    )
+
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        git config alias.commit push
+        git config alias.push commit
+        git config alias.status push
+        git config alias.c commit
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    commit_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m test")" ".codex/hooks/git-guard.cjs")
+    push_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" push origin HEAD")" ".codex/hooks/git-guard.cjs")
+    status_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" status --short")" ".codex/hooks/git-guard.cjs")
+    browser_output=$(cd "$trusted_ws" && BROWSER_MARKER="$browser_marker" run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" -c help.format=web -c web.browser=codex-sdlc -c browser.codex-sdlc.path=\"$browser_script\" status --short")" ".codex/hooks/git-guard.cjs")
+    viewer_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" -c man.viewer=unsafe -c \"man.unsafe.cmd=: > '$viewer_marker'\" status --short")" ".codex/hooks/git-guard.cjs")
+    probe_output=$(cd "$trusted_ws" && PATH="$linked_parent:$PATH" REAL_GIT="$real_git" PROBE_MARKER="$probe_marker" run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" status --short")" ".codex/hooks/git-guard.cjs")
+    alias_failure_output=$(cd "$trusted_ws" && PATH="$failing_git_dir:$PATH" REAL_GIT="$real_git" run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" c -m test")" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+
+    if [ -z "$commit_output" ] && [ -z "$push_output" ] && [ -z "$status_output" ] \
+        && [ -z "$browser_output" ] \
+        && [ ! -e "$browser_marker" ] \
+        && [ -z "$viewer_output" ] && [ ! -e "$viewer_marker" ] \
+        && [ -z "$probe_output" ] && [ ! -e "$probe_marker" ] \
+        && echo "$alias_failure_output" | grep -q '"decision":"block"' \
+        && echo "$alias_failure_output" | grep -qi 'inspect.*alias'; then
+        pass "universal pre-tool hook gives Git built-ins precedence over aliases"
+    else
+        fail "universal pre-tool hook let aliases override Git commands, launched configured help, or failed open (commit: $commit_output; push: $push_output; status: $status_output; configured help: $browser_output; browser opened: $([ -e "$browser_marker" ] && echo yes || echo no); viewer: $viewer_output; viewer ran: $([ -e "$viewer_marker" ] && echo yes || echo no); probe: $probe_output; unpinned: $([ -e "$probe_marker" ] && echo yes || echo no); alias failure: $alias_failure_output)"
+    fi
+    rm -rf "$trusted_ws" "$linked_parent"
+}
+
+test_universal_pretool_allows_inert_inherited_git_settings() {
+    local ws
+    local count_output
+    local no_system_output
+    local discovery_output
+    local ceiling_output
+    local global_null_output
+    local system_null_output
+    local global_file_output
+    local system_file_output
+    local parameters_output
+    local alternates_output
+    local command_count_output
+    local command_no_system_output
+    local command_discovery_output
+    local command_ceiling_output
+    local command_global_null_output
+    local command_system_null_output
+    local inherited_same_git_dir_output
+    local inherited_same_index_output
+    local current_index
+    local null_device="/dev/null"
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        null_device="NUL"
+    fi
+
+    ws=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    printf '%s\n' '[user]' '    name = Codex SDLC Test' > "$ws/global.config"
+    printf '%s\n' '[user]' '    email = codex-sdlc@example.invalid' > "$ws/system.config"
+    mkdir -p "$ws/alternate-objects"
+
+    (
+        cd "$ws" || exit 1
+        git init -q
+        printf '%s\n' "fresh-proof" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    count_output=$(cd "$ws" && GIT_CONFIG_COUNT=0 run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    no_system_output=$(cd "$ws" && GIT_CONFIG_NOSYSTEM=1 run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    discovery_output=$(cd "$ws" && GIT_DISCOVERY_ACROSS_FILESYSTEM=0 run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    ceiling_output=$(cd "$ws" && GIT_CEILING_DIRECTORIES="$(dirname "$ws")" run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    global_null_output=$(cd "$ws" && GIT_CONFIG_GLOBAL="$null_device" run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    system_null_output=$(cd "$ws" && GIT_CONFIG_SYSTEM="$null_device" run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    global_file_output=$(cd "$ws" && GIT_CONFIG_GLOBAL="$ws/global.config" run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    system_file_output=$(cd "$ws" && GIT_CONFIG_SYSTEM="$ws/system.config" run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    parameters_output=$(cd "$ws" && GIT_CONFIG_PARAMETERS="'user.name=Codex SDLC Test'" run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    alternates_output=$(cd "$ws" && GIT_ALTERNATE_OBJECT_DIRECTORIES="$ws/alternate-objects" run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    command_count_output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "GIT_CONFIG_COUNT=0 git commit -m test")" ".codex/hooks/git-guard.cjs")
+    command_no_system_output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "GIT_CONFIG_NOSYSTEM=1 git commit -m test")" ".codex/hooks/git-guard.cjs")
+    command_discovery_output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "GIT_DISCOVERY_ACROSS_FILESYSTEM=0 git commit -m test")" ".codex/hooks/git-guard.cjs")
+    command_ceiling_output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "GIT_CEILING_DIRECTORIES=\"$(dirname "$ws")\" git commit -m test")" ".codex/hooks/git-guard.cjs")
+    command_global_null_output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "GIT_CONFIG_GLOBAL=$null_device git commit -m test")" ".codex/hooks/git-guard.cjs")
+    command_system_null_output=$(cd "$ws" && run_node_json_hook "$(payload_for_command "GIT_CONFIG_SYSTEM=$null_device git commit -m test")" ".codex/hooks/git-guard.cjs")
+    current_index=$(git -C "$ws" rev-parse --git-path index)
+    inherited_same_git_dir_output=$(cd "$ws" && GIT_DIR=.git run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    inherited_same_index_output=$(cd "$ws" && GIT_INDEX_FILE="$current_index" run_node_json_hook "$(payload_for_command "git commit -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$ws"
+
+    if [ -z "$count_output" ] && [ -z "$no_system_output" ] && [ -z "$discovery_output" ] && [ -z "$ceiling_output" ] \
+        && [ -z "$global_null_output" ] && [ -z "$system_null_output" ] \
+        && [ -z "$global_file_output" ] && [ -z "$system_file_output" ] \
+        && [ -z "$parameters_output" ] && [ -z "$alternates_output" ] \
+        && [ -z "$command_count_output" ] && [ -z "$command_no_system_output" ] \
+        && [ -z "$command_discovery_output" ] && [ -z "$command_ceiling_output" ] \
+        && [ -z "$command_global_null_output" ] && [ -z "$command_system_null_output" ] \
+        && [ -z "$inherited_same_git_dir_output" ] && [ -z "$inherited_same_index_output" ]; then
+        pass "universal pre-tool hook allows inert inherited Git settings"
+    else
+        fail "universal pre-tool hook blocked inert or same-repository Git settings (inherited count: $count_output; inherited no-system: $no_system_output; inherited discovery: $discovery_output; inherited ceiling: $ceiling_output; inherited global null: $global_null_output; inherited system null: $system_null_output; global file: $global_file_output; system file: $system_file_output; parameters: $parameters_output; alternates: $alternates_output; command count: $command_count_output; command no-system: $command_no_system_output; command discovery: $command_discovery_output; command ceiling: $command_ceiling_output; command global null: $command_global_null_output; command system null: $command_system_null_output; same GIT_DIR: $inherited_same_git_dir_output; same index: $inherited_same_index_output)"
+    fi
+}
+
+test_universal_pretool_allows_same_context_git_dir_without_index() {
+    local ws
+    local output
+
+    ws=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$ws" || exit 1
+        git init -q
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    output=$(cd "$ws" && GIT_DIR=.git run_node_json_hook "$(payload_for_command "git commit --allow-empty -m test")" ".codex/hooks/git-guard.cjs")
+    rm -rf "$ws"
+
+    if [ -z "$output" ]; then
+        pass "universal pre-tool hook allows a same-context GIT_DIR before the index exists"
+    else
+        fail "universal pre-tool hook rejected a same-context GIT_DIR in an index-free repo (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_inherited_linked_worktree_rebinding() {
+    local ws
+    local linked_parent
+    local first_ws
+    local second_ws
+    local first_command_path
+    local second_git_dir
+    local output
+
+    ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    first_ws="$linked_parent/first"
+    second_ws="$linked_parent/second"
+    first_command_path=$(native_command_path "$first_ws")
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b first-proof "$first_ws"
+        git worktree add -q -b second-proof "$second_ws"
+    )
+
+    (
+        cd "$second_ws" || exit 1
+        printf '%s\n' "second-worktree-change" >> app.txt
+        git add app.txt
+        node "$ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+    (
+        cd "$first_ws" || exit 1
+        printf '%s\n' "second-worktree-change" >> app.txt
+        git add app.txt
+    )
+    second_git_dir=$(git -C "$second_ws" rev-parse --absolute-git-dir)
+
+    output=$(cd "$ws" && GIT_DIR="$second_git_dir" run_node_json_hook "$(payload_for_command "git -C \"$first_command_path\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    git -C "$ws" worktree remove --force "$first_ws" >/dev/null 2>&1
+    git -C "$ws" worktree remove --force "$second_ws" >/dev/null 2>&1
+    rm -rf "$ws" "$linked_parent"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -q 'GIT_DIR'; then
+        pass "universal pre-tool hook binds inherited Git overrides to one worktree"
+    else
+        fail "universal pre-tool hook reused proof across linked worktrees through inherited GIT_DIR (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_inherited_config_worktree_proof_rebinding() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local linked_command_path
+    local unrelated_ws
+    local fakebin
+    local real_git
+    local output
+
+    trusted_ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    linked_command_path=$(native_command_path "$linked_ws")
+    unrelated_ws=$(mktemp -d)
+    fakebin="$linked_parent/fakebin"
+    real_git=$(command -v git)
+    mkdir -p "$trusted_ws/.codex/hooks" "$fakebin"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        'has_rev_parse=false' \
+        'has_show_toplevel=false' \
+        'has_index_path=false' \
+        'previous=""' \
+        'for argument in "$@"; do' \
+        '    [ "$argument" = "rev-parse" ] && has_rev_parse=true' \
+        '    [ "$argument" = "--show-toplevel" ] && has_show_toplevel=true' \
+        '    [ "$previous" = "--git-path" ] && [ "$argument" = "index" ] && has_index_path=true' \
+        '    previous="$argument"' \
+        'done' \
+        'if [ "${GIT_CONFIG_COUNT:-}" = "1" ] && [ "$has_rev_parse" = "true" ] && [ "$has_show_toplevel" = "true" ]; then' \
+        '    if [ "$has_index_path" = "true" ]; then' \
+        '        "$REAL_GIT" "$@" | awk -v target="$REDIRECT_WORKTREE" '\''NR == 3 { $0 = target } { print }'\''' \
+        '        exit ${PIPESTATUS:-0}' \
+        '    fi' \
+        '    printf "%s\n" "$REDIRECT_WORKTREE"' \
+        '    exit 0' \
+        'fi' \
+        'exec "$REAL_GIT" "$@"' > "$fakebin/git"
+    chmod +x "$fakebin/git"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "trusted-baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+    )
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+    )
+    (
+        cd "$unrelated_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "unrelated-proof" > app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    output=$(cd "$trusted_ws" \
+        && PATH="$fakebin:$PATH" \
+            REAL_GIT="$real_git" \
+            REDIRECT_WORKTREE="$unrelated_ws" \
+            GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0=core.worktree \
+            GIT_CONFIG_VALUE_0="$unrelated_ws" \
+            run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$linked_parent" "$unrelated_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -q 'GIT_CONFIG_COUNT'; then
+        pass "universal pre-tool hook binds inherited Git config to the inspected worktree"
+    else
+        fail "universal pre-tool hook reused unrelated proof through inherited core.worktree (output: $output)"
+    fi
+}
+
+test_universal_pretool_preserves_case_sensitive_worktree_identity() {
+    local ws
+    local linked_parent
+    local upper_ws
+    local lower_ws
+    local upper_command_path
+    local lower_git_dir
+    local simulated_guard
+    local output
+    local context_source
+
+    context_source=$(sed -n '/^function physicalGitContext(/,/^}/p' "$UNIVERSAL_PRETOOL_SCRIPT")
+    if echo "$context_source" | grep -q 'toLowerCase' \
+        || ! echo "$context_source" | grep -q 'statSync'; then
+        fail "universal pre-tool hook must compare filesystem identity without unconditional case folding"
+        return
+    fi
+
+    ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    upper_ws="$linked_parent/Worktree"
+    lower_ws="$linked_parent/worktree"
+    mkdir "$upper_ws"
+    if ! mkdir "$lower_ws" 2>/dev/null; then
+        rm -rf "$ws" "$linked_parent"
+        pass "case-sensitive worktree identity coverage skipped on case-insensitive volume"
+        return
+    fi
+    rmdir "$upper_ws" "$lower_ws"
+
+    upper_command_path=$(native_command_path "$upper_ws")
+    simulated_guard="$ws/git-guard-darwin.cjs"
+    {
+        printf '%s\n' 'Object.defineProperty(process, "platform", { value: "darwin" });'
+        sed '1d' "$UNIVERSAL_PRETOOL_SCRIPT"
+    } > "$simulated_guard"
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b upper-proof "$upper_ws"
+        git worktree add -q -b lower-proof "$lower_ws"
+    )
+
+    for target in "$upper_ws" "$lower_ws"; do
+        (
+            cd "$target" || exit 1
+            printf '%s\n' "same-change" >> app.txt
+            git add app.txt
+        )
+    done
+    (
+        cd "$lower_ws" || exit 1
+        node "$ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+    lower_git_dir=$(git -C "$lower_ws" rev-parse --absolute-git-dir)
+
+    output=$(cd "$ws" && GIT_DIR="$lower_git_dir" run_node_json_hook "$(payload_for_command "git -C \"$upper_command_path\" commit -m bypass")" "$simulated_guard")
+    git -C "$ws" worktree remove --force "$upper_ws" >/dev/null 2>&1
+    git -C "$ws" worktree remove --force "$lower_ws" >/dev/null 2>&1
+    rm -rf "$ws" "$linked_parent"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -q 'GIT_DIR'; then
+        pass "universal pre-tool hook preserves case-sensitive worktree identity"
+    else
+        fail "universal pre-tool hook folded distinct case-sensitive worktree identities together (output: $output)"
+    fi
+}
+
+test_universal_pretool_allows_case_variant_linked_worktree_context() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local linked_command_path
+    local case_variant_ws
+    local case_variant_linked_ws
+    local output
+    local target_output
+
+    if [ "$IS_WINDOWS" = "true" ] || [ "$(uname -s)" != "Darwin" ]; then
+        pass "linked-worktree case-variant path coverage is macOS-only"
+        return
+    fi
+
+    trusted_ws=$(mktemp -d /private/tmp/Codex-SDLC-Case.XXXXXX)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    linked_command_path=$(native_command_path "$linked_ws")
+    case_variant_ws=$(printf '%s' "$trusted_ws" | tr '[:upper:]' '[:lower:]')
+    case_variant_linked_ws=$(printf '%s' "$linked_ws" | tr '[:upper:]' '[:lower:]')
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+    )
+
+    if ! git -C "$case_variant_ws" rev-parse --show-toplevel >/dev/null 2>&1; then
+        git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+        rm -rf "$trusted_ws" "$linked_parent"
+        pass "linked-worktree case-variant path coverage skipped on case-sensitive macOS volume"
+        return
+    fi
+
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command_with_workdir "git -C \"$linked_command_path\" commit -m test" "$case_variant_ws")" ".codex/hooks/git-guard.cjs")
+    target_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$case_variant_linked_ws\" commit -m test")" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$linked_parent"
+
+    if [ -z "$output" ] && [ -z "$target_output" ]; then
+        pass "universal pre-tool hook canonicalizes case-variant macOS worktree paths"
+    else
+        fail "universal pre-tool hook rejected a case-variant path to the same linked-worktree repository (workdir: $output; target: $target_output)"
+    fi
+}
+
+test_universal_pretool_blocks_case_variant_windows_git_env() {
+    local ws
+    local simulated_guard
+    local output
+    local inert_output
+
+    ws=$(mktemp -d)
+    simulated_guard="$ws/git-guard-windows.cjs"
+    {
+        printf '%s\n' 'Object.defineProperty(process, "platform", { value: "win32" });'
+        sed '1d' "$UNIVERSAL_PRETOOL_SCRIPT"
+    } > "$simulated_guard"
+    mkdir -p "$ws/repo/.codex/hooks" "$ws/alternate"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/repo/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$ws/repo" || exit 1
+        git init -q
+        printf '%s\n' "fresh-proof" > app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    output=$(cd "$ws/repo" && git_dir="$ws/alternate" run_node_json_hook "$(payload_for_command "git commit -m test")" "$simulated_guard")
+    inert_output=$(cd "$ws/repo" && run_node_json_hook "$(payload_for_command "git_config_count=0 git_config_key_0=core.hooksPath git_config_value_0=/tmp/ignored git commit -m test")" "$simulated_guard")
+    rm -rf "$ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -q 'GIT_DIR' \
+        && [ -z "$inert_output" ]; then
+        pass "universal pre-tool hook normalizes case-insensitive Windows Git environment names"
+    else
+        fail "universal pre-tool hook mishandled case-variant Windows Git environment settings (override: $output; inert: $inert_output)"
+    fi
+}
+
+test_universal_pretool_blocks_windows_cmd_path_expansion() {
+    local ws
+    local linked_ws
+    local unrelated_ws
+    local simulated_guard
+    local output
+
+    ws=$(mktemp -d)
+    linked_ws="$ws/%TARGET%"
+    unrelated_ws=$(mktemp -d)
+    simulated_guard="$ws/git-guard-windows.cjs"
+    {
+        printf '%s\n' 'Object.defineProperty(process, "platform", { value: "win32" });'
+        sed '1d' "$UNIVERSAL_PRETOOL_SCRIPT"
+    } > "$simulated_guard"
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b literal-cmd-path "$linked_ws"
+    )
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        node "$ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+    (
+        cd "$unrelated_ws" || exit 1
+        git init -q
+        printf '%s\n' "unrelated-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$ws" && TARGET="$unrelated_ws" run_node_json_hook "$(payload_for_command 'git -C "%TARGET%" commit -m bypass')" "$simulated_guard")
+    git -C "$ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$ws" "$unrelated_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks cmd.exe expansion in linked-worktree paths"
+    else
+        fail "universal pre-tool hook validated a literal path that cmd.exe can retarget (output: $output)"
+    fi
+}
+
+test_universal_pretool_blocks_symlink_parent_directory_rebinding() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local unrelated_ws
+    local output
+    local linked_output
+    local single_operand_output
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        pass "universal pre-tool hook symlink traversal coverage is POSIX-only"
+        return
+    fi
+
+    trusted_ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    unrelated_ws=$(mktemp -d)
+    mkdir -p "$trusted_ws/.codex/hooks" "$unrelated_ws/child"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "trusted" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+        ln -s "$linked_ws" linked-alias
+        ln -s "$unrelated_ws/child" escape-link
+        printf '%s\n' "trusted-change" >> app.txt
+        git add app.txt
+        node .codex/hooks/git-guard.cjs prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$unrelated_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "unrelated" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        printf '%s\n' "unrelated-change" >> app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C escape-link -C .. commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    single_operand_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C escape-link/.. commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    linked_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C linked-alias commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$linked_parent" "$unrelated_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo' \
+        && echo "$single_operand_output" | grep -q '"decision":"block"' \
+        && echo "$single_operand_output" | grep -qi 'target repo' \
+        && echo "$linked_output" | grep -q '"decision":"block"' \
+        && echo "$linked_output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks symlinked linked-worktree targets and resolves chained -C operands"
+    else
+        fail "universal pre-tool hook allowed symlink target rebinding (chained traversal: $output; single-operand traversal: $single_operand_output; linked alias: $linked_output)"
+    fi
+}
+
+test_universal_pretool_blocks_linked_worktree_without_fresh_proof() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local linked_command_path
+    local missing_output
+    local compound_output
+    local background_output
+    local stale_output
+
+    trusted_ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    linked_command_path=$(native_command_path "$linked_ws")
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+    )
+
+    missing_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m test")" ".codex/hooks/git-guard.cjs")
+
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "proof-target" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    compound_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" status >/dev/null && sh -c 'git commit -m bypass'")" ".codex/hooks/git-guard.cjs")
+    background_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m test &")" ".codex/hooks/git-guard.cjs")
+    printf '%s\n' "changed-after-proof" >> "$linked_ws/app.txt"
+    stale_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" push origin HEAD")" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$linked_parent"
+
+    if echo "$missing_output" | grep -q '"decision":"block"' \
+        && echo "$missing_output" | grep -qi 'proof is missing' \
+        && echo "$compound_output" | grep -q '"decision":"block"' \
+        && echo "$compound_output" | grep -qi 'target repo' \
+        && echo "$background_output" | grep -q '"decision":"block"' \
+        && echo "$background_output" | grep -qi 'target repo' \
+        && echo "$stale_output" | grep -q '"decision":"block"' \
+        && echo "$stale_output" | grep -qi 'proof is stale'; then
+        pass "universal pre-tool hook binds linked-worktree proof to a direct commit or push"
+    else
+        fail "universal pre-tool hook mishandled linked-worktree proof binding (missing: $missing_output; compound: $compound_output; background: $background_output; stale: $stale_output)"
+    fi
+}
+
+test_universal_pretool_blocks_wrapper_directory_proof_rebinding() {
+    local trusted_ws
+    local linked_ws
+    local other_parent
+    local other_ws
+    local linked_command_path
+    local other_parent_command_path
+    local linked_object_dir
+    local output
+    local login_output
+    local long_login_output
+    local env_path_output
+    local assignment_path_output
+    local executable_path_output
+    local nohup_output
+    local index_output
+    local namespace_output
+    local inherited_object_output
+    local alias_output
+    local include_alias_output
+    local invalid_null_output
+    local invalid_null_device="NUL"
+
+    trusted_ws=$(mktemp -d)
+    linked_ws="$trusted_ws/linked worktree"
+    other_parent=$(mktemp -d)
+    other_ws="$other_parent/linked worktree"
+    linked_command_path=$(native_command_path "$linked_ws")
+    other_parent_command_path=$(native_command_path "$other_parent")
+    if [ "$IS_WINDOWS" = "true" ]; then
+        invalid_null_device="/dev/null"
+    fi
+    mkdir -p "$trusted_ws/.codex/hooks" "$other_ws"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+    )
+
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+    linked_object_dir=$(git -C "$linked_ws" rev-parse --git-path objects)
+    git -C "$linked_ws" config alias.c commit
+    printf '%s\n' '[alias]' '    hidden = commit' > "$other_parent/aliases.config"
+
+    (
+        cd "$other_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "unrelated-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "env -C \"$other_parent_command_path\" git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    login_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "sudo -i git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    long_login_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "sudo --login git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    env_path_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "env PATH=/tmp/fake git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    assignment_path_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "PATH=/tmp/fake git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    executable_path_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "/tmp/fake/git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    nohup_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "nohup git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    index_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "GIT_INDEX_FILE=/tmp/alternate-index git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    namespace_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "GIT_NAMESPACE=alternate git -C \"linked worktree\" push origin HEAD")" ".codex/hooks/git-guard.cjs")
+    inherited_object_output=$(cd "$trusted_ws" && GIT_OBJECT_DIRECTORY="$linked_object_dir" run_node_json_hook "$(payload_for_command "git -C \"linked worktree\" commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    alias_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"linked worktree\" c -m bypass")" ".codex/hooks/git-guard.cjs")
+    include_alias_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"linked worktree\" -c include.path=\"$other_parent_command_path/aliases.config\" hidden -m bypass")" ".codex/hooks/git-guard.cjs")
+    invalid_null_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"linked worktree\" -c core.hooksPath=$invalid_null_device commit -m bypass")" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$other_parent"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo' \
+        && echo "$login_output" | grep -q '"decision":"block"' \
+        && echo "$login_output" | grep -qi 'target repo' \
+        && echo "$long_login_output" | grep -q '"decision":"block"' \
+        && echo "$long_login_output" | grep -qi 'target repo' \
+        && echo "$env_path_output" | grep -q '"decision":"block"' \
+        && echo "$env_path_output" | grep -qi 'target repo' \
+        && echo "$assignment_path_output" | grep -q '"decision":"block"' \
+        && echo "$assignment_path_output" | grep -qi 'target repo' \
+        && echo "$executable_path_output" | grep -q '"decision":"block"' \
+        && echo "$executable_path_output" | grep -qi 'target repo' \
+        && echo "$nohup_output" | grep -q '"decision":"block"' \
+        && echo "$nohup_output" | grep -qi 'target repo' \
+        && echo "$index_output" | grep -q '"decision":"block"' \
+        && echo "$index_output" | grep -qi 'target repo' \
+        && echo "$namespace_output" | grep -q '"decision":"block"' \
+        && echo "$namespace_output" | grep -qi 'target repo' \
+        && echo "$inherited_object_output" | grep -q '"decision":"block"' \
+        && echo "$inherited_object_output" | grep -q 'GIT_OBJECT_DIRECTORY' \
+        && echo "$alias_output" | grep -q '"decision":"block"' \
+        && echo "$alias_output" | grep -qi 'target repo' \
+        && echo "$include_alias_output" | grep -q '"decision":"block"' \
+        && echo "$include_alias_output" | grep -qi 'target repo' \
+        && echo "$invalid_null_output" | grep -q '"decision":"block"' \
+        && echo "$invalid_null_output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks wrapper directory proof rebinding"
+    else
+        fail "universal pre-tool hook allowed wrapper or repository-context proof rebinding (linked: $linked_command_path; chdir: $output; login: $login_output; long login: $long_login_output; env PATH: $env_path_output; assignment PATH: $assignment_path_output; executable path: $executable_path_output; nohup: $nohup_output; index: $index_output; namespace: $namespace_output; inherited object dir: $inherited_object_output; alias: $alias_output; include alias: $include_alias_output; invalid null: $invalid_null_output)"
+    fi
+}
+
+test_universal_pretool_blocks_shell_alias_proof_rebinding() {
+    local trusted_ws
+    local linked_parent
+    local linked_ws
+    local literal_ws
+    local other_ws
+    local linked_command_path
+    local other_command_path
+    local output
+    local process_substitution_output
+    local substitution_output
+    local variable_output
+
+    trusted_ws=$(mktemp -d)
+    linked_parent=$(mktemp -d)
+    linked_ws="$linked_parent/linked worktree"
+    literal_ws="$trusted_ws/\$TARGET"
+    other_ws=$(mktemp -d)
+    linked_command_path=$(native_command_path "$linked_ws")
+    other_command_path=$(native_command_path "$other_ws")
+    mkdir -p "$trusted_ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$trusted_ws/.codex/hooks/git-guard.cjs"
+
+    (
+        cd "$trusted_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "baseline" > app.txt
+        git add app.txt
+        git commit -qm "baseline"
+        git worktree add -q -b linked-proof "$linked_ws"
+        git worktree add -q -b literal-proof "$literal_ws"
+    )
+
+    (
+        cd "$linked_ws" || exit 1
+        printf '%s\n' "linked-worktree-change" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$literal_ws" || exit 1
+        printf '%s\n' "literal-worktree-change" >> app.txt
+        git add app.txt
+        node "$trusted_ws/.codex/hooks/git-guard.cjs" prove --reviewed --check "true" >/dev/null
+    )
+
+    (
+        cd "$other_ws" || exit 1
+        git init -q
+        git config user.name "Codex SDLC Test"
+        git config user.email "codex-sdlc@example.invalid"
+        printf '%s\n' "unrelated-change" > app.txt
+        git add app.txt
+    )
+
+    output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" -c alias.c='!unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C \"$other_command_path\" commit -m bypass' c")" ".codex/hooks/git-guard.cjs")
+    substitution_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -m \"\$(git -C \"$other_command_path\" commit -m bypass)\"")" ".codex/hooks/git-guard.cjs")
+    process_substitution_output=$(cd "$trusted_ws" && run_node_json_hook "$(payload_for_command "git -C \"$linked_command_path\" commit -F <(git -C \"$other_command_path\" commit -m bypass)")" ".codex/hooks/git-guard.cjs")
+    variable_output=$(cd "$trusted_ws" && TARGET="$other_command_path" run_node_json_hook "$(payload_for_command 'git -C $TARGET commit -m bypass')" ".codex/hooks/git-guard.cjs")
+    git -C "$trusted_ws" worktree remove --force "$linked_ws" >/dev/null 2>&1
+    git -C "$trusted_ws" worktree remove --force "$literal_ws" >/dev/null 2>&1
+    rm -rf "$trusted_ws" "$linked_parent" "$other_ws"
+
+    if echo "$output" | grep -q '"decision":"block"' \
+        && echo "$output" | grep -qi 'target repo' \
+        && echo "$substitution_output" | grep -q '"decision":"block"' \
+        && echo "$substitution_output" | grep -qi 'target repo' \
+        && echo "$process_substitution_output" | grep -q '"decision":"block"' \
+        && echo "$process_substitution_output" | grep -qi 'target repo' \
+        && echo "$variable_output" | grep -q '"decision":"block"' \
+        && echo "$variable_output" | grep -qi 'target repo'; then
+        pass "universal pre-tool hook blocks indirect proof rebinding"
+    else
+        fail "universal pre-tool hook allowed indirect proof rebinding (alias: $output; substitution: $substitution_output; process substitution: $process_substitution_output; variable: $variable_output)"
     fi
 }
 
@@ -3377,8 +4479,14 @@ test_docs_document_proof_stamp_gate() {
     if grep -q 'git-guard.cjs prove --reviewed' "$REPO_DIR/PROVE-IT.md" \
         && grep -q 'git-guard.cjs prove --reviewed' "$REPO_DIR/README.md" \
         && grep -q 'fresh SDLC proof' "$REPO_DIR/README.md" \
-        && grep -q 'target repo root' "$REPO_DIR/README.md" \
-        && grep -q 'target repo root' "$REPO_DIR/PROVE-IT.md"; then
+        && grep -qi 'same-repository linked worktree' "$REPO_DIR/README.md" \
+        && grep -qi 'same-repository linked worktree' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q 'GIT_NAMESPACE' "$REPO_DIR/README.md" \
+        && grep -q 'GIT_OBJECT_DIRECTORY' "$REPO_DIR/README.md" \
+        && grep -q 'GIT_NAMESPACE' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q 'GIT_OBJECT_DIRECTORY' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q 'git -C' "$REPO_DIR/README.md" \
+        && grep -q 'git -C' "$REPO_DIR/PROVE-IT.md"; then
         pass "docs document the proof-stamp git gate"
     else
         fail "docs should explain the proof-stamp git gate"
@@ -3408,6 +4516,22 @@ test_universal_pretool_blocks_exported_git_env_proof_reuse
 test_universal_pretool_blocks_auto_exported_git_env_proof_reuse
 test_universal_pretool_blocks_workdir_proof_reuse
 test_universal_pretool_allows_workdir_with_fresh_proof
+test_universal_pretool_allows_linked_worktree_with_fresh_proof
+test_universal_pretool_supports_git_without_path_format
+test_universal_pretool_reports_git_context_inspection_failure
+test_universal_pretool_preserves_builtin_git_action_precedence
+test_universal_pretool_allows_inert_inherited_git_settings
+test_universal_pretool_allows_same_context_git_dir_without_index
+test_universal_pretool_blocks_inherited_linked_worktree_rebinding
+test_universal_pretool_blocks_inherited_config_worktree_proof_rebinding
+test_universal_pretool_preserves_case_sensitive_worktree_identity
+test_universal_pretool_allows_case_variant_linked_worktree_context
+test_universal_pretool_blocks_case_variant_windows_git_env
+test_universal_pretool_blocks_windows_cmd_path_expansion
+test_universal_pretool_blocks_symlink_parent_directory_rebinding
+test_universal_pretool_blocks_linked_worktree_without_fresh_proof
+test_universal_pretool_blocks_wrapper_directory_proof_rebinding
+test_universal_pretool_blocks_shell_alias_proof_rebinding
 test_universal_pretool_blocks_git_after_shell_prefixes
 test_universal_pretool_allows_non_git_command_mentions
 test_universal_pretool_does_not_crash_on_non_git_prototype_words
