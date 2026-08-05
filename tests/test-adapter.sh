@@ -105,11 +105,15 @@ run_node_hook_status() {
 }
 
 payload_for_command() {
-    COMMAND_TEXT="$1" node -e 'process.stdout.write(JSON.stringify({ tool_input: { command: process.env.COMMAND_TEXT } }));'
+    MSYS_NO_PATHCONV=1 COMMAND_TEXT="$1" node -e 'process.stdout.write(JSON.stringify({ tool_input: { command: process.env.COMMAND_TEXT } }));'
 }
 
 payload_for_command_with_workdir() {
-    COMMAND_TEXT="$1" WORKDIR_TEXT="$2" node -e 'process.stdout.write(JSON.stringify({ tool_input: { command: process.env.COMMAND_TEXT, workdir: process.env.WORKDIR_TEXT } }));'
+    local workdir_text="$2"
+    if [ "$IS_WINDOWS" = "true" ]; then
+        workdir_text=$(cygpath -w "$workdir_text")
+    fi
+    MSYS_NO_PATHCONV=1 COMMAND_TEXT="$1" WORKDIR_TEXT="$workdir_text" node -e 'process.stdout.write(JSON.stringify({ tool_input: { command: process.env.COMMAND_TEXT, workdir: process.env.WORKDIR_TEXT } }));'
 }
 
 deep_nested_eval_command() {

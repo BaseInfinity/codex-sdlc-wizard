@@ -1,0 +1,22 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  windows-npm:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Run npm integration suite through Git Bash
+        shell: bash
+        run: bash tests/test-npm.sh

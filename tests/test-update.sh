@@ -184,6 +184,38 @@ test_update_skips_customized_docs_by_default() {
     fi
 }
 
+# ---- Test 4b: check warns when customized docs retain stale model policy ----
+test_check_warns_when_customized_docs_retain_stale_model_policy() {
+    local ws stale_policy
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    stale_policy='CUSTOM POLICY: gpt-5'".5 at xhigh is the default root driver."
+    printf '%s\n' "$stale_policy" >> "$ws/SDLC.md"
+
+    local output check_output valid=true
+    output=$(run_update "$ws")
+    check_output=$(run_check "$ws")
+
+    grep -Fq "$stale_policy" "$ws/SDLC.md" || valid=false
+    echo "$output" | grep -Fq 'SDLC.md: customized -> skip' || valid=false
+    json_text_equals "$check_output" 'data.managed_files["SDLC.md"].status' "customized" || valid=false
+    json_text_equals "$check_output" 'data.managed_files["SDLC.md"].policy_warnings.length' "2" || valid=false
+    json_text_equals "$check_output" 'data.managed_files["SDLC.md"].policy_warnings[0].kind' "stale_model_reference" || valid=false
+    json_text_equals "$check_output" 'data.managed_files["SDLC.md"].policy_warnings[1].kind' "stale_default_reasoning" || valid=false
+    json_text_equals "$check_output" 'data.summary.policy_warnings' "2" || valid=false
+    json_text_equals "$check_output" 'data.policy_warnings.length' "2" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "check warns without rewriting customized docs with stale model policy"
+    else
+        fail "check missed stale model policy in a customized managed document"
+    fi
+}
+
 # ---- Test 5: force-all replaces customized generated docs ----
 test_update_force_all_replaces_customized_docs() {
     local ws
@@ -712,6 +744,34 @@ NODE
         pass "check parses BOM-prefixed hooks.json before classifying drift"
     else
         fail "check treated a BOM-prefixed hooks.json as broken"
+    fi
+}
+
+test_check_warns_when_managed_hook_event_is_disabled() {
+    local ws check_output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src" "$ws/.codex-home"
+
+    run_setup_local "$ws"
+    HOOKS_PATH="$ws/.codex/hooks.json" CONFIG_PATH="$ws/.codex-home/config.toml" node <<'NODE'
+const fs = require("fs");
+const stateKey = `${fs.realpathSync(process.env.HOOKS_PATH)}:pre_tool_use:0:0`;
+fs.writeFileSync(process.env.CONFIG_PATH, `[hooks.state.'${stateKey}']\nenabled = false\n`);
+NODE
+
+    check_output=$(cd "$ws" && CODEX_HOME="$ws/.codex-home" bash "$CHECK_SH" 2>/dev/null) || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].status' "warning" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks.json"].content_status' "match" || valid=false
+    json_text_equals "$check_output" 'data.summary.warning' "1" || valid=false
+    json_text_equals "$check_output" 'data.hook_activation.disabled_events[0].event' "PreToolUse" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "check warns when Codex disables a managed hook event"
+    else
+        printf '%s\n' "$check_output" >&2
+        fail "check reports disabled managed hooks as healthy matches"
     fi
 }
 
@@ -1310,7 +1370,7 @@ NODE
 
 # ---- Test 18: legacy model migration refreshes unchanged policy surfaces only ----
 test_update_refreshes_legacy_policy_surfaces_without_overwriting_customizations() {
-    local ws output valid=true
+    local ws output check_output valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
     mkdir -p "$ws/src"
@@ -1337,7 +1397,8 @@ EOF
     SKILL_PATH="$ws/.agents/skills/sdlc/SKILL.md" node <<'NODE'
 const fs = require("fs");
 const file = process.env.SKILL_PATH;
-fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/\n/g, "\r\n"));
+const content = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+fs.writeFileSync(file, content.replace(/\n/g, "\r\n"));
 NODE
     echo '# USER CUSTOM SETUP HELPER' > "$ws/.codex-home/skills/setup-wizard/SKILL.md"
     echo '# USER CUSTOM UPDATE HELPER' > "$ws/.codex-home/skills/update-wizard/SKILL.md"
@@ -1378,6 +1439,7 @@ NODE
     echo 'USER CUSTOM POLICY' >> "$ws/START-SDLC.md"
 
     output=$(run_update "$ws") || valid=false
+    check_output=$(run_check "$ws") || valid=false
 
     grep -Fq 'Default to `high`' "$ws/SDLC-LOOP.md" || valid=false
     grep -Fq 'USER CUSTOM POLICY' "$ws/START-SDLC.md" || valid=false
@@ -1391,6 +1453,14 @@ NODE
     echo "$output" | grep -Fq 'skills/setup-wizard: customized -> skip' || valid=false
     echo "$output" | grep -Fq 'skills/update-wizard: customized -> skip' || valid=false
     echo "$output" | grep -Fq 'START-SDLC.md: customized -> skip' || valid=false
+    json_text_equals "$check_output" 'data.managed_files["START-SDLC.md"].status' "customized" || valid=false
+    json_text_equals "$check_output" 'data.managed_files["START-SDLC.md"].policy_warnings[0].kind' "stale_default_reasoning" || valid=false
+
+    if [ "$valid" != "true" ]; then
+        printf '%s\n' '--- legacy policy migration diagnostics ---' >&2
+        grep -nE 'Default|xhigh|high|USER CUSTOM' "$ws/SDLC-LOOP.md" "$ws/START-SDLC.md" "$ws/.agents/skills/sdlc/SKILL.md" >&2 || true
+        printf '%s\n' "$check_output" >&2
+    fi
 
     rm -rf "$ws"
 
@@ -1711,6 +1781,7 @@ test_update_reports_uninitialized_repo
 test_update_check_only_reports_missing_without_repair
 test_update_repairs_missing_generated_docs
 test_update_skips_customized_docs_by_default
+test_check_warns_when_customized_docs_retain_stale_model_policy
 test_update_force_all_replaces_customized_docs
 test_update_repairs_windows_hook_drift
 test_update_repairs_legacy_js_node_hooks
@@ -1721,6 +1792,7 @@ test_update_repairs_missing_compact_guard_without_overwriting_custom_hooks
 test_update_repairs_managed_hook_drift_without_overwriting_host_hooks
 test_update_merges_hook_config_without_overwriting_customized_hook_scripts
 test_check_treats_bom_prefixed_hooks_as_customized
+test_check_warns_when_managed_hook_event_is_disabled
 test_update_replaces_and_backs_up_malformed_hooks
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills
