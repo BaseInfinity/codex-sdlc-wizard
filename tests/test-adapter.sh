@@ -2975,6 +2975,7 @@ test_package_has_npm_release_surface() {
         "update.sh" \
         "AGENTS.md" \
         "README.md" \
+        "WINDOWS-CODEX-DESKTOP-E2E.md" \
         "ROADMAP.md" \
         "SDLC-LOOP.md" \
         "START-SDLC.md" \
