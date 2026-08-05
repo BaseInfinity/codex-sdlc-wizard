@@ -61,9 +61,12 @@ If setup has not detected proof commands yet, pass them explicitly:
 node .codex/hooks/git-guard.cjs prove --reviewed --check "npm test"
 ```
 
-The stamp is stored under `.git/codex-sdlc/proof.json`, expires after four
-hours, and is tied to the current repo content so it does not dirty the
-worktree.
-Run guarded `git commit` / `git push` commands from the target repo root; repo
-context overrides such as `cd`, `git -C`, `--git-dir`, `--work-tree`, `GIT_DIR`,
-and `GIT_WORK_TREE` must be stamped in that target repo.
+The stamp is stored in Git metadata under `codex-sdlc/proof.json`, expires after
+four hours, and is tied to the current worktree content so it does not dirty the
+worktree. Guarded `git -C <path> commit` and `git -C <path> push` commands may
+use fresh proof from a same-repository linked worktree because the guard verifies
+the shared physical Git common directory. Unrelated repositories and other repo
+context overrides such as `cd`, `--git-dir`, `--work-tree`, `GIT_DIR`, and
+`GIT_WORK_TREE` remain blocked and require a session rooted in the target repo.
+Inherited `GIT_NAMESPACE` and `GIT_OBJECT_DIRECTORY` are also blocked because
+they retarget ref or object writes even when the worktree path is unchanged.

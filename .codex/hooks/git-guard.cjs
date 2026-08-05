@@ -7,7 +7,80 @@ const path = require("node:path");
 const PROOF_TTL_MS = 4 * 60 * 60 * 1000;
 const PROOF_RELATIVE_PATH = "codex-sdlc/proof.json";
 const WORKTREE_PROOF_PATH = ".codex-sdlc/proof.json";
-const GIT_REPOSITORY_ENV_NAMES = new Set(["GIT_COMMON_DIR", "GIT_DIR", "GIT_WORK_TREE"]);
+const GIT_INSPECTION_FAILURE = "inspection-failed";
+const GIT_REPOSITORY_ENV_NAMES = new Set([
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CEILING_DIRECTORIES",
+  "GIT_COMMON_DIR",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_NOSYSTEM",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_SYSTEM",
+  "GIT_DIR",
+  "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+  "GIT_INDEX_FILE",
+  "GIT_NAMESPACE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_WORK_TREE",
+]);
+const GIT_REPOSITORY_RETARGET_ENV_NAMES = new Set([
+  "GIT_COMMON_DIR",
+  "GIT_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_NAMESPACE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_WORK_TREE",
+]);
+const GIT_REPOSITORY_SAME_CONTEXT_ENV_NAMES = new Set([
+  "GIT_COMMON_DIR",
+  "GIT_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_WORK_TREE",
+]);
+
+function normalizedGitRepositoryEnvName(name) {
+  const value = String(name);
+  return process.platform === "win32" ? value.toUpperCase() : value;
+}
+
+function isGitRepositoryEnvName(name) {
+  const normalizedName = normalizedGitRepositoryEnvName(name);
+  return GIT_REPOSITORY_ENV_NAMES.has(normalizedName)
+    || /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(normalizedName);
+}
+
+function inheritedGitRepositoryOverride(environment = process.env) {
+  let sameContextOverride = "";
+  for (const [name, value] of Object.entries(environment)) {
+    const normalizedName = normalizedGitRepositoryEnvName(name);
+    if (GIT_REPOSITORY_RETARGET_ENV_NAMES.has(normalizedName)
+        && typeof value === "string" && value !== "") {
+      if (!GIT_REPOSITORY_SAME_CONTEXT_ENV_NAMES.has(normalizedName)) {
+        return normalizedName;
+      }
+      sameContextOverride ||= normalizedName;
+    }
+  }
+
+  return sameContextOverride;
+}
+
+function inheritedGitContextSetting(environment = process.env) {
+  for (const [name, value] of Object.entries(environment)) {
+    if (isGitRepositoryEnvName(name) && typeof value === "string" && value !== "") {
+      return normalizedGitRepositoryEnvName(name);
+    }
+  }
+
+  return "";
+}
+
+function nullGitConfigPath(value) {
+  const normalizedValue = String(value);
+  return normalizedValue === "/dev/null"
+    || (process.platform === "win32" && ["NUL", "NUL:", "\\\\.\\NUL"].includes(normalizedValue.toUpperCase()));
+}
 const UNCONFIGURED_PROOF_COMMANDS = new Set([
   "none",
   "none configured",
@@ -3748,6 +3821,7 @@ function gitRepositoryOverrideOption(words, startIndex) {
 }
 
 function gitEnvironmentRepositoryOverrideOption(words, limitIndex) {
+  const configCount = assignmentValueBeforeIndex(words, "GIT_CONFIG_COUNT", limitIndex);
   for (let index = 0; index < Math.min(limitIndex, words.length); index += 1) {
     const nextIndex = skipRedirection(words, index);
 
@@ -3756,24 +3830,43 @@ function gitEnvironmentRepositoryOverrideOption(words, limitIndex) {
       continue;
     }
 
-    const match = String(words[index]).match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
-
-    if (match && GIT_REPOSITORY_ENV_NAMES.has(match[1])) {
-      return match[1];
+    const name = gitRepositoryEnvName(words[index], configCount);
+    if (name !== "") {
+      return name;
     }
   }
 
   return "";
 }
 
-function gitRepositoryEnvName(word) {
-  const match = String(word ?? "").match(/^([A-Za-z_][A-Za-z0-9_]*)(?:=.*)?$/);
+function gitRepositoryEnvName(word, configCountText = String(process.env.GIT_CONFIG_COUNT ?? "")) {
+  const match = String(word ?? "").match(/^([A-Za-z_][A-Za-z0-9_]*)(?:=(.*))?$/);
 
-  if (match && GIT_REPOSITORY_ENV_NAMES.has(match[1])) {
-    return match[1];
+  if (!match || !isGitRepositoryEnvName(match[1])) {
+    return "";
   }
 
-  return "";
+  const name = normalizedGitRepositoryEnvName(match[1]);
+  const value = match[2];
+  if (value === undefined || GIT_REPOSITORY_RETARGET_ENV_NAMES.has(name)) {
+    return name;
+  }
+  if (name === "GIT_CEILING_DIRECTORIES"
+      || name === "GIT_CONFIG_NOSYSTEM"
+      || name === "GIT_DISCOVERY_ACROSS_FILESYSTEM") {
+    return "";
+  }
+  if (name === "GIT_CONFIG_COUNT") {
+    return /^\d+$/.test(value) && Number(value) === 0 ? "" : name;
+  }
+  if (/^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(name)) {
+    return /^\d+$/.test(configCountText) && Number(configCountText) === 0 ? "" : name;
+  }
+  if ((name === "GIT_CONFIG_GLOBAL" || name === "GIT_CONFIG_SYSTEM") && nullGitConfigPath(value)) {
+    return "";
+  }
+
+  return name;
 }
 
 function shellExportsGitRepositoryEnv(segment) {
@@ -3784,6 +3877,7 @@ function shellExportsGitRepositoryEnv(segment) {
     return false;
   }
 
+  const configCount = assignmentValueBeforeIndex(segment, "GIT_CONFIG_COUNT", segment.length);
   for (let index = executableIndex + 1; index < segment.length; index += 1) {
     const nextIndex = skipRedirection(segment, index);
 
@@ -3802,7 +3896,7 @@ function shellExportsGitRepositoryEnv(segment) {
       continue;
     }
 
-    if (gitRepositoryEnvName(word) !== "") {
+    if (gitRepositoryEnvName(word, configCount) !== "") {
       return true;
     }
   }
@@ -3811,6 +3905,7 @@ function shellExportsGitRepositoryEnv(segment) {
 }
 
 function segmentSetsGitRepositoryEnv(segment) {
+  const configCount = assignmentValueBeforeIndex(segment, "GIT_CONFIG_COUNT", segment.length);
   for (let index = 0; index < segment.length; index += 1) {
     const nextIndex = skipRedirection(segment, index);
 
@@ -3825,7 +3920,7 @@ function segmentSetsGitRepositoryEnv(segment) {
       return false;
     }
 
-    if (gitRepositoryEnvName(word) !== "") {
+    if (gitRepositoryEnvName(word, configCount) !== "") {
       return true;
     }
   }
@@ -4006,12 +4101,606 @@ function commandChangesDirectory(commandText, depth = 0) {
   return false;
 }
 
-function commandTargetsAnotherRepoContext(commandText) {
-  return commandHasGitRepositoryOverride(commandText) || commandChangesDirectory(commandText);
+function gitPathProbe(cwd, pathArguments, expectedValues, environment) {
+  for (const absolutePaths of [true, false]) {
+    const result = childProcess.spawnSync(
+      "git",
+      ["-C", cwd, "rev-parse", ...(absolutePaths ? ["--path-format=absolute"] : []), ...pathArguments],
+      {
+        encoding: "utf8",
+        env: environment,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 2000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
+    const values = String(result.stdout ?? "").trim().split(/\r?\n/);
+    if (result.status === 0
+        && values.length === expectedValues
+        && values.every((value) => value !== "")) {
+      return { ok: true, values };
+    }
+  }
+
+  return { ok: false, values: [] };
+}
+
+function physicalGitCommonDirectory(cwd, environment = process.env) {
+  const probe = gitPathProbe(cwd, ["--git-common-dir"], 1, environment);
+  if (!probe.ok) {
+    return { ok: false, path: "" };
+  }
+
+  try {
+    return {
+      ok: true,
+      path: fs.realpathSync.native(path.resolve(cwd, probe.values[0])),
+    };
+  } catch {
+    return { ok: false, path: "" };
+  }
+}
+
+function physicalGitContext(cwd, environment) {
+  const probe = gitPathProbe(
+    cwd,
+    ["--git-common-dir", "--absolute-git-dir", "--show-toplevel", "--git-path", "index"],
+    4,
+    environment,
+  );
+  if (!probe.ok) {
+    return { ok: false, values: [] };
+  }
+
+  try {
+    return { ok: true, values: probe.values.map((value, index) => {
+      const absolutePath = path.resolve(cwd, value);
+      try {
+        const physicalPath = fs.realpathSync.native(absolutePath);
+        const stats = fs.statSync(physicalPath, { bigint: true });
+        return {
+          device: String(stats.dev),
+          inode: String(stats.ino),
+          path: path.normalize(physicalPath),
+          exists: true,
+        };
+      } catch (error) {
+        if (index !== 3 || error?.code !== "ENOENT") {
+          throw error;
+        }
+        const physicalParent = fs.realpathSync.native(path.dirname(absolutePath));
+        const stats = fs.statSync(physicalParent, { bigint: true });
+        return {
+          device: String(stats.dev),
+          inode: String(stats.ino),
+          path: path.join(path.normalize(physicalParent), path.basename(absolutePath)),
+          exists: false,
+        };
+      }
+    }) };
+  } catch {
+    return { ok: false, values: [] };
+  }
+}
+
+function samePhysicalGitContext(cwd) {
+  const inheritedContext = physicalGitContext(cwd, canonicalGitRepositoryEnvironment());
+  const cleanContext = physicalGitContext(cwd, cleanGitContextEnvironment());
+  if (!inheritedContext.ok || !cleanContext.ok) {
+    return { ok: false, matches: false };
+  }
+
+  return {
+    ok: true,
+    matches: inheritedContext.values.every((value, index) => {
+      const cleanValue = cleanContext.values[index];
+      if (value.exists !== cleanValue.exists) {
+        return false;
+      }
+      const hasFilesystemIdentity = value.device !== "0" || value.inode !== "0";
+      const cleanHasFilesystemIdentity = cleanValue.device !== "0" || cleanValue.inode !== "0";
+      if (hasFilesystemIdentity && cleanHasFilesystemIdentity) {
+        return value.device === cleanValue.device
+          && value.inode === cleanValue.inode
+          && (value.exists || path.basename(value.path) === path.basename(cleanValue.path));
+      }
+      return value.path === cleanValue.path;
+    }),
+  };
+}
+
+function physicalGitWorkingDirectory(cwd, operand) {
+  try {
+    const physicalBase = fs.realpathSync.native(cwd);
+    const absoluteOperand = path.isAbsolute(operand);
+    const operandRoot = absoluteOperand ? path.parse(operand).root : "";
+    const operandSuffix = absoluteOperand ? operand.slice(operandRoot.length) : operand;
+    const pathComponents = process.platform === "win32"
+      ? operandSuffix.split(/[\\/]+/)
+      : operandSuffix.split(/\/+/);
+    let physicalTarget = fs.realpathSync.native(absoluteOperand ? operandRoot : physicalBase);
+    for (const component of pathComponents) {
+      if (component === "" || component === ".") {
+        continue;
+      }
+      if (component === "..") {
+        physicalTarget = path.dirname(physicalTarget);
+        continue;
+      }
+      const candidateTarget = path.join(physicalTarget, component);
+      const systemAlias = process.platform === "darwin"
+        && new Set(["/etc", "/tmp", "/var"]).has(path.normalize(candidateTarget));
+      if (fs.lstatSync(candidateTarget).isSymbolicLink() && !systemAlias) {
+        return "";
+      }
+      physicalTarget = fs.realpathSync.native(candidateTarget);
+    }
+    const lexicalTarget = path.resolve(physicalBase, operand);
+    const comparablePath = (value) => {
+      let normalized = path.normalize(value);
+      if (process.platform === "darwin" && /^\/(?:etc|tmp|var)(?:\/|$)/.test(normalized)) {
+        normalized = `/private${normalized}`;
+      }
+      return process.platform === "win32" || process.platform === "darwin"
+        ? normalized.toLowerCase()
+        : normalized;
+    };
+    const comparableLexicalTarget = comparablePath(lexicalTarget);
+    const comparablePhysicalTarget = comparablePath(physicalTarget);
+    return comparableLexicalTarget === comparablePhysicalTarget ? physicalTarget : "";
+  } catch {
+    return "";
+  }
+}
+
+function gitCompatiblePathOperand(operand) {
+  if (process.platform !== "win32" || !String(operand).startsWith("/")) {
+    return operand;
+  }
+
+  const converted = childProcess.spawnSync("cygpath", ["-w", operand], {
+    encoding: "utf8",
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 2000,
+  });
+  if (converted.status === 0 && converted.stdout.trim() !== "") {
+    return converted.stdout.trim();
+  }
+
+  const drivePath = String(operand).match(/^\/([A-Za-z])(?:\/(.*))?$/);
+  if (!drivePath) {
+    return "";
+  }
+
+  const suffix = String(drivePath[2] ?? "").replaceAll("/", "\\");
+  return `${drivePath[1].toUpperCase()}:\\${suffix}`;
+}
+
+function literalGitPathOperand(operand) {
+  const value = String(operand);
+  const unsafeCharacters = process.platform === "win32"
+    ? /[$`*?[\]{}%!^]/
+    : /[$`*?[\]{}]/;
+  return value !== ""
+    && !value.startsWith("~")
+    && !unsafeCharacters.test(value);
+}
+
+function hasIndirectGitExecutable(words, executableIndex) {
+  return executableIndex !== 0;
+}
+
+function safeLinkedWorktreeGitConfig(configText) {
+  const separatorIndex = String(configText).indexOf("=");
+  if (separatorIndex < 1) {
+    return false;
+  }
+
+  const key = String(configText).slice(0, separatorIndex).trim().toLowerCase();
+  const value = String(configText).slice(separatorIndex + 1).trim().toLowerCase();
+  if (key === "core.hookspath") {
+    return process.platform === "win32"
+      ? value === "nul" || value === "nul:"
+      : value === "/dev/null";
+  }
+
+  return (key === "core.fsmonitor" || key === "commit.gpgsign") && value === "false";
+}
+
+function directGitWorkingDirectory(words, executableIndex, initialCwd) {
+  if (gitEnvironmentRepositoryOverrideOption(words, executableIndex) !== "") {
+    return { ok: false, cwd: initialCwd, changed: false };
+  }
+
+  let cwd = initialCwd;
+  let changed = false;
+  let indirectContext = hasIndirectGitExecutable(words, executableIndex)
+    || !/^git(?:\.exe)?$/i.test(String(words[executableIndex]));
+  const safeGlobalFlags = new Set([
+    "-p",
+    "-P",
+    "--paginate",
+    "--no-pager",
+    "--no-replace-objects",
+    "--literal-pathspecs",
+    "--glob-pathspecs",
+    "--noglob-pathspecs",
+    "--icase-pathspecs",
+    "--no-optional-locks",
+  ]);
+
+  for (let index = executableIndex + 1; index < words.length; index += 1) {
+    const word = words[index];
+    const nextIndex = skipRedirection(words, index);
+
+    if (nextIndex !== index) {
+      index = nextIndex - 1;
+      continue;
+    }
+
+    if (word === "--" || isGitHelpOption(word)) {
+      break;
+    }
+
+    if (word === "-C") {
+      const operandIndex = indexAfterOptionOperand(words, index + 1);
+      if (operandIndex <= index + 1) {
+        return { ok: false, cwd: initialCwd, changed: false };
+      }
+      const rawOperand = words[operandIndex - 1];
+      if (!literalGitPathOperand(rawOperand)) {
+        return { ok: false, cwd: initialCwd, changed: false };
+      }
+      const operand = gitCompatiblePathOperand(rawOperand);
+      if (operand === "") {
+        return { ok: false, cwd: initialCwd, changed: false };
+      }
+      cwd = physicalGitWorkingDirectory(cwd, operand);
+      if (cwd === "") {
+        return { ok: false, cwd: initialCwd, changed: false };
+      }
+      changed = true;
+      index = operandIndex - 1;
+      continue;
+    }
+
+    if (word === "--git-dir" || word === "--work-tree" || word === "--namespace" || word === "--bare"
+        || /^--(?:git-dir|work-tree|namespace|bare)=/.test(word)) {
+      return { ok: false, cwd: initialCwd, changed: false };
+    }
+
+    if (word === "-c") {
+      const config = optionOperand(words, index + 1);
+      if (!safeLinkedWorktreeGitConfig(config.value)) {
+        indirectContext = true;
+      }
+      index = config.index;
+      continue;
+    }
+
+    if (safeGlobalFlags.has(word)) {
+      continue;
+    }
+
+    if (word === "--exec-path" || word === "--config-env") {
+      indirectContext = true;
+      index = indexAfterOptionOperand(words, index + 1) - 1;
+      continue;
+    }
+
+    if (/^--(?:exec-path|config-env)=/.test(word) || word.startsWith("-")) {
+      indirectContext = true;
+      continue;
+    }
+
+    break;
+  }
+
+  return changed && indirectContext
+    ? { ok: false, cwd, changed }
+    : { ok: true, cwd, changed };
+}
+
+function gitAliasConfigArguments(words, executableIndex) {
+  const args = [];
+  const subcommandDetails = gitSubcommandDetails(words, executableIndex + 1);
+  const limitIndex = subcommandDetails.index < 0 ? words.length : subcommandDetails.index;
+
+  for (let index = executableIndex + 1; index < limitIndex; index += 1) {
+    const word = words[index];
+    const nextIndex = skipRedirection(words, index);
+
+    if (nextIndex !== index) {
+      index = nextIndex - 1;
+      continue;
+    }
+
+    if (word === "-c") {
+      const config = optionOperand(words, index + 1);
+      if (config.value !== "") {
+        args.push("-c", config.value);
+      }
+      index = config.index;
+      continue;
+    }
+
+    const configEnv = word === "--config-env"
+      ? optionOperand(words, index + 1)
+      : { index, value: word.startsWith("--config-env=") ? word.slice("--config-env=".length) : "" };
+    if (configEnv.value !== "") {
+      const match = configEnv.value.match(/^([^=]+)=([A-Za-z_][A-Za-z0-9_]*)$/);
+      const value = match ? assignmentValueBeforeIndex(words, match[2], executableIndex) : "";
+      if (match && value !== "") {
+        args.push("-c", `${match[1]}=${value}`);
+      }
+      index = configEnv.index;
+    }
+  }
+
+  return args;
+}
+
+function sanitizedGitInspectionEnvironment() {
+  const environment = { ...process.env };
+  for (const name of Object.keys(environment)) {
+    if (GIT_REPOSITORY_RETARGET_ENV_NAMES.has(normalizedGitRepositoryEnvName(name))) {
+      delete environment[name];
+    }
+  }
+  return environment;
+}
+
+function cleanGitContextEnvironment() {
+  const environment = { ...process.env };
+  for (const name of Object.keys(environment)) {
+    if (isGitRepositoryEnvName(name)) {
+      delete environment[name];
+    }
+  }
+  return environment;
+}
+
+function canonicalGitRepositoryEnvironment() {
+  const environment = { ...process.env };
+  for (const [name, value] of Object.entries(process.env)) {
+    const normalizedName = normalizedGitRepositoryEnvName(name);
+    if (isGitRepositoryEnvName(name)) {
+      delete environment[name];
+      environment[normalizedName] = value;
+    }
+  }
+  return environment;
+}
+
+const repositoryAliasInspectionCache = new Map();
+let gitCommandInspectionCache = null;
+
+function repositoryGitAliases(cwd, configArgs = []) {
+  const cacheKey = JSON.stringify([cwd, configArgs]);
+  const cached = repositoryAliasInspectionCache.get(cacheKey);
+  if (cached) {
+    return { ok: cached.ok, aliases: new Map(cached.aliases) };
+  }
+
+  const aliases = new Map();
+  const result = childProcess.spawnSync(
+    "git",
+    ["-C", cwd, ...configArgs, "config", "--null", "--get-regexp", "^alias\\."],
+    {
+      encoding: "utf8",
+      env: sanitizedGitInspectionEnvironment(),
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 2000,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  if (result.status !== 0 && result.status !== 1) {
+    repositoryAliasInspectionCache.set(cacheKey, { ok: false, aliases: [] });
+    return { ok: false, aliases };
+  }
+
+  for (const record of String(result.stdout ?? "").split("\0")) {
+    const separatorIndex = record.indexOf("\n");
+    if (separatorIndex < 1) {
+      continue;
+    }
+    const key = record.slice(0, separatorIndex);
+    const value = record.slice(separatorIndex + 1);
+    addGitAliasConfig(aliases, `${key}=${value}`);
+  }
+
+  repositoryAliasInspectionCache.set(cacheKey, { ok: true, aliases: [...aliases] });
+  return { ok: true, aliases };
+}
+
+function gitCommandShadowsAlias(subcommand) {
+  if (gitCommandInspectionCache === null) {
+    const result = childProcess.spawnSync(
+      "git",
+      ["--list-cmds=builtins,main,others"],
+      {
+        encoding: "utf8",
+        env: sanitizedGitInspectionEnvironment(),
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 2000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
+    gitCommandInspectionCache = result.status === 0
+      ? { ok: true, commands: new Set(String(result.stdout ?? "").split(/\s+/).filter(Boolean)) }
+      : { ok: false, commands: new Set() };
+  }
+
+  return {
+    ok: gitCommandInspectionCache.ok,
+    shadowed: gitCommandInspectionCache.commands.has(subcommand),
+  };
+}
+
+function aliasesForGitContext(words, executableIndex, context) {
+  const configArgs = gitAliasConfigArguments(words, executableIndex);
+  const configured = context.changed
+    ? repositoryGitAliases(context.cwd, configArgs)
+    : { ok: true, aliases: new Map() };
+  if (!configured.ok) {
+    return configured;
+  }
+
+  for (const [name, value] of gitConfigAliases(words, executableIndex, executableIndex + 1)) {
+    configured.aliases.set(name, value);
+  }
+  const subcommand = gitSubcommandDetails(words, executableIndex + 1).subcommand.toLowerCase();
+  if (context.changed && configured.aliases.has(subcommand)) {
+    const commandPrecedence = gitCommandShadowsAlias(subcommand);
+    if (!commandPrecedence.ok) {
+      return { ok: false, aliases: configured.aliases };
+    }
+    if (commandPrecedence.shadowed) {
+      configured.aliases.delete(subcommand);
+    }
+  }
+  return configured;
+}
+
+function commandHasExecutableIndirection(commandText) {
+  const substitutionScanText = stripHeredocBodies(commandText, { quotedOnly: true });
+  return executableSubstitutionTexts(substitutionScanText).length > 0;
+}
+
+function guardedActionWorkingDirectory(commandText, initialCwd, expectedAction) {
+  const normalizedCommandText = String(commandText).trim();
+  const inheritedOverride = inheritedGitRepositoryOverride();
+  const inheritedContextSetting = inheritedGitContextSetting();
+  if (inheritedOverride && !GIT_REPOSITORY_SAME_CONTEXT_ENV_NAMES.has(inheritedOverride)) {
+    return { ok: false, cwd: initialCwd, inheritedOverride };
+  }
+  if (inheritedContextSetting) {
+    const inheritedSetting = inheritedOverride || inheritedContextSetting;
+    const initialContext = samePhysicalGitContext(initialCwd);
+    if (!initialContext.ok) {
+      return { ok: false, cwd: initialCwd, inspectionFailure: true, inheritedOverride: inheritedSetting };
+    }
+    if (!initialContext.matches) {
+      return { ok: false, cwd: initialCwd, inheritedOverride: inheritedSetting };
+    }
+  }
+  if (commandChangesDirectory(normalizedCommandText)) {
+    return { ok: false, cwd: initialCwd };
+  }
+
+  const executableCommandText = stripHeredocBodies(normalizedCommandText).trim();
+  const segmentDetails = commandSegmentsWithOperators(shellTokens(executableCommandText));
+  const segments = segmentDetails.map((segment) => segment.words);
+  let directContext = null;
+  let directActionIsLiteral = false;
+  for (const segment of segments) {
+    const executableIndex = firstExecutableIndex(segment);
+    if (executableIndex < 0 || executableName(segment[executableIndex]) !== "git") {
+      continue;
+    }
+    const directWords = segment.slice(executableIndex);
+    const candidateContext = directGitWorkingDirectory(segment, executableIndex, initialCwd);
+    const configuredAliases = aliasesForGitContext(segment, executableIndex, candidateContext);
+    if (!configuredAliases.ok) {
+      return { ok: false, cwd: initialCwd, inspectionFailure: true, inspectionSubject: "aliases" };
+    }
+    const directAction = directGitAction(directWords, configuredAliases.aliases, 0);
+    if (directAction !== expectedAction) {
+      continue;
+    }
+    if (directContext !== null) {
+      return { ok: false, cwd: initialCwd };
+    }
+    directContext = candidateContext;
+    directActionIsLiteral = gitSubcommandDetails(directWords, 1).subcommand === expectedAction;
+  }
+
+  if (directContext === null) {
+    return commandHasGitRepositoryOverride(commandText)
+      ? { ok: false, cwd: initialCwd }
+      : { ok: true, cwd: initialCwd };
+  }
+  if (!directContext.ok) {
+    return { ok: false, cwd: initialCwd };
+  }
+  if (!directContext.changed) {
+    return commandHasGitRepositoryOverride(commandText)
+      ? { ok: false, cwd: initialCwd }
+      : { ok: true, cwd: initialCwd };
+  }
+  if (!directActionIsLiteral || commandHasExecutableIndirection(normalizedCommandText)) {
+    return { ok: false, cwd: initialCwd };
+  }
+  if (segments.length !== 1
+      || segmentDetails[0].beforeOperator !== ""
+      || !new Set(["", ";"]).has(segmentDetails[0].afterOperator)) {
+    return { ok: false, cwd: initialCwd };
+  }
+  if (inheritedContextSetting) {
+    const inheritedSetting = inheritedOverride || inheritedContextSetting;
+    const targetContext = samePhysicalGitContext(directContext.cwd);
+    if (!targetContext.ok) {
+      return { ok: false, cwd: initialCwd, inspectionFailure: true, inheritedOverride: inheritedSetting };
+    }
+    if (!targetContext.matches) {
+      return { ok: false, cwd: initialCwd, inheritedOverride: inheritedSetting };
+    }
+  }
+
+  const initialCommonDir = physicalGitCommonDirectory(initialCwd);
+  const targetCommonDir = physicalGitCommonDirectory(directContext.cwd);
+  if (!initialCommonDir.ok || !targetCommonDir.ok) {
+    return { ok: false, cwd: initialCwd, inspectionFailure: true };
+  }
+  if (initialCommonDir.path !== targetCommonDir.path) {
+    return { ok: false, cwd: initialCwd };
+  }
+
+  return { ok: true, cwd: directContext.cwd };
+}
+
+function linkedWorktreeGuardedSubcommand(commandText, initialCwd) {
+  const normalizedCommandText = String(commandText).trim();
+  const segmentDetails = commandSegmentsWithOperators(shellTokens(stripHeredocBodies(normalizedCommandText)));
+
+  for (const segmentDetail of segmentDetails) {
+    const segment = segmentDetail.words;
+    const executableIndex = firstExecutableIndex(segment);
+    if (executableIndex < 0 || executableName(segment[executableIndex]) !== "git") {
+      continue;
+    }
+
+    const context = directGitWorkingDirectory(segment, executableIndex, initialCwd);
+    if (!context.changed) {
+      continue;
+    }
+    const configuredAliases = aliasesForGitContext(segment, executableIndex, context);
+    if (!configuredAliases.ok) {
+      const subcommand = gitSubcommandDetails(segment, executableIndex + 1).subcommand.toLowerCase();
+      const commandPrecedence = gitCommandShadowsAlias(subcommand);
+      if (!commandPrecedence.ok || !commandPrecedence.shadowed) {
+        return GIT_INSPECTION_FAILURE;
+      }
+      continue;
+    }
+    const action = directGitAction(segment.slice(executableIndex), configuredAliases.aliases, 0);
+    if (action === "commit" || action === "push") {
+      return action;
+    }
+  }
+
+  return "";
 }
 
 function assignmentValueBeforeIndex(words, name, limitIndex) {
-  let value = process.env[String(name)] ?? "";
+  const normalizedName = normalizedGitRepositoryEnvName(name);
+  let value = "";
+  for (const [environmentName, environmentValue] of Object.entries(process.env)) {
+    if (normalizedGitRepositoryEnvName(environmentName) === normalizedName) {
+      value = environmentValue ?? "";
+    }
+  }
 
   for (let index = 0; index < Math.min(limitIndex, words.length); index += 1) {
     const nextIndex = skipRedirection(words, index);
@@ -4023,7 +4712,7 @@ function assignmentValueBeforeIndex(words, name, limitIndex) {
 
     const match = String(words[index]).match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
 
-    if (match && match[1] === name) {
+    if (match && normalizedGitRepositoryEnvName(match[1]) === normalizedName) {
       value = match[2];
     }
   }
@@ -4156,14 +4845,14 @@ function directGitAction(words, aliases, depth) {
     return "";
   }
 
+  if ((subcommand === "commit" || subcommand === "push") && !gitSubcommandRequestsHelp(words, subcommandDetails.index + 1, subcommand)) {
+    return subcommand;
+  }
+
   const aliasAction = gitAliasAction(subcommand, aliases, words.slice(subcommandDetails.index + 1), depth + 1);
 
   if (aliasAction) {
     return aliasAction;
-  }
-
-  if ((subcommand === "commit" || subcommand === "push") && !gitSubcommandRequestsHelp(words, subcommandDetails.index + 1, subcommand)) {
-    return subcommand;
   }
 
   return nestedGitPushAction(subcommand, words.slice(subcommandDetails.index + 1));
@@ -5219,14 +5908,38 @@ if (/^\s*(?:(?:\/usr\/bin|\/bin)\/)?(?:bash|zsh|sh|dash|ksh|fish)(?:\s+-[\w-]+)*
   process.exit(0);
 }
 
-const subcommand = guardedGitSubcommand(command);
+const detectedSubcommand = guardedGitSubcommand(command) || linkedWorktreeGuardedSubcommand(command, commandCwd);
+const inspectionFailed = detectedSubcommand === GIT_INSPECTION_FAILURE;
+const subcommand = inspectionFailed ? "push" : detectedSubcommand;
+const guardedContext = subcommand === "commit" || subcommand === "push"
+  ? (inspectionFailed
+    ? { ok: false, cwd: commandCwd, inspectionFailure: true, inspectionSubject: "aliases" }
+    : guardedActionWorkingDirectory(command, commandCwd, subcommand))
+  : { ok: true, cwd: commandCwd };
+const actionCwd = guardedContext.ok ? guardedContext.cwd : commandCwd;
+
+function guardedContextFailureReason(action, context) {
+  if (context.inspectionFailure) {
+    if (context.inspectionSubject === "aliases") {
+      return "SDLC CHECKPOINT: cannot inspect target Git aliases safely, so this guarded action is blocked. Repair Git/config access or use a clean repo session, then retry.";
+    }
+    const inheritedDetail = context.inheritedOverride
+      ? ` while inherited ${context.inheritedOverride} is set`
+      : "";
+    return `SDLC CHECKPOINT: cannot inspect target Git context safely${inheritedDetail}, so this guarded action is blocked. Repair Git/config access or use a clean repo session, then retry.`;
+  }
+  if (context.inheritedOverride) {
+    return `SDLC CHECKPOINT: git ${action} cannot verify its target while inherited ${context.inheritedOverride} is set. Clear that Git repository override or start a clean repo session, then stamp fresh SDLC proof.`;
+  }
+  return `SDLC CHECKPOINT: git ${action} targets another repo context. Run from the target repo root and stamp fresh SDLC proof there.`;
+}
 
 if (subcommand === "commit") {
-  if (commandTargetsAnotherRepoContext(command)) {
-    block("SDLC CHECKPOINT: git commit targets another repo context. Run from the target repo root and stamp fresh SDLC proof there.");
+  if (!guardedContext.ok) {
+    block(guardedContextFailureReason("commit", guardedContext));
     process.exit(0);
   }
-  const proof = sdlcProofStatus(commandCwd);
+  const proof = sdlcProofStatus(actionCwd);
   if (proof.ok) {
     process.exit(0);
   }
@@ -5235,11 +5948,11 @@ if (subcommand === "commit") {
 }
 
 if (subcommand === "push") {
-  if (commandTargetsAnotherRepoContext(command)) {
-    block("SDLC CHECKPOINT: git push targets another repo context. Run from the target repo root and stamp fresh SDLC proof there.");
+  if (!guardedContext.ok) {
+    block(guardedContextFailureReason("push", guardedContext));
     process.exit(0);
   }
-  const proof = sdlcProofStatus(commandCwd);
+  const proof = sdlcProofStatus(actionCwd);
   if (proof.ok) {
     process.exit(0);
   }
