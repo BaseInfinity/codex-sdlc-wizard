@@ -18,13 +18,13 @@
 ## Priority queue
 
 1. **Accept the real Windows candidate** — [#79: Run the plugin submission candidate on real Windows Codex Desktop and CLI](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/79).
-2. **Restore unattended linked-worktree completion** — [#85: Allow proof-bound Git actions in same-repository linked worktrees](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/85).
+2. **Resolve the remaining Windows cleanup finding** — [#92: Investigate flaky access-denied proof cleanup on Windows](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/92).
 3. **Stop redundant reviewer test reruns** — [#73: Use proof-aware prompt-only native Codex review](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/73).
 4. **Timebox one cumulative upstream audit** — [#65: Audit upstream v1.74.0 through v1.90.0](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/65) together with [#81: Extend the audit through v1.91.0](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/81).
 5. **Reconcile the older handoff prototype** — [#67: Prototype handoff for hook merge, install consistency, cross-vendor review, and release drift](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/67).
 6. **Codify known-good upgrade stability** — [#84: Adopt a preserve-known-good stability contract](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/84).
-7. **Publish and verify `0.7.36`** — [#88: Publish and verify codex-sdlc-wizard 0.7.36](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/88).
-8. **Submit only the verified release** — [#66: Submit Codex SDLC Wizard to the universal Plugins Directory](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/66).
+7. **Publish and verify `0.7.36` only after Windows acceptance** — [#88: Publish and verify codex-sdlc-wizard 0.7.36](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/88).
+8. **Submit only the Windows-verified public release** — [#66: Submit Codex SDLC Wizard to the universal Plugins Directory](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/66).
 9. **Land dual-review hardening after the submission candidate** — [#64: Use `claude --print` as the cross-model reviewer](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/64) (`0.7.37`).
 10. **Prototype the optional orchestration lane** — [#72: Benchmark Sol High orchestration with Luna Max implementation subagents](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/72) (`0.8.0`).
 11. **Add one read-only health entrypoint** — [#82: Add a Codex-native doctor flow](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/82).

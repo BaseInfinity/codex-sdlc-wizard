@@ -74,7 +74,7 @@ test_roadmap_states_current_release() {
 test_roadmap_links_every_open_issue() {
     local issue_number
     local missing=0
-    local post_merge_open_issues="58 64 65 66 67 71 72 73 77 79 81 82 84 85 86 88"
+    local post_merge_open_issues="58 64 65 66 67 71 72 73 77 79 81 82 84 86 88 92"
 
     for issue_number in $post_merge_open_issues; do
         if ! grep -Fq "$REPOSITORY_URL/issues/$issue_number" "$ROADMAP"; then
@@ -94,7 +94,7 @@ test_roadmap_top_order_matches_release_priority() {
     local previous=0
     local current
     local issue_number
-    local ordered_issues="79 85 73 65 67 84 88 66"
+    local ordered_issues="79 92 73 65 67 84 88 66"
 
     for issue_number in $ordered_issues; do
         current=$(issue_line "$issue_number")
