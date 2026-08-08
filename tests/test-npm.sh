@@ -19,6 +19,20 @@ case "$(uname -s)" in
     *) IS_WINDOWS=false ;;
 esac
 
+native_node_path() {
+    local candidate="$1"
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        if ! cygpath -am "$candidate"; then
+            printf 'warning: could not convert npm package path for Windows: %s\n' "$candidate" >&2
+            printf '%s\n' "$candidate"
+        fi
+        return
+    fi
+
+    printf '%s\n' "$candidate"
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
@@ -196,7 +210,7 @@ test_local_npx_installs_into_clean_repo() {
         mkdir -p "$target_repo/src"
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard --yes >/dev/null 2>&1
+            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- codex-sdlc-wizard --yes >/dev/null 2>&1
         ) || installed=false
     fi
 
@@ -244,7 +258,7 @@ test_local_npx_setup_honors_model_profile_flag() {
     else
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
+            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
         ) || configured=false
     fi
 
@@ -296,13 +310,13 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
 
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
                 codex-sdlc-wizard setup --yes >/dev/null 2>&1
         ) || valid=false
 
         output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
                 codex-sdlc-wizard 2>&1
         ) || valid=false
     fi
@@ -347,19 +361,19 @@ test_packed_tarball_scratch_smoke() {
 
         setup_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
                 codex-sdlc-wizard setup --yes 2>&1
         ) || valid=false
 
         check_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
                 codex-sdlc-wizard check 2>&1
         ) || valid=false
 
         update_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
                 codex-sdlc-wizard update check-only 2>&1
         ) || valid=false
     fi
@@ -436,6 +450,7 @@ EOF
 
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -523,6 +538,7 @@ EOF
     set +e
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -581,6 +597,7 @@ EOF
     set +e
     (
         cd "$ws" || exit 1
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -604,7 +621,7 @@ EOF
 }
 
 test_unsupported_codex_version_blocks_handoff_before_mutation() {
-    local ws fakebin codex_home output status valid=true
+    local ws fakebin fakebin_win codex_bin codex_path_entry codex_home output status valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -623,12 +640,30 @@ exit 99
 EOF
     chmod +x "$fakebin/codex"
 
+    cat > "$fakebin/codex.cmd" <<'EOF'
+@echo off
+if "%~1"=="--version" (
+  echo launcher 9.9.9 warning
+  echo codex-cli 0.143.9
+  exit /b 0
+)
+exit /b 99
+EOF
+
+    codex_path_entry="$fakebin"
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+        codex_bin="$fakebin_win\\codex.cmd"
+    else
+        codex_bin="$fakebin/codex"
+    fi
+
     set +e
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
-        CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
-        PATH="$fakebin:$PATH" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
+        PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" 2>&1
     )
     status=$?
@@ -636,6 +671,7 @@ EOF
 
     [ "$status" -ne 0 ] || valid=false
     echo "$output" | grep -Fq 'Codex CLI 0.144.0 or newer' || valid=false
+    echo "$output" | grep -Fq 'found 0.143.9' || valid=false
     echo "$output" | grep -Fq 'npm install -g @openai/codex@latest' || valid=false
     [ ! -e "$ws/.codex/config.toml" ] || valid=false
     [ ! -e "$ws/.codex-sdlc/model-profile.json" ] || valid=false
@@ -650,7 +686,7 @@ EOF
 }
 
 test_configured_codex_binary_drives_installer_version_gate() {
-    local ws oldbin currentbin codex_home output status valid=true
+    local ws oldbin currentbin oldbin_win currentbin_win codex_bin codex_path_entry codex_home output status valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     oldbin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-old-bin.XXXXXX")
     currentbin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-current-bin.XXXXXX")
@@ -675,13 +711,36 @@ exit 0
 EOF
     chmod +x "$oldbin/codex" "$currentbin/codex"
 
+    cat > "$oldbin/codex.cmd" <<'EOF'
+@echo off
+if "%~1"=="--version" (
+  echo codex-cli 0.143.9
+  exit /b 0
+)
+exit /b 99
+EOF
+    cat > "$currentbin/codex.cmd" <<'EOF'
+@echo off
+if "%~1"=="--version" echo codex-cli 0.144.0
+exit /b 0
+EOF
+
+    codex_path_entry="$oldbin"
+    if oldbin_win=$(cd "$oldbin" && pwd -W 2>/dev/null) \
+        && currentbin_win=$(cd "$currentbin" && pwd -W 2>/dev/null); then
+        codex_bin="$currentbin_win\\codex.cmd"
+    else
+        codex_bin="$currentbin/codex"
+    fi
+
     set +e
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
-        CODEX_SDLC_CODEX_BIN="$currentbin/codex" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_HANDOFF_MODE=plain \
-        PATH="$oldbin:$PATH" \
+        PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" </dev/null 2>&1
     )
     status=$?
@@ -690,6 +749,8 @@ EOF
     [ "$status" -eq 0 ] || valid=false
     [ -f "$ws/.codex/config.toml" ] || valid=false
     grep -q '^model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    echo "$output" | grep -Fq 'Handing off into Codex for live setup using plain codex' || valid=false
+    echo "$output" | grep -Fq 'Scanning project...' && valid=false
     echo "$output" | grep -Fq 'found 0.143.9' && valid=false
 
     rm -rf "$ws" "$oldbin" "$currentbin" "$codex_home"
@@ -754,6 +815,7 @@ EOF
 
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -834,6 +896,7 @@ EOF
 
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -932,6 +995,7 @@ EOF
     set +e
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
