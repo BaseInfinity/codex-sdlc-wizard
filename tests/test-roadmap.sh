@@ -7,7 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 ROADMAP="$REPO_DIR/ROADMAP.md"
 PACKAGE_JSON="$REPO_DIR/package.json"
-REPOSITORY_URL="https://github.com/BaseInfinity/codex-sdlc-wizard"
+REPOSITORY_URL_REGEX='https://github[.]com/BaseInfinity/codex-sdlc-wizard'
+OPEN_ISSUES="58 64 65 66 71 72 73 77 79 82 84 86 88 92 93 95 96 97 98 99 100 101"
 PASSED=0
 FAILED=0
 
@@ -27,7 +28,29 @@ fail() {
 
 issue_line() {
     local issue_number="$1"
-    grep -nF "$REPOSITORY_URL/issues/$issue_number" "$ROADMAP" | cut -d: -f1 | head -n1 || true
+    grep -nE "$REPOSITORY_URL_REGEX/issues/$issue_number([^0-9]|$)" "$ROADMAP" | cut -d: -f1 | head -n1 || true
+}
+
+roadmap_has_issue() {
+    local issue_number="$1"
+    grep -Eq "$REPOSITORY_URL_REGEX/issues/$issue_number([^0-9]|$)" "$ROADMAP"
+}
+
+priority_section() {
+    awk '
+        /^## Priority queue$/ { in_queue = 1; next }
+        /^## / { if (in_queue) exit }
+        in_queue { print }
+    ' "$ROADMAP"
+}
+
+priority_lines() {
+    priority_section | grep -E '^[0-9]+[.] ' || true
+}
+
+priority_has_issue() {
+    local issue_number="$1"
+    priority_lines | grep -Eq "$REPOSITORY_URL_REGEX/issues/$issue_number([^0-9]|$)"
 }
 
 echo "=== Roadmap Tests ==="
@@ -71,30 +94,114 @@ test_roadmap_states_current_release() {
     fi
 }
 
-test_roadmap_links_every_open_issue() {
+test_roadmap_links_post_merge_open_issue_snapshot() {
     local issue_number
     local missing=0
-    local post_merge_open_issues="58 64 65 66 67 71 72 73 77 79 81 82 84 86 88 92"
-
-    for issue_number in $post_merge_open_issues; do
-        if ! grep -Fq "$REPOSITORY_URL/issues/$issue_number" "$ROADMAP"; then
-            echo "Missing issue link: #$issue_number"
+    # Offline completeness snapshot. Update this list in the same change that
+    # reconciles GitHub issue state and ROADMAP priority.
+    for issue_number in $OPEN_ISSUES; do
+        if ! priority_has_issue "$issue_number"; then
+            echo "Missing open issue link: #$issue_number"
             missing=$((missing + 1))
         fi
     done
 
     if [ "$missing" -eq 0 ]; then
-        pass "Roadmap links every GitHub issue that remains open after this change"
+        pass "Roadmap links the post-merge open-issue snapshot"
     else
-        fail "Roadmap is missing $missing open issue link(s)"
+        fail "Roadmap is missing $missing current open issue link(s)"
     fi
 }
 
-test_roadmap_top_order_matches_release_priority() {
+test_roadmap_rejects_unknown_issue_links() {
+    local issue_number
+    local unexpected=0
+
+    while IFS= read -r issue_number; do
+        [ -n "$issue_number" ] || continue
+        case " $OPEN_ISSUES " in
+            *" $issue_number "*) ;;
+            *)
+                echo "Unexpected issue link in priority queue: #$issue_number"
+                unexpected=$((unexpected + 1))
+                ;;
+        esac
+    done < <(priority_lines | grep -Eo "$REPOSITORY_URL_REGEX/issues/[0-9]+" | sed 's#.*/##' || true)
+
+    if [ "$unexpected" -eq 0 ]; then
+        pass "Roadmap priority queue contains only current open issues"
+    else
+        fail "Roadmap contains $unexpected stale or unknown issue link(s)"
+    fi
+}
+
+test_roadmap_priority_section_contains_only_numbered_items() {
+    local invalid=0
+    local line
+
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        if ! grep -Eq '^[0-9]+[.] ' <<<"$line"; then
+            echo "Malformed priority item: $line"
+            invalid=$((invalid + 1))
+        fi
+    done < <(priority_section)
+
+    if [ "$invalid" -eq 0 ]; then
+        pass "Roadmap priority section contains only numbered items"
+    else
+        fail "Roadmap has $invalid malformed priority item(s)"
+    fi
+}
+
+test_roadmap_excludes_resolved_issues() {
+    local issue_number
+    local stale=0
+    local closed_issues="67 81 91"
+
+    for issue_number in $closed_issues; do
+        if roadmap_has_issue "$issue_number"; then
+            echo "Roadmap retains resolved issue: #$issue_number"
+            stale=$((stale + 1))
+        fi
+    done
+
+    if [ "$stale" -eq 0 ]; then
+        pass "Roadmap excludes resolved issues"
+    else
+        fail "Roadmap retains $stale resolved issue(s)"
+    fi
+}
+
+test_roadmap_priority_numbers_are_contiguous() {
+    local expected=1
+    local actual
+    local inspected=0
+    local line
+
+    while IFS= read -r line; do
+        inspected=$((inspected + 1))
+        actual="${line%%.*}"
+        if [ "$actual" -ne "$expected" ]; then
+            fail "Roadmap priority numbering is not contiguous at item $actual"
+            return
+        fi
+        expected=$((expected + 1))
+    done < <(priority_lines)
+
+    if [ "$inspected" -eq 0 ]; then
+        fail "Roadmap has no numbered priorities"
+        return
+    fi
+
+    pass "Roadmap priority numbering is contiguous"
+}
+
+test_roadmap_head_order_matches_priority() {
     local previous=0
     local current
     local issue_number
-    local ordered_issues="79 92 73 65 67 84 88 66"
+    local ordered_issues="98 86 73 92 93 84 88 79 64 95 100 101 66"
 
     for issue_number in $ordered_issues; do
         current=$(issue_line "$issue_number")
@@ -105,21 +212,28 @@ test_roadmap_top_order_matches_release_priority() {
         previous="$current"
     done
 
-    pass "Roadmap orders the 0.7.36 release queue by priority"
+    pass "Roadmap orders the release and distribution queue by priority"
 }
 
-test_roadmap_keeps_upstream_issues_together() {
-    local line_65
-    local line_81
+test_roadmap_does_not_duplicate_issue_owners() {
+    local issue_number
+    local line
+    local seen=""
 
-    line_65=$(issue_line 65)
-    line_81=$(issue_line 81)
+    while IFS= read -r line; do
+        while IFS= read -r issue_number; do
+            [ -n "$issue_number" ] || continue
+            case " $seen " in
+                *" $issue_number "*)
+                    fail "Roadmap duplicates issue #$issue_number across priorities"
+                    return
+                    ;;
+            esac
+            seen="$seen $issue_number"
+        done < <(grep -Eo "$REPOSITORY_URL_REGEX/issues/[0-9]+" <<<"$line" | sed 's#.*/##' || true)
+    done < <(priority_lines)
 
-    if [ -n "$line_65" ] && [ "$line_65" = "$line_81" ]; then
-        pass "Roadmap consolidates the cumulative upstream audit links"
-    else
-        fail "Roadmap does not keep issues #65 and #81 in one timeboxed priority item"
-    fi
+    pass "Roadmap assigns each issue to at most one priority"
 }
 
 test_roadmap_requires_issue_owner_for_every_priority() {
@@ -127,11 +241,11 @@ test_roadmap_requires_issue_owner_for_every_priority() {
     local line
 
     while IFS= read -r line; do
-        if ! grep -Eq "$REPOSITORY_URL/issues/[0-9]+" <<<"$line"; then
+        if ! grep -Eq "$REPOSITORY_URL_REGEX/issues/[0-9]+([^0-9]|$)" <<<"$line"; then
             echo "Priority item has no GitHub issue: $line"
             missing_owner=$((missing_owner + 1))
         fi
-    done < <(grep -E '^[0-9]+\. ' "$ROADMAP")
+    done < <(priority_lines)
 
     if [ "$missing_owner" -eq 0 ]; then
         pass "Every roadmap priority has a GitHub issue owner"
@@ -158,9 +272,13 @@ test_roadmap_removes_stale_prose_sections() {
 test_roadmap_exists
 test_roadmap_declares_order_as_priority
 test_roadmap_states_current_release
-test_roadmap_links_every_open_issue
-test_roadmap_top_order_matches_release_priority
-test_roadmap_keeps_upstream_issues_together
+test_roadmap_links_post_merge_open_issue_snapshot
+test_roadmap_rejects_unknown_issue_links
+test_roadmap_excludes_resolved_issues
+test_roadmap_priority_section_contains_only_numbered_items
+test_roadmap_priority_numbers_are_contiguous
+test_roadmap_head_order_matches_priority
+test_roadmap_does_not_duplicate_issue_owners
 test_roadmap_requires_issue_owner_for_every_priority
 test_roadmap_removes_stale_prose_sections
 
