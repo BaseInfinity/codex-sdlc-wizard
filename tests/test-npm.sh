@@ -19,11 +19,14 @@ case "$(uname -s)" in
     *) IS_WINDOWS=false ;;
 esac
 
-native_node_path() {
+native_npm_package_spec() {
     local candidate="$1"
+    local native_path
 
     if [ "$IS_WINDOWS" = "true" ]; then
-        if ! cygpath -am "$candidate"; then
+        if native_path=$(cygpath -am "$candidate"); then
+            printf 'file:%s\n' "$native_path"
+        else
             printf 'warning: could not convert npm package path for Windows: %s\n' "$candidate" >&2
             printf '%s\n' "$candidate"
         fi
@@ -210,7 +213,7 @@ test_local_npx_installs_into_clean_repo() {
         mkdir -p "$target_repo/src"
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- codex-sdlc-wizard --yes >/dev/null 2>&1
+            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard --yes >/dev/null 2>&1
         ) || installed=false
     fi
 
@@ -258,7 +261,7 @@ test_local_npx_setup_honors_model_profile_flag() {
     else
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
+            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
         ) || configured=false
     fi
 
@@ -310,13 +313,13 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
 
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
+            CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard setup --yes >/dev/null 2>&1
         ) || valid=false
 
         output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
+            CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard 2>&1
         ) || valid=false
     fi
@@ -361,19 +364,19 @@ test_packed_tarball_scratch_smoke() {
 
         setup_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
+            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard setup --yes 2>&1
         ) || valid=false
 
         check_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
+            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard check 2>&1
         ) || valid=false
 
         update_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_node_path "$tarball_path")" -- \
+            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard update check-only 2>&1
         ) || valid=false
     fi
