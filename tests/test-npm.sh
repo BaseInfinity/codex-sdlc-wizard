@@ -199,7 +199,7 @@ test_local_npx_installs_into_clean_repo() {
     local npm_cache
     npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
 
-    local json tarball_name
+    local json tarball_name install_output=""
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
     tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
 
@@ -211,9 +211,9 @@ test_local_npx_installs_into_clean_repo() {
     else
         printf '%s' '{"name":"install-smoke","scripts":{"test":"jest"}}' > "$target_repo/package.json"
         mkdir -p "$target_repo/src"
-        (
-            cd "$target_repo"
-            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard --yes >/dev/null 2>&1
+        install_output=$(
+            cd "$target_repo" &&
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard --yes 2>&1
         ) || installed=false
     fi
 
@@ -233,13 +233,15 @@ test_local_npx_installs_into_clean_repo() {
     grep -q 'powershell\.exe' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
     grep -q 'bash-guard\.sh' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
 
-    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
-
     if [ "$installed" = "true" ]; then
         pass "local npm exec defaults to adaptive setup with universal Node hooks when automation passes --yes"
     else
+        printf '%s\n' "--- local npm exec install package spec ---" "$(native_npm_package_spec "$tarball_path")" >&2
+        printf '%s\n' "--- local npm exec install output ---" "$install_output" >&2
         fail "local npm exec did not route the default command through adaptive setup with universal Node hooks"
     fi
+
+    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
 }
 
 test_local_npx_setup_honors_model_profile_flag() {
@@ -249,7 +251,7 @@ test_local_npx_setup_honors_model_profile_flag() {
     local npm_cache
     npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
 
-    local json tarball_name
+    local json tarball_name configured_output=""
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
     tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
 
@@ -259,9 +261,9 @@ test_local_npx_setup_honors_model_profile_flag() {
     if [ -z "$tarball_name" ] || [ ! -f "$tarball_path" ]; then
         configured=false
     else
-        (
-            cd "$target_repo"
-            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
+        configured_output=$(
+            cd "$target_repo" &&
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard setup --yes --model-profile maximum 2>&1
         ) || configured=false
     fi
 
@@ -282,13 +284,15 @@ test_local_npx_setup_honors_model_profile_flag() {
         fi
     fi
 
-    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
-
     if [ "$configured" = "true" ]; then
         pass "local npm exec setup honors the model-profile flag"
     else
+        printf '%s\n' "--- local npm exec profile package spec ---" "$(native_npm_package_spec "$tarball_path")" >&2
+        printf '%s\n' "--- local npm exec profile output ---" "$configured_output" >&2
         fail "local npm exec setup did not honor the model-profile flag"
     fi
+
+    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
 }
 
 test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
@@ -298,7 +302,7 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
     local npm_cache
     npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
 
-    local json tarball_name tarball_path output
+    local json tarball_name tarball_path output="" setup_output=""
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
     tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
     tarball_path="$pack_dir/$tarball_name"
@@ -311,10 +315,10 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
         printf '%s' '{"name":"initialized-clone","scripts":{"test":"jest"}}' > "$target_repo/package.json"
         mkdir -p "$target_repo/src"
 
-        (
-            cd "$target_repo"
+        setup_output=$(
+            cd "$target_repo" &&
             MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
-                codex-sdlc-wizard setup --yes >/dev/null 2>&1
+                codex-sdlc-wizard setup --yes 2>&1
         ) || valid=false
 
         output=$(
@@ -332,13 +336,16 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
     [ -f "$target_repo/.codex-home-second/skills/update-wizard/SKILL.md" ] || valid=false
     [ -f "$target_repo/.codex-home-second/skills/feedback/SKILL.md" ] || valid=false
 
-    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
-
     if [ "$valid" = "true" ]; then
         pass "default CLI updates initialized clones without an explicit subcommand"
     else
+        printf '%s\n' "--- initialized clone package spec ---" "$(native_npm_package_spec "$tarball_path")" >&2
+        printf '%s\n' "--- initialized clone setup output ---" "$setup_output" >&2
+        printf '%s\n' "--- initialized clone update output ---" "$output" >&2
         fail "default CLI did not auto-run update for an initialized clone"
     fi
+
+    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
 }
 
 test_packed_tarball_scratch_smoke() {
@@ -391,13 +398,17 @@ test_packed_tarball_scratch_smoke() {
     echo "$check_output" | grep -q '"status": "match"' || valid=false
     echo "$update_output" | grep -Eq 'No managed files need updates|"status": "match"|match' || valid=false
 
-    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
-
     if [ "$valid" = "true" ]; then
         pass "packed tarball scratch smoke proves setup, check, and update on a clean repo"
     else
+        printf '%s\n' "--- packed scratch package spec ---" "$(native_npm_package_spec "$tarball_path")" >&2
+        printf '%s\n' "--- packed scratch setup output ---" "$setup_output" >&2
+        printf '%s\n' "--- packed scratch check output ---" "$check_output" >&2
+        printf '%s\n' "--- packed scratch update output ---" "$update_output" >&2
         fail "packed tarball scratch smoke did not prove the release surface cleanly"
     fi
+
+    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
 }
 
 test_default_interactive_hands_off_to_codex() {
