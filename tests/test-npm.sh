@@ -213,7 +213,7 @@ test_local_npx_installs_into_clean_repo() {
         mkdir -p "$target_repo/src"
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard --yes >/dev/null 2>&1
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard --yes >/dev/null 2>&1
         ) || installed=false
     fi
 
@@ -261,7 +261,7 @@ test_local_npx_setup_honors_model_profile_flag() {
     else
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
         ) || configured=false
     fi
 
@@ -313,13 +313,13 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
 
         (
             cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard setup --yes >/dev/null 2>&1
         ) || valid=false
 
         output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard 2>&1
         ) || valid=false
     fi
@@ -364,19 +364,19 @@ test_packed_tarball_scratch_smoke() {
 
         setup_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard setup --yes 2>&1
         ) || valid=false
 
         check_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard check 2>&1
         ) || valid=false
 
         update_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard update check-only 2>&1
         ) || valid=false
     fi
