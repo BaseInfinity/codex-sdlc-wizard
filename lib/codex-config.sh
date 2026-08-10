@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MINIMUM_GPT56_CODEX_VERSION="${MINIMUM_GPT56_CODEX_VERSION:-0.144.0}"
-MODEL_POLICY_SCHEMA_VERSION=2
+MODEL_POLICY_SCHEMA_VERSION=3
 
 require_gpt56_codex_version() {
     local version_output=""

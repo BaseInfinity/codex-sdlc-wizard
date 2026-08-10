@@ -1360,7 +1360,7 @@ const manifest = {
   },
   model_profile: {
     selected_profile: process.env.MODEL_PROFILE_SELECTED || "",
-    policy_schema_version: Number(process.env.MODEL_POLICY_SCHEMA_VERSION_SELECTED || "2"),
+    policy_schema_version: Number(process.env.MODEL_POLICY_SCHEMA_VERSION_SELECTED || "3"),
     baseline_reasoning: process.env.REASONING_BASELINE_SELECTED || "high",
     escalation_reasoning: process.env.REASONING_ESCALATION_SELECTED || "xhigh",
     repo_risk_signals: process.env.REASONING_RISK_SIGNALS_SELECTED || "none detected during setup"
