@@ -5,22 +5,29 @@ Codex does not have a native `/sdlc` command. This file is the honest replacemen
 ## The Loop
 
 1. Frame the slice
-   Restate the task, set a scope guard, state confidence (`HIGH` / `MEDIUM` / `LOW`), and say what will prove the work is done.
+   Restate one issue, freeze a closed behavior allowlist, one risk lane, and explicit exclusions, state confidence (`HIGH` / `MEDIUM` / `LOW`), and say what will prove the work is done. Feature creep becomes a separate follow-up issue unless omitting it would make the active change unsafe or nonfunctional.
 2. Pick the reasoning level
    Default to `high` for meaningful agentic coding. Escalate the difficult slice to `xhigh` for security review, migrations, destructive operations, long-running research, or challenging coding where `high` leaves unresolved risk. Repo-local instructions may define a measured exception.
    Use Max as a single-task escalation only when `xhigh` is not enough. Use Ultra only for subagent-backed parallel work that divides cleanly. Most tasks do not need Max or Ultra.
 3. Red first
    Write the failing test first when the task is code-shaped.
    If the task is setup, auth, or environment repair, define the failing observable first instead of pretending it is unit-testable.
+   Harness-repair lane: when broken SDLC enforcement or test bootstrap prevents RED for its own repair, declare the failing observable and exact file allowlist, make the smallest repair, then write and run the missing regression test immediately after. This never waives final proof or review.
 4. Green with the smallest change
    Make the narrowest change that can satisfy the red check.
 5. Prove it
    Run the targeted checks, capture the evidence, and make sure the result matches the original success condition.
 6. Review the diff
-   Read the diff back, note risks, and remove junk before thinking about a commit.
+   Author-review the exact incremental diff, note risks, and remove junk before each coherent green commit.
 7. Commit only after proof
-   Commits happen after tests and proof, not before.
-8. Escalate honestly
+   Commit coherent green slices after focused proof. Freeze the cumulative completion candidate and run one fresh broad proof before final review; relevant changes invalidate it and require a fresh final proof.
+8. Review to a decision
+   Review the full base-to-candidate diff once after it is stable. Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix now or a follow-up issue; P3 never blocks and is recorded only when worthwhile.
+   Give reviewers the fresh proof command and result and say `Do not rerun tests`; missing or stale proof is a blocker to report, not permission to launch another broad suite.
+   Reviewer role: inspect the frozen diff and return prioritized code-review findings only; do not edit, implement, run tests, re-plan, or perform follow-up work. The builder owns every correction through the normal SDLC loop.
+   When two reviewers are required, they assess the same frozen candidate independently, exchange compact findings once, and return a joint ledger. Allow at most two corrective rounds. If P0/P1 remains, decompose, abandon, or escalate; never waive it or continue an unbounded review loop.
+   Check every corrective finding against the base. If the blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
+9. Escalate honestly
    If blocked, name the blocker, show the evidence, and propose the next move.
 
 ## Task routing gate
