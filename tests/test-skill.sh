@@ -468,6 +468,8 @@ test_sdlc_workflow_is_bounded_and_repairable() {
         grep -Eqi '(at most|maximum|max(imum)?) two corrective rounds|two-corrective-round' "$file" || valid=false
         grep -Eqi 'exchange.*findings.*once|one.*exchange.*findings' "$file" || valid=false
         grep -Fqi 'do not rerun tests' "$file" || valid=false
+        grep -Fqi 'code-review findings only' "$file" || valid=false
+        grep -Eqi 'builder (owns|implements) every correction' "$file" || valid=false
         grep -Eqi 'harness.repair|repair.*enforcement' "$file" || valid=false
         grep -Eqi 'test.*immediately after|immediately.*test' "$file" || valid=false
         grep -Eqi 'loop until clean|repeat.*review.*until.*clean' "$file" && valid=false

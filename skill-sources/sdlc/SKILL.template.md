@@ -101,6 +101,8 @@ Use native Codex review for a second pass when the slice warrants it:
 
 Pass the fresh proof command and result in the custom review prompt and say `Do not rerun tests`; the reviewer inspects the diff and evidence. Missing or stale proof is a blocker to report, not permission to launch another broad suite.
 
+Reviewer role: inspect the frozen diff and return prioritized code-review findings only; do not edit, implement, run tests, re-plan, or perform follow-up work. The builder owns every correction through the normal SDLC loop.
+
 `auto_review` is for eligible approval prompts, not code-diff review. Do not require `/autoreview` unless the current Codex host exposes it as a verified feature.
 
 At each coherent green slice, author-review the exact incremental diff before committing. Once the cumulative candidate is stable, freeze it, run one fresh broad proof, and review the full base-to-candidate diff once. A relevant correction invalidates that completion proof; use narrow delta checks while fixing, then run a fresh final proof.

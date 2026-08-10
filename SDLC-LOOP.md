@@ -24,6 +24,7 @@ Codex does not have a native `/sdlc` command. This file is the honest replacemen
 8. Review to a decision
    Review the full base-to-candidate diff once after it is stable. Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix now or a follow-up issue; P3 never blocks and is recorded only when worthwhile.
    Give reviewers the fresh proof command and result and say `Do not rerun tests`; missing or stale proof is a blocker to report, not permission to launch another broad suite.
+   Reviewer role: inspect the frozen diff and return prioritized code-review findings only; do not edit, implement, run tests, re-plan, or perform follow-up work. The builder owns every correction through the normal SDLC loop.
    When two reviewers are required, they assess the same frozen candidate independently, exchange compact findings once, and return a joint ledger. Allow at most two corrective rounds. If P0/P1 remains, decompose, abandon, or escalate; never waive it or continue an unbounded review loop.
    Check every corrective finding against the base. If the blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
 9. Escalate honestly
