@@ -19,14 +19,21 @@ Use this skill for implementation, bug-fix, refactor, testing, release, publish,
 4. Task routing gate: before giving execution steps, identify the execution lane as CLI, Desktop/computer-use, browser automation, or human-only setup. If Microsoft browser sign-in, developer program qualification, account pickers, MFA, tenant consent, Office UI, admin portal state, or other auth-heavy screens are involved, say `Desktop/computer-use` first, then provide handoff guardrails before CLI/browser steps.
 5. If confidence is below 95% for the next slice, research more before coding. Ask the user only if the uncertainty stays material.
    Keep slices small enough that confidence stays high in practice. If confidence is not high, say why plainly and tighten the slice.
+   Freeze one issue, a closed behavior allowlist, one risk lane, and explicit exclusions. Feature creep becomes a separate follow-up issue unless omitting it would make the active change unsafe or nonfunctional.
 6. TDD is mandatory: write the failing test first, run it red, implement the minimum fix, then run it green.
+   Harness-repair lane: when broken SDLC enforcement or test bootstrap prevents the RED step for its own repair, declare the failing observable and exact file allowlist before editing, make the smallest repair, then write and run the missing regression test immediately after. This exception is only for repairing the harness itself; focused proof, final broad proof, and completion review still apply.
 7. Run the narrowest relevant verification first, then the full required suite before shipping.
 8. Self-review the exact diff. Check for regressions, scope creep, stale docs, and dead code.
 9. For release or publish work, treat version bump, docs, tests, publish, and verification as one SDLC slice.
 10. Review is mandatory. The portable contract is review behavior, not a slash-command name.
    Use native Codex review when appropriate: `codex review --uncommitted` before commit, `codex review --base <branch>` for branch or PR-sized diffs, and `codex review --commit <sha>` for a specific commit.
    Use `codex -c 'model_reasoning_effort="high"' review --uncommitted` for an enforced Sol-high gate, especially from `mixed`; apply the same prefix to `--base` or `--commit` reviews.
+   Pass the fresh proof command and result in the custom review prompt and say `Do not rerun tests`; the reviewer inspects the diff and evidence. Missing or stale proof is a blocker to report, not permission to launch another broad suite.
    `review_model` controls native Codex review model selection but does not set review reasoning independently. `auto_review` is for eligible approval prompts, not code-diff review. Do not require `/autoreview` unless the current Codex host exposes it as a verified feature.
+   At each coherent green slice, author-review the exact incremental diff before committing. Once the cumulative candidate is stable, freeze it, run one fresh broad proof, and review the full base-to-candidate diff once. A relevant correction invalidates that completion proof; use narrow delta checks while fixing, then run a fresh final proof.
+   Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix now or a follow-up issue; P3 never blocks and is recorded only when worthwhile.
+   When two reviewers are required, they assess the same frozen candidate independently, exchange compact findings once, and return a joint ledger. Allow at most two corrective rounds. If P0/P1 remains, decompose, abandon, or escalate; never waive it or continue an unbounded review loop.
+   For every corrective finding, check its provenance against the base. If the blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
    If the work is in a product repo, keep that session focused on the product repo. File a direct GitHub issue for proven reusable wizard findings and only switch to live wizard work if the product repo is actually blocked.
 11. Present a final summary with what changed, what was verified, and any residual risk.
 

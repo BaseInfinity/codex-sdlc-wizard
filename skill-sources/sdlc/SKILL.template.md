@@ -43,6 +43,9 @@ For meaningful work, make these visible before implementation:
 - scope
 - confidence
 - verification plan
+- one issue with a closed behavior allowlist, one risk lane, and explicit exclusions
+
+Feature creep becomes a separate follow-up issue unless omitting it would make the active change unsafe or nonfunctional.
 
 Check:
 
@@ -64,6 +67,8 @@ Prefer:
 3. prove-it
 
 If strict test-first is not realistic for the very first primitive or baseline slice, say so explicitly and get back to TDD as soon as the baseline exists.
+
+Harness-repair lane: when broken SDLC enforcement or test bootstrap prevents the RED step for its own repair, declare the failing observable and exact file allowlist before editing, make the smallest repair, then write and run the missing regression test immediately after. This is not a general test waiver; focused proof, final broad proof, and completion review still apply.
 
 ### 3. Prove-it
 
@@ -94,7 +99,17 @@ Use native Codex review for a second pass when the slice warrants it:
 
 `review_model` controls native Codex review model selection but does not set review reasoning independently. Mixed mode must use the explicit `high` command override above; apply the same prefix to `--base` or `--commit` reviews. This is a CLI review path, not a slash-command contract.
 
+Pass the fresh proof command and result in the custom review prompt and say `Do not rerun tests`; the reviewer inspects the diff and evidence. Missing or stale proof is a blocker to report, not permission to launch another broad suite.
+
 `auto_review` is for eligible approval prompts, not code-diff review. Do not require `/autoreview` unless the current Codex host exposes it as a verified feature.
+
+At each coherent green slice, author-review the exact incremental diff before committing. Once the cumulative candidate is stable, freeze it, run one fresh broad proof, and review the full base-to-candidate diff once. A relevant correction invalidates that completion proof; use narrow delta checks while fixing, then run a fresh final proof.
+
+Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix now or a follow-up issue; P3 never blocks and is recorded only when worthwhile.
+
+When two reviewers are required, they assess the same frozen candidate independently, exchange compact findings once, and return a joint ledger. Allow at most two corrective rounds. If P0/P1 remains, decompose, abandon, or escalate; never waive it or continue an unbounded review loop.
+
+For every corrective finding, check its provenance against the base. If the blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
 
 ### 5. CI and Merge Guard
 

@@ -10,6 +10,10 @@ SKILL_MD="$REPO_DIR/skills/codex-sdlc-wizard/SKILL.md"
 OPENAI_YAML="$REPO_DIR/skills/codex-sdlc-wizard/agents/openai.yaml"
 PLUGIN_MANIFEST="$REPO_DIR/.codex-plugin/plugin.json"
 REPO_SDLC_SKILL="$REPO_DIR/.agents/skills/sdlc/SKILL.md"
+SHIPPED_SDLC_SKILL="$REPO_DIR/skill-sources/sdlc/SKILL.template.md"
+SDLC_LOOP="$REPO_DIR/SDLC-LOOP.md"
+AGENTS_BASELINE="$REPO_DIR/templates/AGENTS.baseline.md"
+AGENTS_TEMPLATE="$REPO_DIR/templates/AGENTS.md.tmpl"
 REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
 GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
 REPO_AGENTS="$REPO_DIR/AGENTS.md"
@@ -452,6 +456,30 @@ test_repo_scoped_sdlc_skill_documents_native_review() {
     fi
 }
 
+test_sdlc_workflow_is_bounded_and_repairable() {
+    local file
+    local valid=true
+
+    for file in "$REPO_SDLC_SKILL" "$SHIPPED_SDLC_SKILL" "$SDLC_LOOP" "$AGENTS_BASELINE" "$AGENTS_TEMPLATE"; do
+        grep -Eqi 'closed (behavior )?allowlist' "$file" || valid=false
+        grep -Eqi 'feature creep.*(follow-up|separate).*issue|(follow-up|separate).*issue.*feature creep' "$file" || valid=false
+        grep -Eqi 'candidate-born.*outside.*allowlist.*(remove|delete)|(remove|delete).*candidate-born.*outside.*allowlist' "$file" || valid=false
+        grep -Eq 'P0.*P1.*P2.*P3' "$file" || valid=false
+        grep -Eqi '(at most|maximum|max(imum)?) two corrective rounds|two-corrective-round' "$file" || valid=false
+        grep -Eqi 'exchange.*findings.*once|one.*exchange.*findings' "$file" || valid=false
+        grep -Fqi 'do not rerun tests' "$file" || valid=false
+        grep -Eqi 'harness.repair|repair.*enforcement' "$file" || valid=false
+        grep -Eqi 'test.*immediately after|immediately.*test' "$file" || valid=false
+        grep -Eqi 'loop until clean|repeat.*review.*until.*clean' "$file" && valid=false
+    done
+
+    if [ "$valid" = "true" ]; then
+        pass "SDLC workflow terminates, controls scope, and permits bounded harness repair"
+    else
+        fail "SDLC workflow is missing bounded review, scope, severity, reconciliation, or harness-repair rules"
+    fi
+}
+
 test_skill_manifest_exists
 test_plugin_skill_resolves_bundled_scripts_from_plugin_root
 test_plugin_skill_handles_legacy_standalone_install
@@ -468,6 +496,7 @@ test_plugin_skill_bundle_avoids_duplicate_helper_discovery
 test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
+test_sdlc_workflow_is_bounded_and_repairable
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
