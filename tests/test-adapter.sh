@@ -137,6 +137,22 @@ deep_nested_eval_command() {
 echo "=== Codex SDLC Adapter Tests ==="
 echo ""
 
+write_fake_pester_module() {
+    local module_root="$1"
+    mkdir -p "$module_root/Pester"
+    cat > "$module_root/Pester/Pester.psm1" <<'EOF'
+function Invoke-Pester {
+    param(
+        [object]$Path,
+        [object]$ExcludeTag,
+        [switch]$EnableExit,
+        [switch]$CI
+    )
+}
+Export-ModuleMember -Function Invoke-Pester
+EOF
+}
+
 if [ "$IS_WINDOWS" = "true" ]; then
     PRETOOL_SCRIPT="$HOOKS_DIR/git-guard.ps1"
     SESSION_SCRIPT="$HOOKS_DIR/session-start.ps1"
@@ -221,8 +237,8 @@ test_universal_proof_runs_powershell_manifest_commands_in_pwsh() {
     cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
     cat > "$module_root/Pester/Pester.psm1" <<'EOF'
 function Invoke-Pester {
-    param([string]$Path)
-    Set-Content -LiteralPath $env:CODEX_SDLC_TEST_MARKER -Value "$($PSVersionTable.PSEdition)|$Path"
+    param([string]$Path, [switch]$EnableExit)
+    Set-Content -LiteralPath $env:CODEX_SDLC_TEST_MARKER -Value "$($PSVersionTable.PSEdition)|$Path|$EnableExit"
 }
 Export-ModuleMember -Function Invoke-Pester
 EOF
@@ -230,7 +246,7 @@ EOF
 {
   "scan": {
     "language": "PowerShell",
-    "test_command": "Invoke-Pester -Path tests"
+    "test_command": "Invoke-Pester -Path tests -EnableExit"
   }
 }
 EOF
@@ -246,9 +262,26 @@ EOF
     set -e
 
     [ "$status" -eq 0 ] || valid=false
-    grep -Fxq 'Core|tests' "$marker" 2>/dev/null || valid=false
-    echo "$output" | grep -Fq 'Running SDLC proof check: Invoke-Pester -Path tests' || valid=false
+    grep -Fxq 'Core|tests|True' "$marker" 2>/dev/null || valid=false
+    echo "$output" | grep -Fq 'Running SDLC proof check: Invoke-Pester -Path tests -EnableExit' || valid=false
     echo "$output" | grep -Fq 'Wrote SDLC proof:' || valid=false
+    rm -f "$ws/.git/codex-sdlc/proof.json"
+    cat > "$ws/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "scan": {
+    "language": "PowerShell",
+    "test_command": "Invoke-Pester -Path tests"
+  }
+}
+EOF
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MARKER="$win_marker" PSModulePath="$win_module_root;$PSModulePath" \
+        node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || valid=false
+    echo "$output" | grep -Fqi 'Unsafe Pester proof command' || valid=false
+    [ ! -e "$ws/.git/codex-sdlc/proof.json" ] || valid=false
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
@@ -256,6 +289,482 @@ EOF
     else
         printf '%s\n' "$output" >&2
         fail "universal proof sent a PowerShell manifest command to the wrong interpreter"
+    fi
+}
+
+test_universal_proof_rejects_shell_prefixed_powershell_hosts() {
+    local ws fakebin command output status valid=true
+    local -a commands
+    ws=$(mktemp -d)
+    fakebin=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks" "$ws/.codex-sdlc"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    if [ "$IS_WINDOWS" = "true" ]; then
+        cat > "$fakebin/pwsh.cmd" <<'EOF'
+@echo off
+if "%CODEX_SDLC_VALIDATE_ONLY%"=="1" exit /b 2
+echo Tests Passed: 0, Failed: 1 1>&2
+exit /b 0
+EOF
+    else
+        cat > "$fakebin/pwsh" <<'EOF'
+#!/bin/sh
+[ "$CODEX_SDLC_VALIDATE_ONLY" = "1" ] && exit 2
+echo 'Tests Passed: 0, Failed: 1' >&2
+exit 0
+EOF
+        chmod +x "$fakebin/pwsh"
+    fi
+    printf '%s\n' 'proof-target' > "$ws/app.txt"
+    (cd "$ws" && git init -q && git add app.txt)
+
+    commands=(
+        'echo setup && pwsh -Command "Invoke-Pester -Path tests"'
+        'bash -c '\''pwsh -Command "Invoke-Pester -Path tests"'\'''
+        'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -Command "Invoke-Pester -Path tests"'
+        'cmd.exe /c po^wershell.exe -NoProfile -Command "Invoke-Pester -Path tests"'
+        'po^wershell.exe -NoProfile -Command "Invoke-Pester -Path tests"'
+        'eval '\''pwsh -NoProfile -Command "Invoke-Pester -Path tests"'\'''
+        'printf '\''%s\n'\'' '\''pwsh -NoProfile -Command "Invoke-Pester -Path tests"'\'' | sh'
+    )
+    for command in "${commands[@]}"; do
+        TEST_COMMAND="$command" node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  scan: { language: "JavaScript", test_command: process.env.TEST_COMMAND },
+}));
+' "$ws/.codex-sdlc/manifest.json"
+        rm -f "$ws/.git/codex-sdlc/proof.json"
+
+        set +e
+        output=$(cd "$ws" && PATH="$fakebin:$PATH" node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+        status=$?
+        set -e
+
+        if [ "$status" -ne 2 ] || [ -e "$ws/.git/codex-sdlc/proof.json" ]; then
+            printf 'wrapped PowerShell proof was accepted: %s\n%s\n' "$command" "$output" >&2
+            valid=false
+        fi
+    done
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof rejects PowerShell hosts after shell prefixes"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof stamped a shell-prefixed bare Pester command"
+    fi
+}
+
+test_universal_proof_preserves_powershell_names_as_data() {
+    local ws fakebin output status query_output query_status stdin_output stdin_status powershell_output powershell_status valid=true
+    ws=$(mktemp -d)
+    fakebin=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks" "$ws/.codex-sdlc" "$ws/tests"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    cat > "$ws/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "scan": {
+    "language": "JavaScript",
+    "test_command": "printf '%s\\n' powershell pwsh"
+  }
+}
+EOF
+    printf '%s\n' 'proof-target' > "$ws/app.txt"
+    printf '%s\n' '#!/bin/sh' 'exit 0' > "$ws/tests/run.sh"
+    (cd "$ws" && git init -q && git add app.txt)
+
+    set +e
+    output=$(cd "$ws" && node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    echo "$output" | grep -Fq 'powershell' || valid=false
+    echo "$output" | grep -Fq 'pwsh' || valid=false
+    [ -e "$ws/.git/codex-sdlc/proof.json" ] || valid=false
+
+    rm -f "$ws/.git/codex-sdlc/proof.json"
+    cat > "$ws/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "scan": {
+    "language": "PowerShell",
+    "test_command": "'pwsh' | Select-String pwsh"
+  }
+}
+EOF
+    if ! command -v pwsh >/dev/null 2>&1 && ! command -v powershell.exe >/dev/null 2>&1; then
+        printf '%s\n' '#!/bin/sh' 'exit 0' > "$fakebin/pwsh"
+        chmod +x "$fakebin/pwsh"
+    fi
+    set +e
+    powershell_output=$(cd "$ws" && PATH="$fakebin:$PATH" node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+    powershell_status=$?
+    set -e
+    [ "$powershell_status" -eq 0 ] || valid=false
+    echo "$powershell_output" | grep -Fq 'Wrote SDLC proof:' || valid=false
+    [ -e "$ws/.git/codex-sdlc/proof.json" ] || valid=false
+
+    rm -f "$ws/.git/codex-sdlc/proof.json"
+    cat > "$ws/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "scan": {
+    "language": "JavaScript",
+    "test_command": "command -v pwsh >/dev/null || true"
+  }
+}
+EOF
+    set +e
+    query_output=$(cd "$ws" && PATH="$fakebin:$PATH" node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+    query_status=$?
+    set -e
+    [ "$query_status" -eq 0 ] || valid=false
+    echo "$query_output" | grep -Fq 'Wrote SDLC proof:' || valid=false
+    [ -e "$ws/.git/codex-sdlc/proof.json" ] || valid=false
+
+    rm -f "$ws/.git/codex-sdlc/proof.json"
+    cat > "$ws/.codex-sdlc/manifest.json" <<'EOF'
+{
+  "scan": {
+    "language": "JavaScript",
+    "test_command": "bash < tests/run.sh"
+  }
+}
+EOF
+    set +e
+    stdin_output=$(cd "$ws" && node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+    stdin_status=$?
+    set -e
+    [ "$stdin_status" -eq 0 ] || valid=false
+    echo "$stdin_output" | grep -Fq 'Wrote SDLC proof:' || valid=false
+    [ -e "$ws/.git/codex-sdlc/proof.json" ] || valid=false
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof preserves PowerShell host names used only as data"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof misclassified a PowerShell host name used as data"
+    fi
+}
+
+test_universal_proof_rejects_pester_without_exit_propagation() {
+    local ws fakebin command output status valid=true
+    local -a multiline_commands
+    ws=$(mktemp -d)
+    fakebin=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks" "$ws/.codex-sdlc"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    grep -Fq 'Explicit pwsh/powershell wrappers are not allowed' \
+        "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    if grep -Fq 'cmd.exe wrappers around PowerShell are not allowed' \
+        "$ws/.codex/hooks/git-guard.cjs"; then
+        valid=false
+    fi
+    grep -Fq "ParameterName -in @('EnableExit', 'CI')" \
+        "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    grep -Fq 'Where-Object { $_.Extent.Text -match' \
+        "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    grep -Fq "'pwsh-preview'" "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    grep -Fq "'powershell-preview'" "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    grep -Fq 'EncodedCommand' \
+        "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    grep -Fq "'Set-Alias', 'New-Alias'" \
+        "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    grep -Fq "'bash', 'dash'" \
+        "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    grep -Fq "'Start-Job'" \
+        "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    grep -Fq "Properties['Background']" \
+        "$ws/.codex/hooks/git-guard.cjs" || valid=false
+    printf '%s\n' 'proof-target' > "$ws/app.txt"
+    (cd "$ws" && git init -q && git add app.txt)
+    if ! command -v pwsh >/dev/null 2>&1 && ! command -v powershell.exe >/dev/null 2>&1; then
+        cat > "$fakebin/pwsh" <<'EOF'
+#!/bin/sh
+if [ "$CODEX_SDLC_VALIDATE_ONLY" = "1" ]; then
+    echo 'Unsafe PowerShell proof command: test validator rejected command.' >&2
+    exit 2
+fi
+exit 0
+EOF
+        chmod +x "$fakebin/pwsh"
+    fi
+
+    while IFS= read -r command; do
+        TEST_COMMAND="$command" node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  scan: { language: "PowerShell", test_command: process.env.TEST_COMMAND },
+}));
+' "$ws/.codex-sdlc/manifest.json"
+        rm -f "$ws/.git/codex-sdlc/proof.json"
+
+        set +e
+        output=$(cd "$ws" && PATH="$fakebin:$PATH" node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+        status=$?
+        set -e
+
+        if [ "$status" -ne 2 ] \
+            || ! echo "$output" | grep -Fqi 'Unsafe' \
+            || [ -e "$ws/.git/codex-sdlc/proof.json" ]; then
+            printf 'unsafe Pester case was accepted: %s\n' "$command" >&2
+            valid=false
+        fi
+    done <<'EOF'
+Invoke-Pester -Path tests
+$result = Invoke-Pester -Path tests
+Invoke-Pester -Path unit; Invoke-Pester -Path integration -EnableExit
+Invoke-Pester -Path tests # TODO: add -EnableExit
+Invoke-Pester -Path tests <# TODO: add -EnableExit #>
+Invoke-Pester -Path tests -Output "Remember -EnableExit next time"
+Invoke-Pester -Path tests -CI:$false
+pwsh -Command "Invoke-Pester -Path tests"
+pwsh -Command Invoke-Pester -Path tests
+pwsh '-Command' 'Invoke-Pester -Path tests'
+pwsh '-c' 'Invoke-Pester -Path tests'
+"pwsh" -Command "Invoke-Pester -Path tests"
+& "pwsh" -Command "Invoke-Pester -Path tests"
+pwsh -EncodedCommand SQBuAHYAbwBrAGUALQBQAGUAcwB0AGUAcgA=
+powershell.exe -EncodedCommand SQBuAHYAbwBrAGUALQBQAGUAcwB0AGUAcgA=
+powershell-preview -Command "Invoke-Pester -Path tests"
+pwsh-preview -Command "Invoke-Pester -Path tests"
+cmd.exe /c powershell.exe -Command "Invoke-Pester -Path tests"
+Write-Output "$(Invoke-Pester -Path tests)"
+& "Invoke-Pester" -Path tests
+Invoke-`Pester -Path tests
+Pester\Invoke-Pester -Path tests
+Write-Output C#; Invoke-Pester -Path tests
+Invoke-Pester -Path (Get-Tests -EnableExit)
+Write-Output "$(if ($true) { Invoke-Pester -Path tests })"
+pwsh -Command 'Write-Output ''setup''; Invoke-Pester -Path tests'
+$p = 'Invoke-Pester'; & $p -Path tests
+. Invoke-Pester -Path tests
+Invoke-Pester -Path tests -ExcludeTag `-EnableExit
+$payload = 'Invoke-Pester -Path tests'; pwsh -Command $payload
+$payload = 'Invoke-Pester -Path tests'; Invoke-Expression $payload
+iex 'Invoke-Pester -Path tests'
+Import-Module Pester; Set-Alias Run-Tests Invoke-Pester; Run-Tests -Path tests
+Start-Process pwsh -ArgumentList '-Command','Invoke-Pester -Path tests'
+Start-Job { Invoke-Pester -Path tests -CI } | Wait-Job | Receive-Job
+Invoke-Pester -Path tests -CI &
+EOF
+
+    multiline_commands=(
+        $'& `\n\'Invoke-Pester\' -Path tests'
+        $'$note = @\'\nit\'s text\n\'@\nInvoke-Pester -Path tests'
+    )
+    for command in "${multiline_commands[@]}"; do
+        TEST_COMMAND="$command" node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  scan: { language: "PowerShell", test_command: process.env.TEST_COMMAND },
+}));
+' "$ws/.codex-sdlc/manifest.json"
+        rm -f "$ws/.git/codex-sdlc/proof.json"
+
+        set +e
+        output=$(cd "$ws" && PATH="$fakebin:$PATH" node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+        status=$?
+        set -e
+
+        if [ "$status" -ne 2 ] \
+            || ! echo "$output" | grep -Fqi 'Unsafe' \
+            || [ -e "$ws/.git/codex-sdlc/proof.json" ]; then
+            printf 'unsafe multiline Pester case was accepted: %s\n' "$command" >&2
+            valid=false
+        fi
+    done
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof rejects Pester commands that can mask failed tests"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof accepted Pester without explicit failed-test exit propagation"
+    fi
+}
+
+test_universal_proof_accepts_pester_switch_after_quoted_separators() {
+    local ws fakebin module_root test_psmodule_path command output status valid=true
+    local -a multiline_commands
+    ws=$(mktemp -d)
+    fakebin=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks" "$ws/.codex-sdlc"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    printf '%s\n' 'proof-target' > "$ws/app.txt"
+    (cd "$ws" && git init -q && git add app.txt)
+    if command -v pwsh >/dev/null 2>&1 || command -v powershell.exe >/dev/null 2>&1; then
+        module_root="$ws/modules"
+        write_fake_pester_module "$module_root"
+        if [ "$IS_WINDOWS" = "true" ]; then
+            test_psmodule_path="$(cygpath -w "$module_root");$PSModulePath"
+        else
+            test_psmodule_path="$module_root${PSModulePath:+:$PSModulePath}"
+        fi
+    else
+        cat > "$fakebin/pwsh" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+        chmod +x "$fakebin/pwsh"
+        test_psmodule_path="${PSModulePath:-}"
+    fi
+
+    while IFS= read -r command; do
+        TEST_COMMAND="$command" node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  scan: { language: "PowerShell", test_command: process.env.TEST_COMMAND },
+}));
+' "$ws/.codex-sdlc/manifest.json"
+        rm -f "$ws/.git/codex-sdlc/proof.json"
+
+        set +e
+        output=$(cd "$ws" && PSModulePath="$test_psmodule_path" PATH="$fakebin:$PATH" \
+            node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+        status=$?
+        set -e
+
+        if [ "$status" -ne 0 ] \
+            || ! echo "$output" | grep -Fq 'Wrote SDLC proof:' \
+            || [ ! -e "$ws/.git/codex-sdlc/proof.json" ]; then
+            printf 'safe Pester case was rejected: %s\n%s\n' "$command" "$output" >&2
+            valid=false
+        fi
+    done <<'EOF'
+Invoke-Pester -Path "C:\R&D\tests" -EnableExit
+Invoke-Pester -Path 'C:\R|D\tests' -EnableExit
+(Invoke-Pester -Path tests -EnableExit)
+Invoke-Pester -Path 'Invoke-Pester.Tests.ps1' -EnableExit
+Pester\Invoke-Pester -Path tests -EnableExit
+Invoke-Pester -Path tests -CI
+Invoke-Pester -Path tests -CI:$false -EnableExit
+Write-Output Invoke-Pester
+Write-Output '$(Invoke-Pester -Path tests)'
+Write-Output "$(Invoke-Pester -Path (Join-Path . tests) -EnableExit)"
+Write-Output "literal `$(Invoke-Pester -Path tests)"; Invoke-Pester -Path tests -EnableExit
+& { Invoke-Pester -Path tests -EnableExit }
+EOF
+
+    multiline_commands=(
+        $'Invoke-Pester -Path tests `\n -EnableExit'
+    )
+    for command in "${multiline_commands[@]}"; do
+        TEST_COMMAND="$command" node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  scan: { language: "PowerShell", test_command: process.env.TEST_COMMAND },
+}));
+' "$ws/.codex-sdlc/manifest.json"
+        rm -f "$ws/.git/codex-sdlc/proof.json"
+
+        set +e
+        output=$(cd "$ws" && PSModulePath="$test_psmodule_path" PATH="$fakebin:$PATH" \
+            node .codex/hooks/git-guard.cjs prove --reviewed 2>&1)
+        status=$?
+        set -e
+
+        if [ "$status" -ne 0 ] \
+            || ! echo "$output" | grep -Fq 'Wrote SDLC proof:' \
+            || [ ! -e "$ws/.git/codex-sdlc/proof.json" ]; then
+            printf 'safe multiline Pester case was rejected: %s\n%s\n' "$command" "$output" >&2
+            valid=false
+        fi
+    done
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof accepts Pester failure propagation after quoted separators"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof rejected a valid Pester command containing quoted separators"
+    fi
+}
+
+test_universal_proof_validates_explicit_powershell_host_wrappers() {
+    local ws fakebin output status valid=true
+    ws=$(mktemp -d)
+    fakebin=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    printf '%s\n' 'proof-target' > "$ws/app.txt"
+    (cd "$ws" && git init -q && git add app.txt)
+    if ! command -v pwsh >/dev/null 2>&1 && ! command -v powershell.exe >/dev/null 2>&1; then
+        cat > "$fakebin/pwsh" <<'EOF'
+#!/bin/sh
+if [ "$CODEX_SDLC_VALIDATE_ONLY" = "1" ]; then
+    echo 'Unsafe Pester proof command: test validator rejected command.' >&2
+    exit 2
+fi
+exit 0
+EOF
+        chmod +x "$fakebin/pwsh"
+    fi
+
+    set +e
+    output=$(cd "$ws" && PATH="$fakebin:$PATH" node .codex/hooks/git-guard.cjs prove --reviewed \
+        --check 'pwsh -Command "Invoke-Pester -Path tests"' 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 2 ] || valid=false
+    echo "$output" | grep -Fqi 'Unsafe' || valid=false
+    [ ! -e "$ws/.git/codex-sdlc/proof.json" ] || valid=false
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof validates explicit PowerShell host wrappers"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof bypassed validation for an explicit PowerShell host wrapper"
+    fi
+}
+
+test_universal_proof_checks_every_pester_entry_from_zero_depth() {
+    local ws fakebin module_root test_psmodule_path output status valid=true
+    ws=$(mktemp -d)
+    fakebin=$(mktemp -d)
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    printf '%s\n' 'proof-target' > "$ws/app.txt"
+    (cd "$ws" && git init -q && git add app.txt)
+    if command -v pwsh >/dev/null 2>&1 || command -v powershell.exe >/dev/null 2>&1; then
+        module_root="$ws/modules"
+        write_fake_pester_module "$module_root"
+        if [ "$IS_WINDOWS" = "true" ]; then
+            test_psmodule_path="$(cygpath -w "$module_root");$PSModulePath"
+        else
+            test_psmodule_path="$module_root${PSModulePath:+:$PSModulePath}"
+        fi
+    else
+        cat > "$fakebin/pwsh" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+        chmod +x "$fakebin/pwsh"
+        test_psmodule_path="${PSModulePath:-}"
+    fi
+
+    set +e
+    output=$(cd "$ws" && PSModulePath="$test_psmodule_path" PATH="$fakebin:$PATH" \
+        node .codex/hooks/git-guard.cjs prove --reviewed \
+        --check true --check true --check true --check true --check true \
+        --check true --check true --check true --check true \
+        --check "Invoke-Pester -Path tests -EnableExit" 2>&1)
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || valid=false
+    echo "$output" | grep -Fq 'Wrote SDLC proof:' || valid=false
+    [ -e "$ws/.git/codex-sdlc/proof.json" ] || valid=false
+    rm -rf "$ws" "$fakebin"
+
+    if [ "$valid" = "true" ]; then
+        pass "universal proof validates every Pester check from recursion depth zero"
+    else
+        printf '%s\n' "$output" >&2
+        fail "universal proof leaked the Array.find callback index into Pester recursion depth"
     fi
 }
 
@@ -333,9 +842,11 @@ echo none-cli regression sentinel
 EOF
         cat > "$fakebin/pwsh" <<'EOF'
 #!/bin/sh
+[ "$CODEX_SDLC_VALIDATE_ONLY" = "1" ] && exit 0
 [ "$1" = "-NoProfile" ] || exit 97
-[ "$2" = "-Command" ] || exit 98
-exec sh -c "$3"
+[ "$2" = "-EncodedCommand" ] || exit 98
+decoded=$(node -e 'process.stdout.write(Buffer.from(process.argv[1], "base64").toString("utf16le"))' "$3")
+exec sh -c "$decoded"
 EOF
         chmod +x "$fakebin/none-cli" "$fakebin/pwsh"
     fi
@@ -4486,7 +4997,19 @@ test_docs_document_proof_stamp_gate() {
         && grep -q 'GIT_NAMESPACE' "$REPO_DIR/PROVE-IT.md" \
         && grep -q 'GIT_OBJECT_DIRECTORY' "$REPO_DIR/PROVE-IT.md" \
         && grep -q 'git -C' "$REPO_DIR/README.md" \
-        && grep -q 'git -C' "$REPO_DIR/PROVE-IT.md"; then
+        && grep -q 'git -C' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q 'Invoke-Pester' "$REPO_DIR/README.md" \
+        && grep -q -- '-EnableExit' "$REPO_DIR/README.md" \
+        && grep -q 'Invoke-Pester' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q -- '-EnableExit' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q 'scan.language' "$REPO_DIR/README.md" \
+        && grep -q '`"PowerShell"`' "$REPO_DIR/README.md" \
+        && grep -q '& ./tests.ps1' "$REPO_DIR/README.md" \
+        && grep -q 'mixed shell/PowerShell' "$REPO_DIR/README.md" \
+        && grep -q 'scan.language' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q '`"PowerShell"`' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q '& ./tests.ps1' "$REPO_DIR/PROVE-IT.md" \
+        && grep -q 'mixed shell/PowerShell' "$REPO_DIR/PROVE-IT.md"; then
         pass "docs document the proof-stamp git gate"
     else
         fail "docs should explain the proof-stamp git gate"
@@ -4506,6 +5029,12 @@ test_session_silent_when_present
 test_universal_pretool_blocks_commit
 test_universal_pretool_allows_commit_with_fresh_proof
 test_universal_proof_runs_powershell_manifest_commands_in_pwsh
+test_universal_proof_rejects_shell_prefixed_powershell_hosts
+test_universal_proof_preserves_powershell_names_as_data
+test_universal_proof_rejects_pester_without_exit_propagation
+test_universal_proof_accepts_pester_switch_after_quoted_separators
+test_universal_proof_checks_every_pester_entry_from_zero_depth
+test_universal_proof_validates_explicit_powershell_host_wrappers
 test_universal_proof_ignores_placeholder_manifest_commands
 test_universal_proof_preserves_commands_that_begin_with_none
 test_universal_pretool_blocks_stale_proof

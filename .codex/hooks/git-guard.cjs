@@ -97,6 +97,9 @@ const UNCONFIGURED_PROOF_COMMANDS = new Set([
   "-",
   "--",
 ]);
+const MAX_RECURSION_DEPTH = 20;
+const SHELL_NAMES = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"]);
+const WINDOWS_SHELL_NAMES = new Set(["cmd", "powershell", "pwsh"]);
 
 if (process.argv[2] === "prove") {
   process.exit(runProofCli(process.argv.slice(3)));
@@ -115,9 +118,6 @@ if (input.trim() !== "") {
 
 const command = String(payload?.tool_input?.command ?? payload?.command ?? "");
 const commandCwd = commandWorkingDirectory(payload);
-const MAX_RECURSION_DEPTH = 20;
-const SHELL_NAMES = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"]);
-const WINDOWS_SHELL_NAMES = new Set(["cmd", "powershell", "pwsh"]);
 
 function block(reason) {
   process.stdout.write(JSON.stringify({ decision: "block", reason }));
@@ -239,23 +239,176 @@ function isPowerShellShapedCommand(command) {
   return /^(?:&\s*)?[A-Za-z]+-[A-Za-z][A-Za-z0-9-]*(?:\s|$)/.test(command.trim());
 }
 
-function runPowerShellProofCommand(command, root) {
-  for (const host of ["pwsh", "powershell.exe"]) {
-    const result = childProcess.spawnSync(host, ["-NoProfile", "-Command", command], {
-      cwd: root,
-      stdio: "inherit",
-    });
-    if (result.error?.code === "ENOENT") {
-      continue;
-    }
-    return { ...result, host };
+function isPowerShellHostExecutable(word) {
+  const name = String(word ?? "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .pop()
+    .replace(/\.(?:exe|cmd)$/i, "")
+    .toLowerCase();
+  return new Set(["pwsh", "pwsh-preview", "powershell", "powershell-preview"]).has(name);
+}
+
+function normalizeWindowsPowerShellHostPaths(commandText) {
+  const hostName = String.raw`(?:pwsh(?:-preview)?|powershell(?:-preview)?)`;
+  const quotedPath = new RegExp(
+    String.raw`(^|[\s;&|()])"(?:[A-Za-z]:[\\/]|\\\\)[^"]*[\\/](${hostName})\.(exe|cmd)"`,
+    "gi",
+  );
+  const unquotedPath = new RegExp(
+    String.raw`(^|[\s;&|()])(?:[A-Za-z]:[\\/]|\\\\)[^\s;&|()'"]*[\\/](${hostName})\.(exe|cmd)`,
+    "gi",
+  );
+  const replacePath = (_match, prefix, host, extension) => `${prefix}${host}.${extension}`;
+
+  return String(commandText ?? "")
+    .replace(quotedPath, replacePath)
+    .replace(unquotedPath, replacePath);
+}
+
+function isShellCommandLookup(words) {
+  const commandIndex = words.findIndex((word) => executableName(word) === "command");
+  return commandIndex >= 0 && new Set(["-v", "-V"]).has(words[commandIndex + 1]);
+}
+
+function commandInvokesPowerShellHost(commandText, depth = 0) {
+  if (depth > 5) return true;
+
+  const normalizedCommand = normalizeWindowsPowerShellHostPaths(decodeCmdCaretEscapes(commandText));
+
+  for (const stdinPayload of shellStdinPayloads(normalizedCommand)) {
+    if (commandInvokesPowerShellHost(stdinPayload, depth + 1)) return true;
   }
 
+  for (const words of commandSegments(shellTokens(normalizedCommand))) {
+    if (isShellCommandLookup(words)) continue;
+    const executableIndex = prefixedExecutableIndex(words);
+    if (executableIndex < 0) continue;
+    if (isPowerShellHostExecutable(words[executableIndex])) return true;
+
+    const envPayload = envSplitStringPayload(words);
+    if (envPayload !== null && commandInvokesPowerShellHost(envPayload, depth + 1)) return true;
+
+    const evaluatedPayload = evalPayload(words);
+    if (evaluatedPayload !== null && commandInvokesPowerShellHost(evaluatedPayload, depth + 1)) return true;
+
+    const shellPayload = shellCommandPayload(words);
+    if (shellPayload !== null && commandInvokesPowerShellHost(shellPayload, depth + 1)) return true;
+
+    for (const helperPayload of helperCommandPayloads(words)) {
+      if (commandInvokesPowerShellHost(helperPayload, depth + 1)) return true;
+    }
+
+    if (executableName(words[executableIndex]) === "cmd") {
+      const cmdPayload = cmdShellPayload(words, executableIndex + 1);
+      if (cmdPayload !== null && commandInvokesPowerShellHost(decodeCmdCaretEscapes(cmdPayload), depth + 1)) return true;
+    }
+  }
+
+  return false;
+}
+
+function decodeCmdCaretEscapes(commandText) {
+  return String(commandText ?? "").replace(/\^(?:\r\n|\n|\r|.)/g, (escaped) => {
+    if (escaped === "^\r\n" || escaped === "^\n" || escaped === "^\r") return "";
+    return escaped.slice(1);
+  });
+}
+
+function powerShellProofValidator() {
+  return String.raw`
+using namespace System.Management.Automation.Language
+
+function Stop-UnsafeProof([string]$Message) {
+  [Console]::Error.WriteLine($Message)
+  exit 2
+}
+
+function Test-ProofScript([string]$Source) {
+  $tokens = $null
+  $parseErrors = $null
+  $ast = [Parser]::ParseInput($Source, [ref]$tokens, [ref]$parseErrors)
+  if ($parseErrors.Count -gt 0) {
+    Stop-UnsafeProof ('Unsafe PowerShell proof command: ' + $parseErrors[0].Message)
+  }
+
+  $backgroundPipelines = $ast.FindAll({
+    param($Node)
+    $property = $Node.PSObject.Properties['Background']
+    $null -ne $property -and $property.Value -eq $true
+  }, $true)
+  if ($backgroundPipelines.Count -gt 0) {
+    Stop-UnsafeProof 'Unsafe PowerShell proof command: background pipelines are not allowed in reviewed proof commands.'
+  }
+
+  $commands = $ast.FindAll({ param($Node) $Node -is [CommandAst] }, $true)
+  foreach ($command in $commands) {
+    $name = $command.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($name)) {
+      $firstElement = @($command.CommandElements)[0]
+      if ($firstElement -is [ScriptBlockExpressionAst]) {
+        continue
+      }
+      Stop-UnsafeProof 'Unsafe PowerShell proof command: dynamic command invocation is not allowed.'
+    }
+
+    $leafName = ($name -split '[\\/]')[-1]
+    if ($leafName -in @('Invoke-Expression', 'iex')) {
+      Stop-UnsafeProof 'Unsafe PowerShell proof command: runtime code evaluation is not allowed.'
+    }
+    if ($leafName -in @('Set-Alias', 'New-Alias', 'sal', 'nal')) {
+      Stop-UnsafeProof 'Unsafe PowerShell proof command: alias creation is not allowed in reviewed proof commands.'
+    }
+    if ($leafName -in @('bash', 'dash', 'fish', 'ksh', 'sh', 'zsh', 'cmd', 'cmd.exe', 'Start-Process', 'start', 'saps', 'Start-Job', 'Start-ThreadJob')) {
+      Stop-UnsafeProof 'Unsafe PowerShell proof command: nested shell and process launchers are not allowed in reviewed proof commands.'
+    }
+    if ($leafName -ieq 'Invoke-Pester') {
+      $failureExit = $command.CommandElements |
+        Where-Object { $_ -is [CommandParameterAst] -and $_.ParameterName -in @('EnableExit', 'CI') } |
+        Where-Object { $_.Extent.Text -match '(?i)^-(?:EnableExit|CI)(?::\s*\$?true)?$' } |
+        Select-Object -First 1
+      if ($null -eq $failureExit) {
+        Stop-UnsafeProof 'Unsafe Pester proof command: Invoke-Pester must include a literal -EnableExit or -CI switch; configuration objects and splatted switches are not statically accepted.'
+      }
+    }
+
+    if ($leafName -in @('pwsh', 'pwsh.exe', 'pwsh.cmd', 'powershell', 'powershell.exe', 'powershell.cmd', 'pwsh-preview', 'pwsh-preview.exe', 'pwsh-preview.cmd', 'powershell-preview', 'powershell-preview.exe', 'powershell-preview.cmd')) {
+      Stop-UnsafeProof 'Unsafe PowerShell proof command: Explicit pwsh/powershell wrappers are not allowed; provide the inner command directly.'
+    }
+  }
+}
+
+Test-ProofScript ([Environment]::GetEnvironmentVariable('CODEX_SDLC_PROOF_COMMAND'))
+`;
+}
+
+function runPowerShellHost(args, options) {
+  for (const host of ["pwsh", "powershell.exe"]) {
+    const result = childProcess.spawnSync(host, args, options);
+    if (result.error?.code === "ENOENT") continue;
+    return { ...result, host };
+  }
   return {
     status: null,
     error: new Error("neither pwsh nor powershell.exe is available"),
     host: "",
   };
+}
+
+function validatePowerShellProofCommand(command, root) {
+  return runPowerShellHost(["-NoProfile", "-NonInteractive", "-Command", powerShellProofValidator()], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, CODEX_SDLC_PROOF_COMMAND: command, CODEX_SDLC_VALIDATE_ONLY: "1" },
+  });
+}
+
+function runPowerShellProofCommand(command, root) {
+  const encodedCommand = Buffer.from(command, "utf16le").toString("base64");
+  return runPowerShellHost(["-NoProfile", "-EncodedCommand", encodedCommand], {
+    cwd: root,
+    stdio: "inherit",
+  });
 }
 
 function proofHelp() {
@@ -428,8 +581,25 @@ function runProofCli(args) {
   }
 
   for (const check of checks) {
-    process.stdout.write(`Running SDLC proof check: ${check}\n`);
     const usePowerShell = /powershell/i.test(configured.language) || isPowerShellShapedCommand(check);
+    if (!usePowerShell && commandInvokesPowerShellHost(check)) {
+      process.stderr.write("Unsafe PowerShell proof command: explicit or shell-wrapped PowerShell hosts are not allowed; provide the inner command directly.\n");
+      return 2;
+    }
+
+    if (usePowerShell) {
+      const validation = validatePowerShellProofCommand(check, root);
+      if (validation.error) {
+        process.stderr.write(`Cannot validate PowerShell proof check: ${validation.error.message}\n`);
+        return 1;
+      }
+      if (validation.status !== 0) {
+        process.stderr.write(validation.stderr || "Unsafe PowerShell proof command.\n");
+        return 2;
+      }
+    }
+
+    process.stdout.write(`Running SDLC proof check: ${check}\n`);
     const result = usePowerShell
       ? runPowerShellProofCommand(check, root)
       : childProcess.spawnSync(check, {
