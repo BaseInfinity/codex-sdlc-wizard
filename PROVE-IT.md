@@ -55,6 +55,14 @@ the proof-stamping command for the git gate:
 node .codex/hooks/git-guard.cjs prove --reviewed
 ```
 
+If cross-model review is required, wait for a clean Sol review and then run the bounded Fable High reviewer over the same frozen candidate:
+
+```bash
+node .codex/hooks/fable-review.cjs --base <ref> --consent-subscription-quota
+```
+
+This consumes Claude subscription quota and refuses API-key or alternate-provider authentication.
+
 For this repository, run and stamp the complete maintainer suite once with:
 
 ```bash
