@@ -81,6 +81,7 @@ for required in \
   ".codex/hooks/bash-guard.sh" \
   ".codex/hooks/session-start.sh" \
   ".codex/hooks/git-guard.cjs" \
+  ".codex/hooks/fable-review.cjs" \
   ".codex/hooks/session-start.cjs" \
   ".codex/hooks/compact-guard.cjs" \
   ".codex/hooks/git-guard.ps1" \
@@ -347,6 +348,7 @@ for touched_hook in \
   .codex/hooks/bash-guard.sh \
   .codex/hooks/session-start.sh \
   .codex/hooks/git-guard.cjs \
+  .codex/hooks/fable-review.cjs \
   .codex/hooks/session-start.cjs \
   .codex/hooks/compact-guard.cjs; do
   [ -f "$touched_hook" ] && mark_install_touched "$touched_hook"

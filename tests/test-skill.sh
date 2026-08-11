@@ -504,6 +504,24 @@ test_sdlc_review_reuses_one_broad_proof() {
     fi
 }
 
+test_sdlc_documents_bounded_fable_review() {
+    local file
+    local valid=true
+
+    for file in "$REPO_SDLC_SKILL" "$SHIPPED_SDLC_SKILL" "$SDLC_LOOP" "$AGENTS_BASELINE" "$AGENTS_TEMPLATE"; do
+        grep -Fq 'fable-review.cjs --base <ref> --consent-subscription-quota' "$file" || valid=false
+        grep -Fqi 'Fable High' "$file" || valid=false
+        grep -Eqi 'subscription[- ]quota' "$file" || valid=false
+        grep -Eqi 'only after.*Sol.*clean|Sol.*clean.*before.*Fable' "$file" || valid=false
+    done
+
+    if [ "$valid" = "true" ]; then
+        pass "SDLC workflow documents the bounded consent-based Fable High final review"
+    else
+        fail "SDLC workflow does not consistently document the bounded Fable High final review"
+    fi
+}
+
 test_skill_manifest_exists
 test_plugin_skill_resolves_bundled_scripts_from_plugin_root
 test_plugin_skill_handles_legacy_standalone_install
@@ -522,6 +540,7 @@ test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
 test_sdlc_workflow_is_bounded_and_repairable
 test_sdlc_review_reuses_one_broad_proof
+test_sdlc_documents_bounded_fable_review
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

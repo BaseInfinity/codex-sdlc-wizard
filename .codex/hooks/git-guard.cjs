@@ -105,6 +105,10 @@ if (process.argv[2] === "prove") {
   process.exit(runProofCli(process.argv.slice(3)));
 }
 
+if (process.argv[2] === "verify-proof") {
+  process.exit(runVerifyProofCli(process.argv.slice(3)));
+}
+
 const input = fs.readFileSync(0, "utf8");
 let payload = {};
 
@@ -688,6 +692,21 @@ function sdlcProofStatus(cwd = process.cwd()) {
   }
 
   return { ok: true, reason: "fresh proof is present", hint: "" };
+}
+
+function runVerifyProofCli(args) {
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) {
+    process.stderr.write("Usage: node .codex/hooks/git-guard.cjs verify-proof [--json]\n");
+    return 2;
+  }
+
+  const status = sdlcProofStatus();
+  if (args[0] === "--json") {
+    process.stdout.write(`${JSON.stringify(status)}\n`);
+  } else {
+    process.stdout.write(`${status.ok ? "PASS" : "FAIL"}: ${status.reason}\n`);
+  }
+  return status.ok ? 0 : 2;
 }
 
 function isRedirectionOperatorPrefix(value) {

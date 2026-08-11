@@ -130,6 +130,84 @@ test_update_check_only_reports_missing_without_repair() {
     fi
 }
 
+# ---- Test 3: first update installs newly introduced managed hook scripts ----
+test_update_installs_new_managed_hook_on_first_run() {
+    local ws
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    rm -f "$ws/.codex/hooks/fable-review.cjs"
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node <<'NODE'
+const fs = require("fs");
+const manifestPath = process.env.MANIFEST_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+delete manifest.managed_files[".codex/hooks/fable-review.cjs"];
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    local output check_output valid=true
+    output=$(run_update "$ws" 2>&1) || valid=false
+    check_output=$(run_check "$ws")
+
+    cmp -s "$ws/.codex/hooks/fable-review.cjs" "$REPO_DIR/.codex/hooks/fable-review.cjs" || valid=false
+    echo "$output" | grep -Fq '.codex/hooks/fable-review.cjs: untracked -> install' || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/fable-review.cjs"].status' "match" || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "first update installs a newly introduced managed hook script"
+    else
+        echo "$output" >&2
+        fail "first update did not install a newly introduced managed hook script"
+    fi
+}
+
+test_update_preserves_untracked_fable_hook_during_legacy_repair() {
+    local ws custom_before
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local "$ws"
+    printf '%s\n' '// user-owned Fable hook' > "$ws/.codex/hooks/fable-review.cjs"
+    custom_before=$(cat "$ws/.codex/hooks/fable-review.cjs")
+    cat > "$ws/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [{"hooks": [{"type": "command", "command": "node .codex/hooks/git-guard.js"}]}],
+    "SessionStart": [{"hooks": [{"type": "command", "command": "node .codex/hooks/session-start.js"}]}]
+  }
+}
+EOF
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node <<'NODE'
+const fs = require("fs");
+const manifestPath = process.env.MANIFEST_PATH;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+delete manifest.managed_files[".codex/hooks/fable-review.cjs"];
+delete manifest.managed_files[".codex/hooks/git-guard.cjs"];
+delete manifest.managed_files[".codex/hooks/session-start.cjs"];
+manifest.managed_files[".codex/hooks/git-guard.js"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+manifest.managed_files[".codex/hooks/session-start.js"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    local output valid=true
+    output=$(run_update "$ws" 2>&1) || valid=false
+
+    [ "$(cat "$ws/.codex/hooks/fable-review.cjs")" = "$custom_before" ] || valid=false
+    echo "$output" | grep -Fq '.codex/hooks/fable-review.cjs: untracked -> skip (preserve customization)' || valid=false
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "legacy repair preserves an untracked user-owned Fable hook"
+    else
+        echo "$output" >&2
+        fail "legacy repair overwrote an untracked user-owned Fable hook"
+    fi
+}
+
 # ---- Test 3: update repairs missing generated docs by default ----
 test_update_repairs_missing_generated_docs() {
     local ws
@@ -1921,6 +1999,8 @@ NODE
 
 test_update_reports_uninitialized_repo
 test_update_check_only_reports_missing_without_repair
+test_update_installs_new_managed_hook_on_first_run
+test_update_preserves_untracked_fable_hook_during_legacy_repair
 test_update_repairs_missing_generated_docs
 test_update_skips_customized_docs_by_default
 test_check_warns_when_customized_docs_retain_stale_model_policy

@@ -99,6 +99,8 @@ Use native Codex review for a second pass when the slice warrants it:
 
 `review_model` controls native Codex review model selection but does not set review reasoning independently. Mixed mode must use the explicit `high` command override above; apply the same prefix to `--base` or `--commit` reviews. This is a CLI review path, not a slash-command contract.
 
+When repo policy requires cross-model review, run Fable High only after Sol is clean: `node .codex/hooks/fable-review.cjs --base <ref> --consent-subscription-quota`. Consent is explicit because this uses Claude subscription quota. The wrapper refuses API-key and alternate-provider auth, disables tools/MCP/session persistence, reuses the current proof, and binds the receipt to the frozen staged candidate.
+
 Run one broad proof run total on the frozen candidate through `node .codex/hooks/git-guard.cjs prove --reviewed`; do not run the suite directly and then rerun it through the guard. Use a prompt-only review when supplying custom proof-aware instructions. A custom prompt must not be combined with `--uncommitted`, `--base`, or `--commit`; those predefined target flags are for reviews without a custom prompt. Include the exact base identity, frozen candidate tree identity, proof command, and result and say `Do not rerun tests`. Targeted verification is allowed only for a concrete suspected defect; never rerun the broad suite. Missing or stale proof is a blocker to report, not permission to launch another broad suite.
 
 Reviewer role: inspect the frozen diff and return prioritized code-review findings only; do not edit, implement, run tests, re-plan, or perform follow-up work. The builder owns every correction through the normal SDLC loop.
