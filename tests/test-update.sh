@@ -1581,9 +1581,12 @@ NODE
     check_output=$(run_check "$ws") || valid=false
 
     grep -Fq 'Default to `high`' "$ws/SDLC-LOOP.md" || valid=false
+    grep -Fqi 'one broad proof run total' "$ws/AGENTS.md" || valid=false
     grep -Fq 'USER CUSTOM POLICY' "$ws/START-SDLC.md" || valid=false
     grep -Fq 'Use xhigh reasoning by default for this repo.' "$ws/START-SDLC.md" || valid=false
     grep -Fq 'model_reasoning_effort="high"' "$ws/.agents/skills/sdlc/SKILL.md" || valid=false
+    grep -Fqi 'one broad proof run total' "$ws/.agents/skills/sdlc/SKILL.md" || valid=false
+    grep -Eqi 'prompt-only.*review|review.*prompt-only' "$ws/.agents/skills/sdlc/SKILL.md" || valid=false
     grep -Fq 'USER CUSTOM SETUP HELPER' "$ws/.codex-home/skills/setup-wizard/SKILL.md" || valid=false
     grep -Fq 'USER CUSTOM UPDATE HELPER' "$ws/.codex-home/skills/update-wizard/SKILL.md" || valid=false
     json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.managed_files[".agents/skills/sdlc/SKILL.md"].startsWith("sha256:")' "true" || valid=false
@@ -1655,7 +1658,7 @@ EOF
     [ "$(cat "$ws/.codex-sdlc/model-profile.json")" = "$profile_before" ] || valid=false
     echo "$output" | grep -Fq '.codex-sdlc/model-profile.json: customized -> skip' || valid=false
     json_text_equals "$check_output" 'data.managed_files[".codex-sdlc/model-profile.json"].status' "customized" || valid=false
-    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "2" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "3" || valid=false
     echo "$second_output" | grep -Fq 'No changes applied.' || valid=false
     echo "$second_output" | grep -Fq 'refresh model policy' && valid=false
     echo "$second_output" | grep -Fq 'refresh generated model policy' && valid=false
@@ -1714,7 +1717,7 @@ NODE
     output=$(run_update "$ws") || valid=false
     second_output=$(run_update "$ws") || valid=false
 
-    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "2" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "3" || valid=false
     [ "$(cat "$ws/.codex-sdlc/model-profile.json")" = "$profile_before" ] || valid=false
     [ "$(cat "$ws/AGENTS.md")" = "$agents_before" ] || valid=false
     [ "$(cat "$ws/SDLC-LOOP.md")" = "$loop_before" ] || valid=false

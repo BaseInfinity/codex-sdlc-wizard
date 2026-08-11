@@ -48,12 +48,21 @@ Do not commit until you can answer:
 - The proof is recent
 - The diff matches the proof
 
-After the checks and self-review are complete, stamp local proof for the git
-gate:
+After focused checks and self-review, run required broad verification through
+the proof-stamping command for the git gate:
 
 ```bash
 node .codex/hooks/git-guard.cjs prove --reviewed
 ```
+
+For this repository, run and stamp the complete maintainer suite once with:
+
+```bash
+node .codex/hooks/git-guard.cjs prove --reviewed --check "node scripts/run-proof-suite.cjs"
+```
+
+Do not run `node scripts/run-proof-suite.cjs` immediately before this command;
+the proof-stamping invocation already runs it.
 
 If setup has not detected proof commands yet, pass them explicitly:
 
