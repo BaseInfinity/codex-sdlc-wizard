@@ -109,6 +109,8 @@ Reviewer role: inspect the frozen diff and return prioritized code-review findin
 
 At each coherent green slice, author-review the exact incremental diff before committing. Once the cumulative candidate is stable, freeze it, run one fresh broad proof, and review the full base-to-candidate diff once. A relevant correction invalidates that completion proof; use narrow delta checks while fixing, then run a fresh final proof.
 
+Incremental checkpoint: use affected proof, exact-diff author review, and at most one risk-based reviewer before committing a coherent green slice. At the completion boundary, review the whole base-to-candidate diff with Sol High and then Fable High. A finding produces one bounded corrective delta with targeted proof. A third same-plan correction means stop; human approval may authorize a replan with newly scoped work, not silently extend the exhausted plan. Record ten-delivery pilot outcomes in `benchmarks/review-cadence.csv` before making this cadence permanent.
+
 Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix now or a follow-up issue; P3 never blocks and is recorded only when worthwhile.
 
 When two reviewers are required, they assess the same frozen candidate independently, exchange compact findings once, and return a joint ledger. Allow at most two corrective rounds. If P0/P1 remains, decompose, abandon, or escalate; never waive it or continue an unbounded review loop.

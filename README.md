@@ -377,6 +377,12 @@ node .codex/hooks/fable-review.cjs --base main --consent-subscription-quota
 
 The consent flag is required because the review consumes Claude subscription quota. The wrapper verifies Claude first-party subscription auth, refuses API keys and alternate providers, disables tools/MCP/session persistence, reuses the current SDLC proof, and writes a candidate-bound receipt under Git metadata. It does not create a metered API-key charge when the verified subscription lane is used.
 
+### Incremental checkpoints and the completion boundary
+
+For each coherent green slice, run affected proof, author-review the exact incremental diff, and use at most one risk-based reviewer before committing. The final completion boundary is deliberately broader: freeze the candidate, run the broad proof once, and have Sol High and then Fable High review the whole base-to-candidate diff. Fix a blocker as one bounded corrective delta with targeted proof. A third same-plan correction means stop; human approval may authorize a replan with newly scoped work, not silently extend the exhausted plan.
+
+This cadence is a measured ten-delivery pilot, not permanent ceremony. Record delivery, duplicate-proof, per-reviewer disposition and confidence, reconciliation, quota/token cost, correction, tripwire, CI, milestone, and release outcomes in `benchmarks/review-cadence.csv`, then run `bash scripts/summarize-review-cadence.sh`. After ten eligible deliveries across at least two strategies, a human compares the arms and chooses whether to keep, tune, or sunset it.
+
 ## Repo-Scoped Skills
 
 `install.sh` and `setup.sh` scaffold repo-local Codex skills under `.agents/skills`.

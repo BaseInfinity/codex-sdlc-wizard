@@ -9,6 +9,8 @@ LEDGER="$REPO_DIR/benchmarks/model-experiment.csv"
 SUMMARY_SCRIPT="$REPO_DIR/scripts/summarize-model-experiment.sh"
 PILOT_LEDGER="$REPO_DIR/benchmarks/pilot-rollout.csv"
 PILOT_SUMMARY_SCRIPT="$REPO_DIR/scripts/summarize-pilot-rollout.sh"
+REVIEW_LEDGER="$REPO_DIR/benchmarks/review-cadence.csv"
+REVIEW_SUMMARY_SCRIPT="$REPO_DIR/scripts/summarize-review-cadence.sh"
 PASSED=0
 FAILED=0
 
@@ -209,6 +211,74 @@ CSV
     rm -rf "$ws"
 }
 
+test_review_cadence_ledger_exists_with_required_headers() {
+    local has_file=true
+    local has_headers=true
+    local header
+
+    [ -f "$REVIEW_LEDGER" ] || has_file=false
+    header="$(head -n 1 "$REVIEW_LEDGER" 2>/dev/null || true)"
+
+    for column in delivery_id repo issue_id strategy eligible stable_base candidate_tree diff_files broad_proof_runs duplicate_broad_proof_runs sol_review_minutes fable_review_minutes sol_pre_confidence fable_pre_confidence sol_post_confidence fable_post_confidence sol_pre_disposition fable_pre_disposition sol_post_disposition fable_post_disposition sol_disposition_change_reason fable_disposition_change_reason reconciliation_rounds reconciliation_skipped reconciliation_ledger_entries unique_second_reviewer_blockers corrective_rounds tripwire_count red_on_main sol_quota_cost fable_quota_cost sol_token_cost fable_token_cost issue_closed milestone_closed release_shipped delivery_minutes; do
+        echo "$header" | grep -q "$column" || has_headers=false
+    done
+
+    if [ "$has_file" = "true" ] && [ "$has_headers" = "true" ]; then
+        pass "Review cadence ledger exists with the ten-delivery pilot schema"
+    else
+        fail "Review cadence ledger is missing or does not have the required pilot schema"
+    fi
+}
+
+test_review_cadence_summary_script_exists() {
+    if [ -x "$REVIEW_SUMMARY_SCRIPT" ]; then
+        pass "Review cadence summary script exists and is executable"
+    else
+        fail "Review cadence summary script is missing or not executable"
+    fi
+}
+
+test_review_cadence_summary_reports_delivery_outcomes() {
+    local ws fixture output
+    ws="$(mktemp -d)"
+    fixture="$ws/review-cadence.csv"
+
+    cat > "$fixture" <<'CSV'
+delivery_id,repo,issue_id,strategy,eligible,stable_base,candidate_tree,diff_files,broad_proof_runs,duplicate_broad_proof_runs,sol_review_minutes,fable_review_minutes,sol_pre_confidence,fable_pre_confidence,sol_post_confidence,fable_post_confidence,sol_pre_disposition,fable_pre_disposition,sol_post_disposition,fable_post_disposition,sol_disposition_change_reason,fable_disposition_change_reason,reconciliation_rounds,reconciliation_skipped,reconciliation_ledger_entries,unique_second_reviewer_blockers,corrective_rounds,tripwire_count,red_on_main,sol_quota_cost,fable_quota_cost,sol_token_cost,fable_token_cost,issue_closed,milestone_closed,release_shipped,delivery_minutes,notes
+d01,repo,1,monolithic,1,a,b,4,1,0,4,3,90,91,90,91,clean,clean,clean,clean,,,0,1,,0,0,0,0,1,1,1000,800,1,0,0,30,clean
+d02,repo,2,incremental,1,a,b,4,1,0,2,2,80,70,87,85,block,block,clean,clean,fixed-a,fixed-b,1,0,ledger-1,1,1,0,0,1,1,900,700,1,0,0,25,reconciled
+d03,repo,3,monolithic,1,a,b,4,1,0,4,3,,,,,clean,clean,clean,clean,,,0,1,,0,0,0,0,1,1,1000,800,1,0,0,31,clean
+d04,repo,4,incremental,1,a,b,4,1,0,2,2,,,,,clean,clean,clean,clean,,,0,1,,0,0,0,0,1,1,900,700,1,0,0,22,clean
+d05,repo,5,incremental,1,a,b,4,1,0,2,2,,,,,clean,clean,clean,clean,,,0,1,,0,0,0,0,1,1,900,700,1,0,0,23,clean
+d06,repo,6,incremental,1,a,b,4,1,0,2,2,,,,,clean,clean,clean,clean,,,0,1,,0,0,0,0,1,1,900,700,1,0,0,24,clean
+d07,repo,7,incremental,1,a,b,4,1,0,2,2,,,,,clean,clean,clean,clean,,,0,1,,0,0,0,0,1,1,900,700,1,0,0,25,clean
+d08,repo,8,incremental,1,a,b,4,1,0,2,2,,,,,clean,clean,clean,clean,,,0,1,,0,0,0,0,1,1,900,700,1,0,0,26,clean
+d09,repo,9,incremental,1,a,b,4,1,0,2,2,,,,,clean,clean,clean,clean,,,0,1,,0,0,0,0,1,1,900,700,1,0,0,27,clean
+d10,repo,10,incremental,1,a,b,4,1,0,2,2,,,,,block,block,block,block,,,0,1,,0,2,1,0,1,1,900,700,0,0,0,30,breaker
+CSV
+
+    output="$("$REVIEW_SUMMARY_SCRIPT" "$fixture")"
+
+    if echo "$output" | grep -q 'eligible_delivery_count: 10' &&
+       echo "$output" | grep -q 'delivered_count: 9' &&
+       echo "$output" | grep -q 'duplicate_broad_proof_runs: 0' &&
+       echo "$output" | grep -q 'red_on_main_count: 0' &&
+       echo "$output" | grep -q 'tripwire_count: 1' &&
+       echo "$output" | grep -q 'strategy.monolithic.eligible_delivery_count: 2' &&
+       echo "$output" | grep -q 'strategy.monolithic.average_review_minutes: 7.00' &&
+       echo "$output" | grep -q 'strategy.incremental.eligible_delivery_count: 8' &&
+       echo "$output" | grep -q 'strategy.incremental.average_review_minutes: 4.00' &&
+       echo "$output" | grep -q 'strategy.incremental.reconciliation_round_count: 1' &&
+       echo "$output" | grep -q 'strategy.incremental.average_confidence_delta: 11.00' &&
+       echo "$output" | grep -q 'recommendation: human-evaluate-pilot'; then
+        pass "Review cadence summary reports delivery, waste, and termination outcomes"
+    else
+        fail "Review cadence summary does not report the ten-delivery decision metrics"
+    fi
+
+    rm -rf "$ws"
+}
+
 test_benchmark_ledger_exists_with_required_headers
 test_benchmark_summary_script_exists
 test_benchmark_summary_script_reports_thresholds_and_recommendation
@@ -217,6 +287,9 @@ test_pilot_rollout_ledger_exists_with_required_headers
 test_pilot_rollout_summary_script_exists
 test_pilot_rollout_summary_recommends_default_use_when_gate_is_met
 test_pilot_rollout_summary_holds_default_use_when_reusable_bug_count_is_too_high
+test_review_cadence_ledger_exists_with_required_headers
+test_review_cadence_summary_script_exists
+test_review_cadence_summary_reports_delivery_outcomes
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
