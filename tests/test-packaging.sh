@@ -712,21 +712,22 @@ test_readme_documents_optional_goals_contract() {
     fi
 }
 
-test_roadmap_documents_optional_goals_boundary() {
-    local has_goals=true
-    local has_roadmap_boundary=true
-    local has_active_boundary=true
+test_roadmap_is_the_single_project_backlog() {
+    local has_source_of_truth=true
+    local has_single_backlog=true
+    local has_consumer_boundary=true
 
-    grep -q 'GOALS.md' "$ROADMAP" || has_goals=false
-    grep -Eqi 'ROADMAP.md.*backlog|backlog.*ROADMAP.md' "$ROADMAP" || has_roadmap_boundary=false
-    grep -Eqi 'active-scope contract|active scope contract|active contract' "$ROADMAP" || has_active_boundary=false
+    grep -Eqi 'GitHub issues.*source of truth|source of truth.*GitHub issues' "$ROADMAP" || has_source_of_truth=false
+    grep -Eqi 'single ordered project backlog|single.*backlog' "$ROADMAP" || has_single_backlog=false
+    grep -Eqi 'GOALS\.md.*consumer repo|consumer repo.*GOALS\.md' "$ROADMAP" || has_consumer_boundary=false
+    grep -Eqi 'GOALS\.md.*(never|does not).*override|never overrides.*priority queue' "$ROADMAP" || has_consumer_boundary=false
 
-    if [ "$has_goals" = "true" ] &&
-       [ "$has_roadmap_boundary" = "true" ] &&
-       [ "$has_active_boundary" = "true" ]; then
-        pass "ROADMAP documents the optional GOALS.md active-scope boundary"
+    if [ "$has_source_of_truth" = "true" ] &&
+       [ "$has_single_backlog" = "true" ] &&
+       [ "$has_consumer_boundary" = "true" ]; then
+        pass "ROADMAP is the single GitHub-backed project backlog"
     else
-        fail "ROADMAP does not document the optional GOALS.md active-scope boundary"
+        fail "ROADMAP does not remain the single GitHub-backed project backlog"
     fi
 }
 
@@ -1433,7 +1434,7 @@ test_readme_has_install_choice_table
 test_readme_explains_install_side_effects
 test_readme_mentions_packaging_test_command
 test_readme_documents_optional_goals_contract
-test_roadmap_documents_optional_goals_boundary
+test_roadmap_is_the_single_project_backlog
 test_readme_and_goals_template_document_goal_mode_with_sdlc
 test_readme_recommends_full_auto
 test_readme_stays_consumer_focused

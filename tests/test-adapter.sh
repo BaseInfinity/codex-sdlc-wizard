@@ -4592,9 +4592,10 @@ test_repo_defaults_consumer_and_maintainer_work_to_sol_high() {
         all_passed=false
     fi
 
-    if grep -R -E --exclude-dir=.git --exclude-dir=node_modules --exclude=test-adapter.sh \
+    if grep -R -n -E --exclude-dir=.git --exclude-dir=node_modules --exclude=test-adapter.sh \
         --exclude=WINDOWS-E2E-FINDINGS-20260804.md \
-        'gpt-5\.(5|4|3)|GPT-5\.(5|4|3)|Codex Spark|mini-only' "$REPO_DIR" >/dev/null 2>&1; then
+        'gpt-5\.(5|4|3)|GPT-5\.(5|4|3)|Codex Spark|mini-only' "$REPO_DIR" 2>/dev/null | \
+        grep -Ev 'ROADMAP\.md:.*#114: evaluate GPT-5\.3-Codex-Spark' | grep -q .; then
         fail "repo still contains stale legacy model-family references"
         all_passed=false
     fi

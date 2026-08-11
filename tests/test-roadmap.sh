@@ -8,7 +8,7 @@ REPO_DIR="$SCRIPT_DIR/.."
 ROADMAP="$REPO_DIR/ROADMAP.md"
 PACKAGE_JSON="$REPO_DIR/package.json"
 REPOSITORY_URL_REGEX='https://github[.]com/BaseInfinity/codex-sdlc-wizard'
-OPEN_ISSUES="58 64 65 66 71 72 73 77 79 82 84 86 88 92 93 95 96 97 98 99 100 101"
+OPEN_ISSUES="58 65 66 71 72 77 79 82 84 86 88 92 93 95 96 97 99 100 101 104 105 106 107 108 109 111 112 113 114 115 116"
 PASSED=0
 FAILED=0
 
@@ -71,14 +71,15 @@ test_roadmap_declares_order_as_priority() {
 
     grep -Eqi 'GitHub issues.*source of truth|source of truth.*GitHub issues' "$ROADMAP" || has_source_of_truth=false
     grep -Eqi 'order.*priority|top.*next' "$ROADMAP" || has_priority_contract=false
-    grep -Eqi 'GOALS\.md.*active|active.*GOALS\.md' "$ROADMAP" || has_goals_boundary=false
+    grep -Eqi 'GOALS\.md.*consumer repo|consumer repo.*GOALS\.md' "$ROADMAP" || has_goals_boundary=false
+    grep -Eqi 'GOALS\.md.*(never|does not).*override|never overrides.*priority queue' "$ROADMAP" || has_goals_boundary=false
 
     if [ "$has_source_of_truth" = "true" ] &&
        [ "$has_priority_contract" = "true" ] &&
        [ "$has_goals_boundary" = "true" ]; then
         pass "Roadmap declares its GitHub-backed priority contract"
     else
-        fail "Roadmap does not clearly define source of truth, priority order, and active-goal boundaries"
+        fail "Roadmap does not clearly separate project priority from optional consumer execution scope"
     fi
 }
 
@@ -157,7 +158,7 @@ test_roadmap_priority_section_contains_only_numbered_items() {
 test_roadmap_excludes_resolved_issues() {
     local issue_number
     local stale=0
-    local closed_issues="67 81 91"
+    local closed_issues="64 67 73 81 91 98 110"
 
     for issue_number in $closed_issues; do
         if roadmap_has_issue "$issue_number"; then
@@ -201,7 +202,7 @@ test_roadmap_head_order_matches_priority() {
     local previous=0
     local current
     local issue_number
-    local ordered_issues="98 86 73 92 93 84 88 79 64 95 100 101 66"
+    local ordered_issues="116 111 115 109 92 93 79 88 112 84 86 95 100 106 82 66 108 99 65 113 105 104 101 107 114 72 71 77 97 58 96"
 
     for issue_number in $ordered_issues; do
         current=$(issue_line "$issue_number")
