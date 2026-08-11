@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
 RELEASE_DOC="$REPO_DIR/RELEASE.md"
+PROVE_IT_DOC="$REPO_DIR/PROVE-IT.md"
 WORKFLOW="$REPO_DIR/.github/workflows/release.yml"
 UPSTREAM_SYNC_WORKFLOW="$REPO_DIR/.github/workflows/upstream-sync.yml"
 UPSTREAM_VERSION_FILE="$REPO_DIR/UPSTREAM_VERSION"
@@ -270,19 +271,35 @@ test_release_checklist_enforces_sync_and_proof() {
 
 test_release_checklist_points_to_parallel_proof_runner() {
     local has_runner_command=true
+    local has_canonical_stamp_command=true
     local has_parallel_language=true
     local has_serial_escape_hatch=true
 
     grep -Fq 'node scripts/run-proof-suite.cjs' "$RELEASE_DOC" || has_runner_command=false
+    grep -Fq 'node .codex/hooks/git-guard.cjs prove --reviewed --check "node scripts/run-proof-suite.cjs"' "$RELEASE_DOC" || has_canonical_stamp_command=false
     grep -Eqi 'parallel|bounded jobs|jobs' "$RELEASE_DOC" || has_parallel_language=false
     grep -Fq 'node scripts/run-proof-suite.cjs --serial' "$RELEASE_DOC" || has_serial_escape_hatch=false
 
     if [ "$has_runner_command" = "true" ] &&
+       [ "$has_canonical_stamp_command" = "true" ] &&
        [ "$has_parallel_language" = "true" ] &&
        [ "$has_serial_escape_hatch" = "true" ]; then
-        pass "RELEASE.md points maintainers to the parallel proof runner with a serial fallback"
+        pass "RELEASE.md stamps one parallel proof run and keeps a serial debugging fallback"
     else
-        fail "RELEASE.md does not document the parallel proof runner and serial fallback"
+        fail "RELEASE.md does not document the canonical stamped proof run and serial fallback"
+    fi
+}
+
+test_proof_docs_do_not_pre_run_broad_checks() {
+    local valid=true
+
+    grep -Fq 'After the checks and self-review are complete, stamp' "$PROVE_IT_DOC" && valid=false
+    grep -Fq 'After running the required checks and self-review, stamp proof:' "$README" && valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "Proof docs route broad checks through the stamping command instead of pre-running them"
+    else
+        fail "Proof docs still tell maintainers to run broad checks before the stamping command"
     fi
 }
 
@@ -371,6 +388,7 @@ test_readme_documents_maintainer_release_steps
 test_release_checklist_exists
 test_release_checklist_enforces_sync_and_proof
 test_release_checklist_points_to_parallel_proof_runner
+test_proof_docs_do_not_pre_run_broad_checks
 test_parallel_proof_runner_exists_and_lists_full_suite
 test_readme_points_to_release_checklist
 test_roadmap_tests_are_version_agnostic

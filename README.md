@@ -208,7 +208,7 @@ Layer 1: LOCAL TRUTH
 | Capability | Codex-specific shape |
 |------------|----------------------|
 | **Proof-aware git gates** | `git commit` and `git push` stay blocked until a fresh reviewed SDLC proof stamp is tied to the current repo content |
-| **Codex-native review** | Uses `codex review --uncommitted`, `--base`, or `--commit`; mixed mode explicitly overrides review effort to keep its Sol review at `high` |
+| **Codex-native review** | Reuses one stamped broad proof in a prompt-only Sol-high code review; predefined `--uncommitted`, `--base`, and `--commit` targets remain available for reviews without a custom prompt |
 | **Adaptive setup/update** | Default `npx` setup bootstraps first, then hands off into Codex for unresolved questions; update repairs drift without blind overwrites |
 | **Honest skill model** | `$sdlc` is the public repo-scoped workflow; helper skills stay support tooling instead of pretending Codex has slash commands |
 | **Cross-platform hook shape** | Universal Node hook entrypoints avoid Bash/PowerShell hook-config churn across macOS, Linux, Windows, and `type: module` repos |
@@ -219,10 +219,16 @@ Layer 1: LOCAL TRUTH
 The git gate is proof-aware: `git commit` and `git push` are still hard manual
 checkpoints, but they can proceed when a fresh SDLC proof stamp exists.
 
-After running the required checks and self-review, stamp proof:
+After focused checks and self-review, run required broad verification through the proof-stamping command:
 
 ```bash
 node .codex/hooks/git-guard.cjs prove --reviewed
+```
+
+For this repository's maintainer suite, use the single canonical command below. It runs all proof groups once and writes the receipt in that same invocation:
+
+```bash
+node .codex/hooks/git-guard.cjs prove --reviewed --check "node scripts/run-proof-suite.cjs"
 ```
 
 If the repo has no detected commands in `.codex-sdlc/manifest.json`, provide the
@@ -352,11 +358,16 @@ codex review --base main
 
 # Review one already-created commit
 codex review --commit <sha>
+
+# Proof-aware custom review: prompt only; do not add a predefined target flag
+codex -c 'model_reasoning_effort="high"' review 'Review only this frozen diff. Base: <base-commit-or-tree>. Candidate: <candidate-tree>. Proof: <command> => <result>. Do not rerun tests. Return prioritized code-review findings only.'
 ```
 
 When `review_model = "gpt-5.6-sol"` is present, native Codex review uses Sol for the review pass. `review_model` does not set review reasoning independently: effort otherwise inherits the profile's global `model_reasoning_effort`. Mixed-mode agents must therefore use the explicit `high` override above (and the same prefix with `--base` or `--commit`) to provide the advertised Sol-high gate.
 
 Do not treat `/autoreview` as a required SDLC command. `auto_review` is a Codex approval-review setting for eligible tool approval prompts; it is not the code-diff review path. In yolo/full-bypass sessions, approval review usually does not apply because approvals are already bypassed.
+
+Run one broad proof run total on the frozen candidate through the proof-stamping entrypoint. Do not run the suite directly and then rerun it through the guard. When supplying custom proof-aware instructions, use a prompt-only review. A custom prompt must not be combined with `--uncommitted`, `--base`, or `--commit`; those predefined target flags are for reviews without a custom prompt. Include the exact base identity, frozen candidate tree identity, proof command, and result, and say `Do not rerun tests`. Targeted verification is allowed only for a concrete suspected defect; never rerun the broad suite.
 
 ## Repo-Scoped Skills
 

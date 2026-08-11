@@ -482,6 +482,28 @@ test_sdlc_workflow_is_bounded_and_repairable() {
     fi
 }
 
+test_sdlc_review_reuses_one_broad_proof() {
+    local file
+    local valid=true
+
+    for file in "$REPO_SDLC_SKILL" "$SHIPPED_SDLC_SKILL" "$SDLC_LOOP" "$AGENTS_BASELINE" "$AGENTS_TEMPLATE"; do
+        grep -Fqi 'one broad proof run total' "$file" || valid=false
+        grep -Eqi 'prompt-only.*review|review.*prompt-only' "$file" || valid=false
+        grep -Eqi 'custom prompt.*(cannot|must not|do not).*--(uncommitted|base|commit)|(cannot|must not|do not).*--(uncommitted|base|commit).*custom prompt' "$file" || valid=false
+        grep -Eqi 'base.*candidate|candidate.*base' "$file" || valid=false
+        grep -Eqi 'targeted verification.*concrete suspected defect|concrete suspected defect.*targeted verification' "$file" || valid=false
+        grep -Eqi 'proof command and result|proof.*command.*result' "$file" || valid=false
+    done
+
+    grep -Fq 'MODEL_POLICY_SCHEMA_VERSION=3' "$REPO_DIR/lib/codex-config.sh" || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "SDLC review consumes one proof receipt without rerunning broad suites"
+    else
+        fail "SDLC review does not consistently bind prompt-only review to one proof, base, candidate, and upgrade schema"
+    fi
+}
+
 test_skill_manifest_exists
 test_plugin_skill_resolves_bundled_scripts_from_plugin_root
 test_plugin_skill_handles_legacy_standalone_install
@@ -499,6 +521,7 @@ test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
 test_sdlc_workflow_is_bounded_and_repairable
+test_sdlc_review_reuses_one_broad_proof
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

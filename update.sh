@@ -416,6 +416,10 @@ case "$MANIFEST_MODEL_POLICY_SCHEMA_VERSION" in
         ;;
 esac
 MODEL_PROFILE_MIGRATION="$MODEL_PROFILE_DEFAULTED"
+if [ "$MODEL_POLICY_SCHEMA_MIGRATION" = "true" ]; then
+    MODEL_PROFILE_MIGRATION=true
+    RECORD_MODEL_POLICY_MIGRATION=true
+fi
 if [ "$MODEL_PROFILE_METADATA_STATUS" = "missing" ]; then
     MODEL_PROFILE_MIGRATION=true
 elif [ "$MODEL_PROFILE_METADATA_STATUS" = "match" ] && model_profile_metadata_needs_refresh ".codex-sdlc/model-profile.json" "$MODEL_PROFILE"; then

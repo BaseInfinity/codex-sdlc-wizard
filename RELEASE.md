@@ -22,11 +22,13 @@ If the branch cannot be cleanly rebased or merged onto `origin/main`, stop and f
 
 ## 2. Required Proof Suite
 
-Preferred path: run the bounded parallel proof runner and keep every check green before tagging:
+Preferred path: run the bounded parallel proof runner once through the proof-stamping entrypoint and keep every check green before tagging:
 
 ```bash
-node scripts/run-proof-suite.cjs
+node .codex/hooks/git-guard.cjs prove --reviewed --check "node scripts/run-proof-suite.cjs"
 ```
+
+Do not run `node scripts/run-proof-suite.cjs` immediately before the command above; the proof-stamping invocation already runs it.
 
 Use the serial fallback when debugging one failure at a time:
 

@@ -960,6 +960,10 @@ test_readme_documents_native_codex_review() {
     local explains_review_effort_boundary=true
     local explains_auto_review_boundary=true
     local avoids_autoreview_requirement=true
+    local has_single_proof_contract=true
+    local has_prompt_only_contract=true
+    local has_targeted_verification_boundary=true
+    local binds_base_and_candidate=true
 
     grep -q 'codex review' "$README" || has_review_command=false
     grep -q 'codex review --uncommitted' "$README" || has_uncommitted=false
@@ -970,6 +974,11 @@ test_readme_documents_native_codex_review() {
     grep -Eqi 'review_model.*(does not|doesn.t).*reasoning|reasoning.*(does not|doesn.t).*review_model' "$README" || explains_review_effort_boundary=false
     grep -Eqi 'auto_review.*approval|approval.*auto_review' "$README" || explains_auto_review_boundary=false
     grep -Eqi '(must|always|requires).*/autoreview|/autoreview.*(must|always)' "$README" && avoids_autoreview_requirement=false
+    grep -Fqi 'one broad proof run total' "$README" || has_single_proof_contract=false
+    grep -Eqi 'prompt-only.*review|review.*prompt-only' "$README" || has_prompt_only_contract=false
+    grep -Eqi 'custom prompt.*(cannot|must not|do not).*--(uncommitted|base|commit)|(cannot|must not|do not).*--(uncommitted|base|commit).*custom prompt' "$README" || has_prompt_only_contract=false
+    grep -Eqi 'targeted verification.*concrete suspected defect|concrete suspected defect.*targeted verification' "$README" || has_targeted_verification_boundary=false
+    grep -Eqi 'Base: <base-[^>]+>.*Candidate: <candidate-[^>]+>' "$README" || binds_base_and_candidate=false
 
     if [ "$has_review_command" = "true" ] &&
        [ "$has_uncommitted" = "true" ] &&
@@ -979,10 +988,14 @@ test_readme_documents_native_codex_review() {
        [ "$has_explicit_high_review" = "true" ] &&
        [ "$explains_review_effort_boundary" = "true" ] &&
        [ "$explains_auto_review_boundary" = "true" ] &&
-       [ "$avoids_autoreview_requirement" = "true" ]; then
-        pass "README documents native Codex review without requiring unsupported autoreview slash commands"
+       [ "$avoids_autoreview_requirement" = "true" ] &&
+       [ "$has_single_proof_contract" = "true" ] &&
+       [ "$has_prompt_only_contract" = "true" ] &&
+       [ "$has_targeted_verification_boundary" = "true" ] &&
+       [ "$binds_base_and_candidate" = "true" ]; then
+        pass "README documents proof-aware native Codex review without redundant broad verification"
     else
-        fail "README does not document native Codex review and the auto_review boundary clearly enough"
+        fail "README does not document proof-aware native Codex review and its verification boundaries clearly enough"
     fi
 }
 

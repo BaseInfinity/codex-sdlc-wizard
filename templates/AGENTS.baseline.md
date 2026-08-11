@@ -13,7 +13,8 @@ Read `TESTING.md` and `ARCHITECTURE.md` when present and relevant. If `GOALS.md`
 5. Never claim completion without fresh proof.
 6. Author-review and commit coherent green slices. Freeze the cumulative candidate for one fresh broad proof and completion review.
 7. Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix or follow-up issue; P3 never blocks. When two reviewers are required, they exchange compact findings once. Allow at most two corrective rounds; unresolved P0/P1 requires decomposition, abandonment, or escalation.
-   Give reviewers the fresh proof command and result and say `Do not rerun tests`; stale proof is a blocker to report, not permission to launch another broad suite.
+   Run one broad proof run total on the frozen candidate through `node .codex/hooks/git-guard.cjs prove --reviewed`; do not run the suite directly and then rerun it through the guard.
+   Use a prompt-only review when supplying custom proof-aware instructions. A custom prompt must not be combined with `--uncommitted`, `--base`, or `--commit`; those predefined target flags are for reviews without a custom prompt. Include the exact base identity, frozen candidate tree identity, proof command, and result and say `Do not rerun tests`. Targeted verification is allowed only for a concrete suspected defect; never rerun the broad suite. Stale proof is a blocker to report, not permission to launch another broad suite.
    Reviewer role: inspect the frozen diff and return prioritized code-review findings only; do not edit, implement, run tests, re-plan, or perform follow-up work. The builder owns every correction through the normal SDLC loop.
    If a blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
 

@@ -4126,6 +4126,7 @@ const path = require("path");
 const root = process.env.ROOT;
 const agents = fs.readFileSync(path.join(root, "AGENTS.md"));
 fs.writeFileSync(path.join(root, ".codex-sdlc", "manifest.json"), `${JSON.stringify({
+  model_profile: { selected_profile: "mixed", policy_schema_version: 3 },
   managed_files: {
     "AGENTS.md": `sha256:${crypto.createHash("sha256").update(agents).digest("hex")}`,
     ".codex-sdlc/model-profile.json": "sha256:old",
@@ -4168,6 +4169,7 @@ NODE
 const manifest = require(process.env.MANIFEST_PATH);
 if (manifest.model_profile?.selected_profile !== "maximum") process.exit(1);
 if (manifest.model_profile?.baseline_reasoning !== "high") process.exit(1);
+if (manifest.model_profile?.policy_schema_version !== 3) process.exit(1);
 NODE
     rm -rf "$legacy_dir" "$partial_dir"
 
@@ -4989,6 +4991,8 @@ test_e2e_bypasses_hook_trust_only_for_ephemeral_automation() {
 test_docs_document_proof_stamp_gate() {
     if grep -q 'git-guard.cjs prove --reviewed' "$REPO_DIR/PROVE-IT.md" \
         && grep -q 'git-guard.cjs prove --reviewed' "$REPO_DIR/README.md" \
+        && grep -Fq 'node .codex/hooks/git-guard.cjs prove --reviewed --check "node scripts/run-proof-suite.cjs"' "$REPO_DIR/PROVE-IT.md" \
+        && grep -Fq 'node .codex/hooks/git-guard.cjs prove --reviewed --check "node scripts/run-proof-suite.cjs"' "$REPO_DIR/README.md" \
         && grep -q 'fresh SDLC proof' "$REPO_DIR/README.md" \
         && grep -qi 'same-repository linked worktree' "$REPO_DIR/README.md" \
         && grep -qi 'same-repository linked worktree' "$REPO_DIR/PROVE-IT.md" \
