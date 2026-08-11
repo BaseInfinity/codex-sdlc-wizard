@@ -19,6 +19,54 @@ case "$(uname -s)" in
     *) IS_WINDOWS=false ;;
 esac
 
+native_npm_package_spec() {
+    local candidate="$1"
+    local native_path
+
+    if [ "$IS_WINDOWS" = "true" ]; then
+        if native_path=$(cygpath -am "$candidate"); then
+            printf 'file:%s\n' "$native_path"
+        else
+            printf 'warning: could not convert npm package path for Windows: %s\n' "$candidate" >&2
+            printf '%s\n' "$candidate"
+        fi
+        return
+    fi
+
+    printf '%s\n' "$candidate"
+}
+
+make_supported_codex_stub() {
+    local fakebin="$1"
+    local fakebin_win
+
+    cat > "$fakebin/codex" <<'EOF'
+#!/bin/sh
+if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  echo "codex-cli 0.144.0"
+  exit 0
+fi
+exit 97
+EOF
+    chmod +x "$fakebin/codex"
+
+    cat > "$fakebin/codex.cmd" <<'EOF'
+@echo off
+if not "%2"=="" exit /b 97
+if "%~1"=="--version" (
+  echo codex-cli 0.144.0
+  exit /b 0
+)
+exit /b 97
+EOF
+
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+        printf '%s\\codex.cmd\n' "$fakebin_win"
+    else
+        printf '%s/codex\n' "$fakebin"
+    fi
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
@@ -176,13 +224,15 @@ test_npm_pack_includes_runtime_files() {
 }
 
 test_local_npx_installs_into_clean_repo() {
-    local pack_dir target_repo
+    local pack_dir target_repo fakebin codex_bin
     pack_dir=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-pack.XXXXXX")
     target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_bin=$(make_supported_codex_stub "$fakebin")
     local npm_cache
     npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
 
-    local json tarball_name
+    local json tarball_name install_output=""
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
     tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
 
@@ -194,9 +244,9 @@ test_local_npx_installs_into_clean_repo() {
     else
         printf '%s' '{"name":"install-smoke","scripts":{"test":"jest"}}' > "$target_repo/package.json"
         mkdir -p "$target_repo/src"
-        (
-            cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard --yes >/dev/null 2>&1
+        install_output=$(
+            cd "$target_repo" &&
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_CODEX_BIN="$codex_bin" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard --yes 2>&1
         ) || installed=false
     fi
 
@@ -216,23 +266,27 @@ test_local_npx_installs_into_clean_repo() {
     grep -q 'powershell\.exe' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
     grep -q 'bash-guard\.sh' "$target_repo/.codex/hooks.json" 2>/dev/null && installed=false
 
-    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
-
     if [ "$installed" = "true" ]; then
         pass "local npm exec defaults to adaptive setup with universal Node hooks when automation passes --yes"
     else
+        printf '%s\n' "--- local npm exec install package spec ---" "$(native_npm_package_spec "$tarball_path")" >&2
+        printf '%s\n' "--- local npm exec install output ---" "$install_output" >&2
         fail "local npm exec did not route the default command through adaptive setup with universal Node hooks"
     fi
+
+    rm -rf "$pack_dir" "$target_repo" "$fakebin" "$npm_cache"
 }
 
 test_local_npx_setup_honors_model_profile_flag() {
-    local pack_dir target_repo
+    local pack_dir target_repo fakebin codex_bin
     pack_dir=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-pack.XXXXXX")
     target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_bin=$(make_supported_codex_stub "$fakebin")
     local npm_cache
     npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
 
-    local json tarball_name
+    local json tarball_name configured_output=""
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
     tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
 
@@ -242,9 +296,9 @@ test_local_npx_setup_honors_model_profile_flag() {
     if [ -z "$tarball_name" ] || [ ! -f "$tarball_path" ]; then
         configured=false
     else
-        (
-            cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- codex-sdlc-wizard setup --yes --model-profile maximum >/dev/null 2>&1
+        configured_output=$(
+            cd "$target_repo" &&
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_CODEX_BIN="$codex_bin" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- codex-sdlc-wizard setup --yes --model-profile maximum 2>&1
         ) || configured=false
     fi
 
@@ -265,23 +319,27 @@ test_local_npx_setup_honors_model_profile_flag() {
         fi
     fi
 
-    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
-
     if [ "$configured" = "true" ]; then
         pass "local npm exec setup honors the model-profile flag"
     else
+        printf '%s\n' "--- local npm exec profile package spec ---" "$(native_npm_package_spec "$tarball_path")" >&2
+        printf '%s\n' "--- local npm exec profile output ---" "$configured_output" >&2
         fail "local npm exec setup did not honor the model-profile flag"
     fi
+
+    rm -rf "$pack_dir" "$target_repo" "$fakebin" "$npm_cache"
 }
 
 test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
-    local pack_dir target_repo
+    local pack_dir target_repo fakebin codex_bin
     pack_dir=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-pack.XXXXXX")
     target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_bin=$(make_supported_codex_stub "$fakebin")
     local npm_cache
     npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
 
-    local json tarball_name tarball_path output
+    local json tarball_name tarball_path output="" setup_output=""
     json=$(cd "$REPO_DIR" && npm_config_cache="$npm_cache" npm pack --json --pack-destination "$pack_dir" 2>/dev/null) || true
     tarball_name=$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] ? data[0].filename : ""')
     tarball_path="$pack_dir/$tarball_name"
@@ -294,15 +352,15 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
         printf '%s' '{"name":"initialized-clone","scripts":{"test":"jest"}}' > "$target_repo/package.json"
         mkdir -p "$target_repo/src"
 
-        (
-            cd "$target_repo"
-            CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
-                codex-sdlc-wizard setup --yes >/dev/null 2>&1
+        setup_output=$(
+            cd "$target_repo" &&
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home-first" CODEX_SDLC_CODEX_BIN="$codex_bin" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
+                codex-sdlc-wizard setup --yes 2>&1
         ) || valid=false
 
         output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home-second" CODEX_SDLC_CODEX_BIN="$codex_bin" CODEX_SDLC_DISABLE_CODEX_HANDOFF=1 CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard 2>&1
         ) || valid=false
     fi
@@ -315,19 +373,24 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
     [ -f "$target_repo/.codex-home-second/skills/update-wizard/SKILL.md" ] || valid=false
     [ -f "$target_repo/.codex-home-second/skills/feedback/SKILL.md" ] || valid=false
 
-    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
-
     if [ "$valid" = "true" ]; then
         pass "default CLI updates initialized clones without an explicit subcommand"
     else
+        printf '%s\n' "--- initialized clone package spec ---" "$(native_npm_package_spec "$tarball_path")" >&2
+        printf '%s\n' "--- initialized clone setup output ---" "$setup_output" >&2
+        printf '%s\n' "--- initialized clone update output ---" "$output" >&2
         fail "default CLI did not auto-run update for an initialized clone"
     fi
+
+    rm -rf "$pack_dir" "$target_repo" "$fakebin" "$npm_cache"
 }
 
 test_packed_tarball_scratch_smoke() {
-    local pack_dir target_repo
+    local pack_dir target_repo fakebin codex_bin
     pack_dir=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-pack.XXXXXX")
     target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_bin=$(make_supported_codex_stub "$fakebin")
     local npm_cache
     npm_cache=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-cache.XXXXXX")
 
@@ -347,19 +410,19 @@ test_packed_tarball_scratch_smoke() {
 
         setup_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_CODEX_BIN="$codex_bin" CODEX_SDLC_DISABLE_REASONING=1 npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard setup --yes 2>&1
         ) || valid=false
 
         check_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_CODEX_BIN="$codex_bin" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard check 2>&1
         ) || valid=false
 
         update_output=$(
             cd "$target_repo" && \
-            CODEX_HOME="$target_repo/.codex-home" npm_config_cache="$npm_cache" npm exec --yes --package "$tarball_path" -- \
+            MSYS2_ARG_CONV_EXCL='file:' CODEX_HOME="$target_repo/.codex-home" CODEX_SDLC_CODEX_BIN="$codex_bin" npm_config_cache="$npm_cache" npm exec --yes --package "$(native_npm_package_spec "$tarball_path")" -- \
                 codex-sdlc-wizard update check-only 2>&1
         ) || valid=false
     fi
@@ -374,13 +437,17 @@ test_packed_tarball_scratch_smoke() {
     echo "$check_output" | grep -q '"status": "match"' || valid=false
     echo "$update_output" | grep -Eq 'No managed files need updates|"status": "match"|match' || valid=false
 
-    rm -rf "$pack_dir" "$target_repo" "$npm_cache"
-
     if [ "$valid" = "true" ]; then
         pass "packed tarball scratch smoke proves setup, check, and update on a clean repo"
     else
+        printf '%s\n' "--- packed scratch package spec ---" "$(native_npm_package_spec "$tarball_path")" >&2
+        printf '%s\n' "--- packed scratch setup output ---" "$setup_output" >&2
+        printf '%s\n' "--- packed scratch check output ---" "$check_output" >&2
+        printf '%s\n' "--- packed scratch update output ---" "$update_output" >&2
         fail "packed tarball scratch smoke did not prove the release surface cleanly"
     fi
+
+    rm -rf "$pack_dir" "$target_repo" "$fakebin" "$npm_cache"
 }
 
 test_default_interactive_hands_off_to_codex() {
@@ -436,6 +503,7 @@ EOF
 
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -523,6 +591,7 @@ EOF
     set +e
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -581,6 +650,7 @@ EOF
     set +e
     (
         cd "$ws" || exit 1
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -604,7 +674,7 @@ EOF
 }
 
 test_unsupported_codex_version_blocks_handoff_before_mutation() {
-    local ws fakebin codex_home output status valid=true
+    local ws fakebin fakebin_win codex_bin codex_path_entry codex_home output status valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
     codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
@@ -623,12 +693,30 @@ exit 99
 EOF
     chmod +x "$fakebin/codex"
 
+    cat > "$fakebin/codex.cmd" <<'EOF'
+@echo off
+if "%~1"=="--version" (
+  echo launcher 9.9.9 warning
+  echo codex-cli 0.143.9
+  exit /b 0
+)
+exit /b 99
+EOF
+
+    codex_path_entry="$fakebin"
+    if fakebin_win=$(cd "$fakebin" && pwd -W 2>/dev/null); then
+        codex_bin="$fakebin_win\\codex.cmd"
+    else
+        codex_bin="$fakebin/codex"
+    fi
+
     set +e
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
-        CODEX_SDLC_CODEX_BIN="$fakebin/codex" \
-        PATH="$fakebin:$PATH" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
+        PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" 2>&1
     )
     status=$?
@@ -636,6 +724,7 @@ EOF
 
     [ "$status" -ne 0 ] || valid=false
     echo "$output" | grep -Fq 'Codex CLI 0.144.0 or newer' || valid=false
+    echo "$output" | grep -Fq 'found 0.143.9' || valid=false
     echo "$output" | grep -Fq 'npm install -g @openai/codex@latest' || valid=false
     [ ! -e "$ws/.codex/config.toml" ] || valid=false
     [ ! -e "$ws/.codex-sdlc/model-profile.json" ] || valid=false
@@ -650,7 +739,7 @@ EOF
 }
 
 test_configured_codex_binary_drives_installer_version_gate() {
-    local ws oldbin currentbin codex_home output status valid=true
+    local ws oldbin currentbin oldbin_win currentbin_win codex_bin codex_path_entry codex_home output status valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
     oldbin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-old-bin.XXXXXX")
     currentbin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-current-bin.XXXXXX")
@@ -675,13 +764,36 @@ exit 0
 EOF
     chmod +x "$oldbin/codex" "$currentbin/codex"
 
+    cat > "$oldbin/codex.cmd" <<'EOF'
+@echo off
+if "%~1"=="--version" (
+  echo codex-cli 0.143.9
+  exit /b 0
+)
+exit /b 99
+EOF
+    cat > "$currentbin/codex.cmd" <<'EOF'
+@echo off
+if "%~1"=="--version" echo codex-cli 0.144.0
+exit /b 0
+EOF
+
+    codex_path_entry="$oldbin"
+    if oldbin_win=$(cd "$oldbin" && pwd -W 2>/dev/null) \
+        && currentbin_win=$(cd "$currentbin" && pwd -W 2>/dev/null); then
+        codex_bin="$currentbin_win\\codex.cmd"
+    else
+        codex_bin="$currentbin/codex"
+    fi
+
     set +e
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
-        CODEX_SDLC_CODEX_BIN="$currentbin/codex" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_HANDOFF_MODE=plain \
-        PATH="$oldbin:$PATH" \
+        PATH="$codex_path_entry:$PATH" \
         node "$REPO_DIR/bin/codex-sdlc-wizard.js" </dev/null 2>&1
     )
     status=$?
@@ -690,6 +802,8 @@ EOF
     [ "$status" -eq 0 ] || valid=false
     [ -f "$ws/.codex/config.toml" ] || valid=false
     grep -q '^model = "gpt-5.6-sol"' "$ws/.codex/config.toml" 2>/dev/null || valid=false
+    echo "$output" | grep -Fq 'Handing off into Codex for live setup using plain codex' || valid=false
+    echo "$output" | grep -Fq 'Scanning project...' && valid=false
     echo "$output" | grep -Fq 'found 0.143.9' && valid=false
 
     rm -rf "$ws" "$oldbin" "$currentbin" "$codex_home"
@@ -754,6 +868,7 @@ EOF
 
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -834,6 +949,7 @@ EOF
 
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
@@ -932,6 +1048,7 @@ EOF
     set +e
     output=$(
         cd "$ws" && \
+        CI=false \
         CODEX_HOME="$codex_home" \
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \

@@ -61,6 +61,25 @@ If setup has not detected proof commands yet, pass them explicitly:
 node .codex/hooks/git-guard.cjs prove --reviewed --check "npm test"
 ```
 
+For Pester on every platform, include explicit failure propagation with `-EnableExit`
+or Pester 5's `-CI` switch, such as `Invoke-Pester -Path tests -CI`. The proof
+runner refuses an `Invoke-Pester` command without either switch so failed tests
+cannot produce a passing proof stamp through a zero PowerShell process exit. The
+switch must appear literally on `Invoke-Pester`; configuration-object and
+splatted switch forms are intentionally rejected because the proof gate cannot
+verify their runtime contents statically. Alias creation, background jobs, and
+shell-wrapped PowerShell hosts are rejected for the same reason; invoke the
+proof command directly in the proof host.
+
+For a non-PowerShell project that previously stored a wrapper such as
+`pwsh -File tests.ps1`, set `scan.language` in `.codex-sdlc/manifest.json` to
+`"PowerShell"` and store the inner command directly, for example
+`& ./tests.ps1`. Ensure the script
+returns a nonzero process status when any test fails. The language applies to
+every configured proof check, so consolidate a mixed shell/PowerShell set into
+one PowerShell runner and clear the other proof-command fields; the runner must
+fail if any delegated check fails.
+
 The stamp is stored in Git metadata under `codex-sdlc/proof.json`, expires after
 four hours, and is tied to the current worktree content so it does not dirty the
 worktree. Guarded `git -C <path> commit` and `git -C <path> push` commands may
