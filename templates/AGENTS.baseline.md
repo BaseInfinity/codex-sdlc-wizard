@@ -5,10 +5,17 @@ Read `TESTING.md` and `ARCHITECTURE.md` when present and relevant. If `GOALS.md`
 ## Before Every Task
 
 1. Plan before coding. State the task, scope, confidence, and verification gate.
+   Freeze one issue, a closed behavior allowlist, one risk lane, and explicit exclusions. Feature creep becomes a separate follow-up issue unless omission would make the active change unsafe or nonfunctional.
 2. If confidence is not high, research more before editing and ask only when material uncertainty remains.
 3. Write a failing test first for code-shaped changes, then implement the minimum fix.
+   Harness-repair lane: if broken enforcement prevents RED for its own repair, declare the failing observable and exact file allowlist, make the smallest repair, then write and run the missing regression test immediately after. Final proof and review remain mandatory.
 4. Run focused checks, the broader relevant suite, and a self-review before commit.
 5. Never claim completion without fresh proof.
+6. Author-review and commit coherent green slices. Freeze the cumulative candidate for one fresh broad proof and completion review.
+7. Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix or follow-up issue; P3 never blocks. When two reviewers are required, they exchange compact findings once. Allow at most two corrective rounds; unresolved P0/P1 requires decomposition, abandonment, or escalation.
+   Give reviewers the fresh proof command and result and say `Do not rerun tests`; stale proof is a blocker to report, not permission to launch another broad suite.
+   Reviewer role: inspect the frozen diff and return prioritized code-review findings only; do not edit, implement, run tests, re-plan, or perform follow-up work. The builder owns every correction through the normal SDLC loop.
+   If a blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
 
 ## Model Policy
 
