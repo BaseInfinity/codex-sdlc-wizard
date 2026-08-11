@@ -369,6 +369,14 @@ Do not treat `/autoreview` as a required SDLC command. `auto_review` is a Codex 
 
 Run one broad proof run total on the frozen candidate through the proof-stamping entrypoint. Do not run the suite directly and then rerun it through the guard. When supplying custom proof-aware instructions, use a prompt-only review. A custom prompt must not be combined with `--uncommitted`, `--base`, or `--commit`; those predefined target flags are for reviews without a custom prompt. Include the exact base identity, frozen candidate tree identity, proof command, and result, and say `Do not rerun tests`. Targeted verification is allowed only for a concrete suspected defect; never rerun the broad suite.
 
+When your repo policy requires a cross-model final gate, run Fable High only after the Sol review is clean:
+
+```bash
+node .codex/hooks/fable-review.cjs --base main --consent-subscription-quota
+```
+
+The consent flag is required because the review consumes Claude subscription quota. The wrapper verifies Claude first-party subscription auth, refuses API keys and alternate providers, disables tools/MCP/session persistence, reuses the current SDLC proof, and writes a candidate-bound receipt under Git metadata. It does not create a metered API-key charge when the verified subscription lane is used.
+
 ## Repo-Scoped Skills
 
 `install.sh` and `setup.sh` scaffold repo-local Codex skills under `.agents/skills`.

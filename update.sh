@@ -107,6 +107,9 @@ repair_hooks_bundle() {
     ensure_parent_dir ".codex/hooks.json"
     ensure_parent_dir ".codex/hooks/dummy"
     copy_static_file ".codex/hooks/git-guard.cjs"
+    if [ ! -e ".codex/hooks/fable-review.cjs" ] && [ ! -L ".codex/hooks/fable-review.cjs" ]; then
+        copy_static_file ".codex/hooks/fable-review.cjs"
+    fi
     copy_static_file ".codex/hooks/session-start.cjs"
     copy_static_file ".codex/hooks/compact-guard.cjs"
     rm -f .codex/hooks/git-guard.js .codex/hooks/session-start.js
@@ -123,7 +126,7 @@ repair_hooks_bundle() {
 
 repair_missing_hook_scripts() {
     local required_hooks required_hook
-    required_hooks=".codex/hooks/git-guard.cjs .codex/hooks/session-start.cjs .codex/hooks/compact-guard.cjs"
+    required_hooks=".codex/hooks/git-guard.cjs .codex/hooks/fable-review.cjs .codex/hooks/session-start.cjs .codex/hooks/compact-guard.cjs"
     if [ "$IS_WINDOWS" = "true" ]; then
         required_hooks="$required_hooks .codex/hooks/git-guard.ps1 .codex/hooks/session-start.ps1"
     else
@@ -404,6 +407,7 @@ case "$MODEL_PROFILE" in
 esac
 
 MODEL_PROFILE_METADATA_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex-sdlc/model-profile.json"]?.status || ""')"
+FABLE_REVIEW_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex/hooks/fable-review.cjs"]?.status || ""')"
 MANIFEST_MODEL_POLICY_SCHEMA_VERSION="$(json_get_file ".codex-sdlc/manifest.json" 'data.model_profile?.policy_schema_version || ""')"
 MODEL_POLICY_SCHEMA_MIGRATION=false
 RECORD_MODEL_POLICY_MIGRATION=false
@@ -553,6 +557,18 @@ queue_manifest_refresh() {
         MANIFEST_REFRESH_PATHS+=("$relative_path")
     fi
 }
+
+if [ -z "$FABLE_REVIEW_STATUS" ]; then
+    if [ ! -e ".codex/hooks/fable-review.cjs" ] && [ ! -L ".codex/hooks/fable-review.cjs" ]; then
+        PLAN_LINES+=(".codex/hooks/fable-review.cjs|untracked|install")
+        CHANGES_PENDING=true
+        queue_static_repair ".codex/hooks/fable-review.cjs"
+        queue_manifest_refresh ".codex/hooks/fable-review.cjs"
+    else
+        PLAN_LINES+=(".codex/hooks/fable-review.cjs|untracked|skip (preserve customization)")
+        SKIPPED_UNTRACKED_PATHS+=(".codex/hooks/fable-review.cjs")
+    fi
+fi
 
 for line in "${STATUS_LINES[@]}"; do
     IFS=$'\t' read -r relative_path status hash_migration <<< "$line"
@@ -753,12 +769,14 @@ done
 
 SKIPPED_CUSTOM_HASHES_JSON="{}"
 if [ "${#SKIPPED_CUSTOMIZED_PATHS[@]}" -gt 0 ] || [ "${#SKIPPED_UNTRACKED_PATHS[@]}" -gt 0 ]; then
-    SKIPPED_PATHS="$(
-        printf '%s\n' "${SKIPPED_CUSTOMIZED_PATHS[@]}"
-    )"
-    UNTRACKED_PATHS="$(
-        printf '%s\n' "${SKIPPED_UNTRACKED_PATHS[@]}"
-    )"
+    SKIPPED_PATHS=""
+    UNTRACKED_PATHS=""
+    if [ "${#SKIPPED_CUSTOMIZED_PATHS[@]}" -gt 0 ]; then
+        SKIPPED_PATHS="$(printf '%s\n' "${SKIPPED_CUSTOMIZED_PATHS[@]}")"
+    fi
+    if [ "${#SKIPPED_UNTRACKED_PATHS[@]}" -gt 0 ]; then
+        UNTRACKED_PATHS="$(printf '%s\n' "${SKIPPED_UNTRACKED_PATHS[@]}")"
+    fi
     SKIPPED_CUSTOM_HASHES_JSON="$(
         UPDATE_CHECK_JSON="$CHECK_JSON" UPDATE_SKIPPED_PATHS="$SKIPPED_PATHS" UPDATE_UNTRACKED_PATHS="$UNTRACKED_PATHS" node -e '
 const data = JSON.parse(process.env.UPDATE_CHECK_JSON || "{}");

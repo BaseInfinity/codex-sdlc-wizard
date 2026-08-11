@@ -57,6 +57,7 @@ test_installer_smoke_test_clean_project() {
     local has_hooks_json=true
     local has_bash_guard=true
     local has_node_guard=true
+    local has_fable_review=true
     local avoids_unreleased_skill_labels=true
 
     [ -f "$target_repo/AGENTS.md" ] || has_agents=false
@@ -64,6 +65,7 @@ test_installer_smoke_test_clean_project() {
     [ -f "$target_repo/.codex/hooks.json" ] || has_hooks_json=false
     [ -x "$target_repo/.codex/hooks/bash-guard.sh" ] || has_bash_guard=false
     [ -f "$target_repo/.codex/hooks/git-guard.cjs" ] || has_node_guard=false
+    [ -f "$target_repo/.codex/hooks/fable-review.cjs" ] || has_fable_review=false
     grep -q 'node \.codex/hooks/git-guard\.cjs' "$target_repo/.codex/hooks.json" 2>/dev/null || has_node_guard=false
     echo "$output" | grep -Eq '(^|[^A-Za-z])(gdlc|rdlc)([^A-Za-z]|$)' && avoids_unreleased_skill_labels=false
 
@@ -74,6 +76,7 @@ test_installer_smoke_test_clean_project() {
        [ "$has_hooks_json" = "true" ] &&
        [ "$has_bash_guard" = "true" ] &&
        [ "$has_node_guard" = "true" ] &&
+       [ "$has_fable_review" = "true" ] &&
        [ "$avoids_unreleased_skill_labels" = "true" ]; then
         pass "Installer smoke test succeeds in a clean temp project"
     else

@@ -8,6 +8,7 @@ ACTIVE_HOOKS_FILE="$REPO_DIR/.codex/hooks.json"
 UNIVERSAL_PRETOOL_SCRIPT="$HOOKS_DIR/git-guard.cjs"
 UNIVERSAL_SESSION_SCRIPT="$HOOKS_DIR/session-start.cjs"
 UNIVERSAL_COMPACT_SCRIPT="$HOOKS_DIR/compact-guard.cjs"
+FABLE_REVIEW_SCRIPT="$HOOKS_DIR/fable-review.cjs"
 PASSED=0
 FAILED=0
 
@@ -5020,6 +5021,260 @@ test_docs_document_proof_stamp_gate() {
     fi
 }
 
+test_fable_review_requires_consent_and_safe_subscription_auth() {
+    local ws fake_dir fake_cli marker output status valid=true
+    ws=$(mktemp -d)
+    fake_dir=$(mktemp -d)
+    fake_cli="$fake_dir/fake-claude.cjs"
+    marker="$fake_dir/invoked.json"
+
+    git -C "$ws" init -q
+    git -C "$ws" config user.email test@example.com
+    git -C "$ws" config user.name "SDLC Test"
+    printf '%s\n' baseline > "$ws/file.txt"
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    git -C "$ws" add file.txt .codex/hooks/git-guard.cjs
+    git -C "$ws" commit -qm baseline
+    printf '%s\n' candidate > "$ws/file.txt"
+    git -C "$ws" add file.txt
+    (cd "$ws" && node .codex/hooks/git-guard.cjs prove --reviewed --check true >/dev/null)
+
+    cat > "$fake_cli" <<'NODE'
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+if (args[0] === "auth" && args[1] === "status") {
+  process.stdout.write(JSON.stringify({
+    authMethod: "claude.ai",
+    apiProvider: "firstParty",
+    subscriptionType: "max",
+  }));
+  process.exit(0);
+}
+fs.writeFileSync(process.env.FABLE_TEST_MARKER, JSON.stringify({
+  args,
+  cwd: process.cwd(),
+  hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
+  prompt: fs.readFileSync(0, "utf8"),
+}));
+process.stdout.write(JSON.stringify([
+  { type: "system", subtype: "init", model: "claude-fable-5" },
+  {
+    type: "result",
+    model: "claude-fable-5",
+    result: JSON.stringify({ findings: [], verdict: "CERTIFIED" }),
+    structured_output: { findings: [], verdict: "CERTIFIED" },
+  },
+]));
+NODE
+
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MODE=1 CODEX_SDLC_CLAUDE_PATH="$fake_cli" \
+        FABLE_TEST_MARKER="$marker" node "$FABLE_REVIEW_SCRIPT" --base HEAD 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || valid=false
+    echo "$output" | grep -qi 'consent-subscription-quota' || valid=false
+    [ ! -e "$marker" ] || valid=false
+
+    set +e
+    output=$(cd "$ws" && ANTHROPIC_API_KEY=unsafe CODEX_SDLC_TEST_MODE=1 \
+        CODEX_SDLC_CLAUDE_PATH="$fake_cli" FABLE_TEST_MARKER="$marker" \
+        node "$FABLE_REVIEW_SCRIPT" --base HEAD --consent-subscription-quota 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || valid=false
+    echo "$output" | grep -qi 'ANTHROPIC_API_KEY' || valid=false
+    [ ! -e "$marker" ] || valid=false
+
+    rm -rf "$ws" "$fake_dir"
+    if [ "$valid" = "true" ]; then
+        pass "Fable review requires quota consent and rejects metered API auth"
+    else
+        fail "Fable review should require consent and verified subscription auth"
+    fi
+}
+
+test_fable_review_is_tool_free_high_and_candidate_bound() {
+    local ws fake_dir fake_cli marker receipt base tree output status valid=true
+    ws=$(mktemp -d)
+    fake_dir=$(mktemp -d)
+    fake_cli="$fake_dir/fake-claude.cjs"
+    marker="$fake_dir/invoked.json"
+
+    git -C "$ws" init -q
+    git -C "$ws" config user.email test@example.com
+    git -C "$ws" config user.name "SDLC Test"
+    printf '%s\n' baseline > "$ws/file.txt"
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    git -C "$ws" add file.txt .codex/hooks/git-guard.cjs
+    git -C "$ws" commit -qm baseline
+    base=$(git -C "$ws" rev-parse HEAD)
+    printf '%s\n' candidate > "$ws/file.txt"
+    git -C "$ws" add file.txt
+    tree=$(git -C "$ws" write-tree)
+    (cd "$ws" && node .codex/hooks/git-guard.cjs prove --reviewed --check true >/dev/null)
+
+    cat > "$fake_cli" <<'NODE'
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+if (args[0] === "auth" && args[1] === "status") {
+  process.stdout.write(JSON.stringify({
+    authMethod: "claude.ai",
+    apiProvider: "firstParty",
+    subscriptionType: "max",
+  }));
+  process.exit(0);
+}
+fs.writeFileSync(process.env.FABLE_TEST_MARKER, JSON.stringify({
+  args,
+  cwd: process.cwd(),
+  hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
+  prompt: fs.readFileSync(0, "utf8"),
+}));
+if (process.env.FABLE_TEST_MUTATE_PATH) {
+  fs.appendFileSync(process.env.FABLE_TEST_MUTATE_PATH, "changed during review\n");
+}
+process.stdout.write(JSON.stringify([
+  { type: "system", subtype: "init", model: "claude-fable-5" },
+  {
+    type: "result",
+    model: "claude-fable-5",
+    result: JSON.stringify({ findings: [], verdict: "CERTIFIED" }),
+    structured_output: { findings: [], verdict: "CERTIFIED" },
+  },
+]));
+NODE
+
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MODE=1 CODEX_SDLC_CLAUDE_PATH="$fake_cli" \
+        FABLE_TEST_MARKER="$marker" node "$FABLE_REVIEW_SCRIPT" --base HEAD \
+        --consent-subscription-quota 2>&1)
+    status=$?
+    set -e
+    receipt=$(git -C "$ws" rev-parse --git-path codex-sdlc/fable-review.json)
+
+    [ "$status" -eq 0 ] || valid=false
+    [ -f "$ws/$receipt" ] || [ -f "$receipt" ] || valid=false
+    RECEIPT_PATH=$(cd "$ws" && git rev-parse --git-path codex-sdlc/fable-review.json)
+    if [[ "$RECEIPT_PATH" != /* ]]; then RECEIPT_PATH="$ws/$RECEIPT_PATH"; fi
+    RECEIPT_PATH="$RECEIPT_PATH" MARKER_PATH="$marker" BASE_SHA="$base" TREE_SHA="$tree" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const receipt = JSON.parse(fs.readFileSync(process.env.RECEIPT_PATH, "utf8"));
+const call = JSON.parse(fs.readFileSync(process.env.MARKER_PATH, "utf8"));
+const requiredArgs = ["-p", "--model", "fable", "--effort", "high", "--safe-mode", "--max-turns", "1", "--setting-sources", "user", "--tools", "", "--disable-slash-commands", "--no-session-persistence", "--json-schema", "--output-format", "json"];
+for (const value of requiredArgs) {
+  if (!call.args.includes(value)) process.exit(1);
+}
+if (call.cwd === process.cwd()) process.exit(1);
+if (call.hasApiKey) process.exit(1);
+if (!call.prompt.includes(`Base commit: ${process.env.BASE_SHA}`)) process.exit(1);
+if (!call.prompt.includes(`Candidate tree: ${process.env.TREE_SHA}`)) process.exit(1);
+if (!call.prompt.includes("Do not rerun tests")) process.exit(1);
+if (!call.prompt.includes("code-review findings only")) process.exit(1);
+if (receipt.status !== "certified") process.exit(1);
+if (receipt.base_commit !== process.env.BASE_SHA) process.exit(1);
+if (receipt.candidate_tree !== process.env.TREE_SHA) process.exit(1);
+if (receipt.reviewer_effort !== "high") process.exit(1);
+if (!String(receipt.patch_sha256 || "").startsWith("sha256:")) process.exit(1);
+if (!receipt.report.endsWith("Verdict: CERTIFIED")) process.exit(1);
+NODE
+    echo "$output" | grep -q 'Fable review certified' || valid=false
+
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MODE=1 CODEX_SDLC_CLAUDE_PATH="$fake_cli" \
+        FABLE_TEST_MARKER="$marker" FABLE_TEST_MUTATE_PATH="$ws/file.txt" \
+        node "$FABLE_REVIEW_SCRIPT" --base HEAD --consent-subscription-quota 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || valid=false
+    echo "$output" | grep -Eqi 'candidate.*(changed|unstaged)|unstaged.*candidate' || valid=false
+    [ ! -f "$RECEIPT_PATH" ] || valid=false
+
+    rm -rf "$ws" "$fake_dir"
+    if [ "$valid" = "true" ]; then
+        pass "Fable review is isolated, tool-free, high-effort, and candidate-bound"
+    else
+        echo "$output"
+        fail "Fable review did not preserve its bounded review contract"
+    fi
+}
+
+test_fable_review_rejects_stale_proof() {
+    local ws fake_dir fake_cli marker output status valid=true
+    ws=$(mktemp -d)
+    fake_dir=$(mktemp -d)
+    fake_cli="$fake_dir/fake-claude.cjs"
+    marker="$fake_dir/invoked.json"
+
+    git -C "$ws" init -q
+    git -C "$ws" config user.email test@example.com
+    git -C "$ws" config user.name "SDLC Test"
+    printf '%s\n' baseline > "$ws/file.txt"
+    mkdir -p "$ws/.codex/hooks"
+    cp "$UNIVERSAL_PRETOOL_SCRIPT" "$ws/.codex/hooks/git-guard.cjs"
+    git -C "$ws" add file.txt .codex/hooks/git-guard.cjs
+    git -C "$ws" commit -qm baseline
+    printf '%s\n' candidate > "$ws/file.txt"
+    git -C "$ws" add file.txt
+    (cd "$ws" && node .codex/hooks/git-guard.cjs prove --reviewed --check true >/dev/null)
+    printf '%s\n' changed-after-proof > "$ws/file.txt"
+    git -C "$ws" add file.txt
+    cat > "$fake_cli" <<'NODE'
+const args = process.argv.slice(2);
+if (args[0] === "auth" && args[1] === "status") {
+  process.stdout.write(JSON.stringify({
+    authMethod: "claude.ai",
+    apiProvider: "firstParty",
+    subscriptionType: "max",
+  }));
+  process.exit(0);
+}
+
+process.exit(99);
+NODE
+
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MODE=1 CODEX_SDLC_CLAUDE_PATH="$fake_cli" \
+        FABLE_TEST_MARKER="$marker" node "$FABLE_REVIEW_SCRIPT" --base HEAD \
+        --consent-subscription-quota 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || valid=false
+    echo "$output" | grep -qi 'proof.*stale\|stale.*proof' || valid=false
+    [ ! -e "$marker" ] || valid=false
+
+    rm -rf "$ws" "$fake_dir"
+    if [ "$valid" = "true" ]; then
+        pass "Fable review rejects a stale proof before invoking Claude"
+    else
+        echo "$output"
+        fail "Fable review should reject stale candidate proof"
+    fi
+}
+
+test_fable_review_uses_windows_cmd_shim_and_freezes_before_proof_check() {
+    local valid=true
+
+    FABLE_REVIEW_PATH="$FABLE_REVIEW_SCRIPT" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const source = fs.readFileSync(process.env.FABLE_REVIEW_PATH, "utf8");
+if (!source.includes('process.platform === "win32"')) process.exit(1);
+if (!source.includes("process.env.ComSpec")) process.exit(1);
+if (!source.includes('["/d", "/s", "/c", "claude"]')) process.exit(1);
+const candidateIndex = source.indexOf('const candidateTree = git(root, ["write-tree"]);');
+const proofIndex = source.indexOf("proofStatus(root);");
+if (candidateIndex < 0 || proofIndex < 0 || candidateIndex >= proofIndex) process.exit(1);
+NODE
+
+    if [ "$valid" = "true" ]; then
+        pass "Fable review launches the Windows cmd shim and freezes its candidate before proof verification"
+    else
+        fail "Fable review lacks safe Windows shim launch or verifies proof before freezing its candidate"
+    fi
+}
+
 test_pretool_blocks_commit
 test_pretool_blocks_push
 test_pretool_blocks_git_after_shell_prefixes
@@ -5127,6 +5382,10 @@ test_readme_explains_plugin_to_daily_workflow
 test_e2e_requires_explicit_token_opt_in
 test_e2e_bypasses_hook_trust_only_for_ephemeral_automation
 test_docs_document_proof_stamp_gate
+test_fable_review_requires_consent_and_safe_subscription_auth
+test_fable_review_is_tool_free_high_and_candidate_bound
+test_fable_review_rejects_stale_proof
+test_fable_review_uses_windows_cmd_shim_and_freezes_before_proof_check
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

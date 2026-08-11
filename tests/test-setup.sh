@@ -731,6 +731,9 @@ test_manifest_created() {
         if ! json_eval_stdin 'data.managed_files[".codex/hooks/git-guard.cjs"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
             valid=false
         fi
+        if ! json_eval_stdin 'data.managed_files[".codex/hooks/fable-review.cjs"]' < "$ws/.codex-sdlc/manifest.json" >/dev/null 2>&1; then
+            valid=false
+        fi
     fi
     [ -f "$ws/.agents/skills/sdlc/SKILL.md" ] || valid=false
     [ ! -e "$ws/.agents/skills/adlc/SKILL.md" ] || valid=false
