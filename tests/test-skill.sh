@@ -522,6 +522,29 @@ test_sdlc_documents_bounded_fable_review() {
     fi
 }
 
+test_sdlc_documents_incremental_completion_cadence() {
+    local file
+    local valid=true
+
+    for file in "$REPO_SDLC_SKILL" "$SHIPPED_SDLC_SKILL" "$SDLC_LOOP" "$AGENTS_BASELINE" "$AGENTS_TEMPLATE"; do
+        grep -Fqi 'incremental checkpoint' "$file" || valid=false
+        grep -Eqi 'at most one risk-based reviewer|one risk-based reviewer at most' "$file" || valid=false
+        grep -Fqi 'completion boundary' "$file" || valid=false
+        grep -Eqi 'during (this |the )?ten-delivery pilot|when cross-model policy requires it' "$file" || valid=false
+        grep -Eqi 'whole base-to-candidate|complete base-to-candidate' "$file" || valid=false
+        grep -Fqi 'corrective delta' "$file" || valid=false
+        grep -Eqi 'third same-plan correction.*stop|third correction.*stop' "$file" || valid=false
+        grep -Eqi 'human approval.*replan|human.*authoriz.*new plan' "$file" || valid=false
+        grep -Fqi 'ten-delivery' "$file" || valid=false
+    done
+
+    if [ "$valid" = "true" ]; then
+        pass "SDLC workflow distinguishes incremental checkpoints from the final completion gate"
+    else
+        fail "SDLC workflow is missing the incremental checkpoint, completion, correction, or pilot contract"
+    fi
+}
+
 test_skill_manifest_exists
 test_plugin_skill_resolves_bundled_scripts_from_plugin_root
 test_plugin_skill_handles_legacy_standalone_install
@@ -541,6 +564,7 @@ test_repo_scoped_sdlc_skill_documents_native_review
 test_sdlc_workflow_is_bounded_and_repairable
 test_sdlc_review_reuses_one_broad_proof
 test_sdlc_documents_bounded_fable_review
+test_sdlc_documents_incremental_completion_cadence
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

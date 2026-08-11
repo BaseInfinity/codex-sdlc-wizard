@@ -21,6 +21,7 @@ Codex does not have a native `/sdlc` command. This file is the honest replacemen
    Author-review the exact incremental diff, note risks, and remove junk before each coherent green commit.
 7. Commit only after proof
    Commit coherent green slices after focused proof. Freeze the cumulative completion candidate and run one fresh broad proof before final review; relevant changes invalidate it and require a fresh final proof.
+   Incremental checkpoint: use affected proof, exact-diff author review, and at most one risk-based reviewer before each coherent green commit. During the ten-delivery pilot, the completion boundary reviews the whole base-to-candidate diff with Sol High and then Fable High; outside the pilot, use Fable only when cross-model policy requires it. Fix a blocker as one bounded corrective delta with targeted proof. A third same-plan correction means stop; human approval may authorize a replan with newly scoped work, not silently extend the exhausted plan. Record the ten-delivery pilot in `benchmarks/review-cadence.csv` before making this cadence permanent.
 8. Review to a decision
    Review the full base-to-candidate diff once after it is stable. Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix now or a follow-up issue; P3 never blocks and is recorded only when worthwhile.
    Run one broad proof run total on the frozen candidate through `node .codex/hooks/git-guard.cjs prove --reviewed`; do not run the suite directly and then rerun it through the guard.
