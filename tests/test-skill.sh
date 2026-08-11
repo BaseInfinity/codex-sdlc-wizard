@@ -530,6 +530,7 @@ test_sdlc_documents_incremental_completion_cadence() {
         grep -Fqi 'incremental checkpoint' "$file" || valid=false
         grep -Eqi 'at most one risk-based reviewer|one risk-based reviewer at most' "$file" || valid=false
         grep -Fqi 'completion boundary' "$file" || valid=false
+        grep -Eqi 'during (this |the )?ten-delivery pilot|when cross-model policy requires it' "$file" || valid=false
         grep -Eqi 'whole base-to-candidate|complete base-to-candidate' "$file" || valid=false
         grep -Fqi 'corrective delta' "$file" || valid=false
         grep -Eqi 'third same-plan correction.*stop|third correction.*stop' "$file" || valid=false

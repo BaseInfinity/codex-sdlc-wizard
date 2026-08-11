@@ -3,17 +3,32 @@
 
 set -euo pipefail
 
-CSV_PATH="${1:-benchmarks/review-cadence.csv}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CSV_PATH="${1:-$REPO_DIR/benchmarks/review-cadence.csv}"
+EXPECTED_HEADER='delivery_id,repo,issue_id,strategy,eligible,stable_base,candidate_tree,diff_files,broad_proof_runs,duplicate_broad_proof_runs,sol_review_minutes,fable_review_minutes,sol_pre_confidence,fable_pre_confidence,sol_post_confidence,fable_post_confidence,sol_pre_disposition,fable_pre_disposition,sol_post_disposition,fable_post_disposition,sol_disposition_change_reason,fable_disposition_change_reason,reconciliation_rounds,reconciliation_skipped,reconciliation_ledger_entries,unique_second_reviewer_blockers,corrective_rounds,tripwire_count,red_on_main,sol_quota_cost,fable_quota_cost,sol_token_cost,fable_token_cost,issue_closed,milestone_closed,release_shipped,delivery_minutes,notes'
 
 if [ ! -f "$CSV_PATH" ]; then
     echo "missing ledger: $CSV_PATH" >&2
     exit 1
 fi
 
-awk -F, '
+IFS= read -r actual_header < "$CSV_PATH"
+if [ "$actual_header" != "$EXPECTED_HEADER" ]; then
+    echo "review cadence ledger header does not match the required schema" >&2
+    exit 2
+fi
+
+awk -F, -v expected_header="$EXPECTED_HEADER" '
     NR == 1 {
+        expected_fields = split(expected_header, required_header, ",")
         for (field_index = 1; field_index <= NF; field_index++) column[$field_index] = field_index
         next
+    }
+
+    NF != expected_fields {
+        printf "malformed review cadence row %d: expected %d fields, got %d; free-text fields must not contain commas\n", NR, expected_fields, NF > "/dev/stderr"
+        exit 2
     }
 
     $(column["eligible"]) == 1 {

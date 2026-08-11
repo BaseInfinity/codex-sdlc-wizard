@@ -213,21 +213,50 @@ CSV
 
 test_review_cadence_ledger_exists_with_required_headers() {
     local has_file=true
-    local has_headers=true
-    local header
+    local header expected_header
 
     [ -f "$REVIEW_LEDGER" ] || has_file=false
     header="$(head -n 1 "$REVIEW_LEDGER" 2>/dev/null || true)"
+    expected_header='delivery_id,repo,issue_id,strategy,eligible,stable_base,candidate_tree,diff_files,broad_proof_runs,duplicate_broad_proof_runs,sol_review_minutes,fable_review_minutes,sol_pre_confidence,fable_pre_confidence,sol_post_confidence,fable_post_confidence,sol_pre_disposition,fable_pre_disposition,sol_post_disposition,fable_post_disposition,sol_disposition_change_reason,fable_disposition_change_reason,reconciliation_rounds,reconciliation_skipped,reconciliation_ledger_entries,unique_second_reviewer_blockers,corrective_rounds,tripwire_count,red_on_main,sol_quota_cost,fable_quota_cost,sol_token_cost,fable_token_cost,issue_closed,milestone_closed,release_shipped,delivery_minutes,notes'
 
-    for column in delivery_id repo issue_id strategy eligible stable_base candidate_tree diff_files broad_proof_runs duplicate_broad_proof_runs sol_review_minutes fable_review_minutes sol_pre_confidence fable_pre_confidence sol_post_confidence fable_post_confidence sol_pre_disposition fable_pre_disposition sol_post_disposition fable_post_disposition sol_disposition_change_reason fable_disposition_change_reason reconciliation_rounds reconciliation_skipped reconciliation_ledger_entries unique_second_reviewer_blockers corrective_rounds tripwire_count red_on_main sol_quota_cost fable_quota_cost sol_token_cost fable_token_cost issue_closed milestone_closed release_shipped delivery_minutes; do
-        echo "$header" | grep -q "$column" || has_headers=false
-    done
-
-    if [ "$has_file" = "true" ] && [ "$has_headers" = "true" ]; then
+    if [ "$has_file" = "true" ] && [ "$header" = "$expected_header" ]; then
         pass "Review cadence ledger exists with the ten-delivery pilot schema"
     else
         fail "Review cadence ledger is missing or does not have the required pilot schema"
     fi
+}
+
+test_review_cadence_summary_rejects_schema_drift() {
+    local ws malformed missing_header
+    ws="$(mktemp -d)"
+    malformed="$ws/malformed.csv"
+    missing_header="$ws/missing-header.csv"
+
+    head -n 1 "$REVIEW_LEDGER" > "$malformed"
+    printf '%s\n' 'd01,repo,1,incremental,1,a,b,4,1,0,2,2,90,90,90,90,clean,clean,clean,clean,reason,with-comma,reason,0,1,,0,0,0,0,1,1,100,100,1,0,0,20,note' >> "$malformed"
+    printf '%s\n' 'delivery_id,repo,issue_id' > "$missing_header"
+
+    if "$REVIEW_SUMMARY_SCRIPT" "$malformed" >/dev/null 2>&1 ||
+       "$REVIEW_SUMMARY_SCRIPT" "$missing_header" >/dev/null 2>&1; then
+        fail "Review cadence summary accepts malformed rows or missing required headers"
+    else
+        pass "Review cadence summary rejects malformed rows and missing required headers"
+    fi
+
+    rm -rf "$ws"
+}
+
+test_review_cadence_summary_default_is_repo_relative() {
+    local ws
+    ws="$(mktemp -d)"
+
+    if (cd "$ws" && "$REVIEW_SUMMARY_SCRIPT" >/dev/null); then
+        pass "Review cadence summary resolves its default ledger outside the repo root"
+    else
+        fail "Review cadence summary default ledger depends on the caller working directory"
+    fi
+
+    rm -rf "$ws"
 }
 
 test_review_cadence_summary_script_exists() {
@@ -289,6 +318,8 @@ test_pilot_rollout_summary_recommends_default_use_when_gate_is_met
 test_pilot_rollout_summary_holds_default_use_when_reusable_bug_count_is_too_high
 test_review_cadence_ledger_exists_with_required_headers
 test_review_cadence_summary_script_exists
+test_review_cadence_summary_rejects_schema_drift
+test_review_cadence_summary_default_is_repo_relative
 test_review_cadence_summary_reports_delivery_outcomes
 
 echo ""
