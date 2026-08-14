@@ -63,6 +63,17 @@ node .codex/hooks/fable-review.cjs --base <ref> --consent-subscription-quota
 
 This consumes Claude subscription quota and refuses API-key or alternate-provider authentication.
 
+When policy requires Sol High and Fable High to reconcile their independent
+reviews, run the single bounded gate over the same frozen candidate:
+
+```bash
+node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota
+```
+
+Clean agreement stops immediately. A verdict split receives exactly one
+verbatim structured cross-feed round; the gate then emits one joint receipt and
+stops. It never permits a third reviewer exchange.
+
 For this repository, run and stamp the complete maintainer suite once with:
 
 ```bash

@@ -139,11 +139,13 @@ test_update_installs_new_managed_hook_on_first_run() {
 
     run_setup_local "$ws"
     rm -f "$ws/.codex/hooks/fable-review.cjs"
+    rm -f "$ws/.codex/hooks/dual-review.cjs"
     MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" node <<'NODE'
 const fs = require("fs");
 const manifestPath = process.env.MANIFEST_PATH;
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 delete manifest.managed_files[".codex/hooks/fable-review.cjs"];
+delete manifest.managed_files[".codex/hooks/dual-review.cjs"];
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE
 
@@ -152,8 +154,11 @@ NODE
     check_output=$(run_check "$ws")
 
     cmp -s "$ws/.codex/hooks/fable-review.cjs" "$REPO_DIR/.codex/hooks/fable-review.cjs" || valid=false
+    cmp -s "$ws/.codex/hooks/dual-review.cjs" "$REPO_DIR/.codex/hooks/dual-review.cjs" || valid=false
     echo "$output" | grep -Fq '.codex/hooks/fable-review.cjs: untracked -> install' || valid=false
+    echo "$output" | grep -Fq '.codex/hooks/dual-review.cjs: untracked -> install' || valid=false
     json_text_equals "$check_output" 'data.managed_files[".codex/hooks/fable-review.cjs"].status' "match" || valid=false
+    json_text_equals "$check_output" 'data.managed_files[".codex/hooks/dual-review.cjs"].status' "match" || valid=false
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then
@@ -165,7 +170,7 @@ NODE
 }
 
 test_update_preserves_untracked_fable_hook_during_legacy_repair() {
-    local ws custom_before
+    local ws custom_before dual_custom_before
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
     echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
     mkdir -p "$ws/src"
@@ -173,6 +178,8 @@ test_update_preserves_untracked_fable_hook_during_legacy_repair() {
     run_setup_local "$ws"
     printf '%s\n' '// user-owned Fable hook' > "$ws/.codex/hooks/fable-review.cjs"
     custom_before=$(cat "$ws/.codex/hooks/fable-review.cjs")
+    printf '%s\n' '// user-owned dual-review hook' > "$ws/.codex/hooks/dual-review.cjs"
+    dual_custom_before=$(cat "$ws/.codex/hooks/dual-review.cjs")
     cat > "$ws/.codex/hooks.json" <<'EOF'
 {
   "hooks": {
@@ -186,6 +193,7 @@ const fs = require("fs");
 const manifestPath = process.env.MANIFEST_PATH;
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 delete manifest.managed_files[".codex/hooks/fable-review.cjs"];
+delete manifest.managed_files[".codex/hooks/dual-review.cjs"];
 delete manifest.managed_files[".codex/hooks/git-guard.cjs"];
 delete manifest.managed_files[".codex/hooks/session-start.cjs"];
 manifest.managed_files[".codex/hooks/git-guard.js"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
@@ -197,7 +205,9 @@ NODE
     output=$(run_update "$ws" 2>&1) || valid=false
 
     [ "$(cat "$ws/.codex/hooks/fable-review.cjs")" = "$custom_before" ] || valid=false
+    [ "$(cat "$ws/.codex/hooks/dual-review.cjs")" = "$dual_custom_before" ] || valid=false
     echo "$output" | grep -Fq '.codex/hooks/fable-review.cjs: untracked -> skip (preserve customization)' || valid=false
+    echo "$output" | grep -Fq '.codex/hooks/dual-review.cjs: untracked -> skip (preserve customization)' || valid=false
     rm -rf "$ws"
 
     if [ "$valid" = "true" ]; then

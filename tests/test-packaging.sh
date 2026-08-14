@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 README="$REPO_DIR/README.md"
+PROVE_IT="$REPO_DIR/PROVE-IT.md"
 WINDOWS_E2E_RUNBOOK="$REPO_DIR/WINDOWS-CODEX-DESKTOP-E2E.md"
 GIT_ATTRIBUTES="$REPO_DIR/.gitattributes"
 ROADMAP="$REPO_DIR/ROADMAP.md"
@@ -58,6 +59,7 @@ test_installer_smoke_test_clean_project() {
     local has_bash_guard=true
     local has_node_guard=true
     local has_fable_review=true
+    local has_dual_review=true
     local avoids_unreleased_skill_labels=true
 
     [ -f "$target_repo/AGENTS.md" ] || has_agents=false
@@ -66,6 +68,7 @@ test_installer_smoke_test_clean_project() {
     [ -x "$target_repo/.codex/hooks/bash-guard.sh" ] || has_bash_guard=false
     [ -f "$target_repo/.codex/hooks/git-guard.cjs" ] || has_node_guard=false
     [ -f "$target_repo/.codex/hooks/fable-review.cjs" ] || has_fable_review=false
+    [ -f "$target_repo/.codex/hooks/dual-review.cjs" ] || has_dual_review=false
     grep -q 'node \.codex/hooks/git-guard\.cjs' "$target_repo/.codex/hooks.json" 2>/dev/null || has_node_guard=false
     echo "$output" | grep -Eq '(^|[^A-Za-z])(gdlc|rdlc)([^A-Za-z]|$)' && avoids_unreleased_skill_labels=false
 
@@ -77,6 +80,7 @@ test_installer_smoke_test_clean_project() {
        [ "$has_bash_guard" = "true" ] &&
        [ "$has_node_guard" = "true" ] &&
        [ "$has_fable_review" = "true" ] &&
+       [ "$has_dual_review" = "true" ] &&
        [ "$avoids_unreleased_skill_labels" = "true" ]; then
         pass "Installer smoke test succeeds in a clean temp project"
     else
@@ -968,6 +972,7 @@ test_readme_documents_native_codex_review() {
     local has_prompt_only_contract=true
     local has_targeted_verification_boundary=true
     local binds_base_and_candidate=true
+    local documents_bounded_dual_review=true
 
     grep -q 'codex review' "$README" || has_review_command=false
     grep -q 'codex review --uncommitted' "$README" || has_uncommitted=false
@@ -983,6 +988,7 @@ test_readme_documents_native_codex_review() {
     grep -Eqi 'custom prompt.*(cannot|must not|do not).*--(uncommitted|base|commit)|(cannot|must not|do not).*--(uncommitted|base|commit).*custom prompt' "$README" || has_prompt_only_contract=false
     grep -Eqi 'targeted verification.*concrete suspected defect|concrete suspected defect.*targeted verification' "$README" || has_targeted_verification_boundary=false
     grep -Eqi 'Base: <base-[^>]+>.*Candidate: <candidate-[^>]+>' "$README" || binds_base_and_candidate=false
+    grep -Fq 'node .codex/hooks/dual-review.cjs --base main --consent-subscription-quota' "$README" || documents_bounded_dual_review=false
 
     if [ "$has_review_command" = "true" ] &&
        [ "$has_uncommitted" = "true" ] &&
@@ -996,10 +1002,19 @@ test_readme_documents_native_codex_review() {
        [ "$has_single_proof_contract" = "true" ] &&
        [ "$has_prompt_only_contract" = "true" ] &&
        [ "$has_targeted_verification_boundary" = "true" ] &&
-       [ "$binds_base_and_candidate" = "true" ]; then
+       [ "$binds_base_and_candidate" = "true" ] &&
+       [ "$documents_bounded_dual_review" = "true" ]; then
         pass "README documents proof-aware native Codex review without redundant broad verification"
     else
         fail "README does not document proof-aware native Codex review and its verification boundaries clearly enough"
+    fi
+}
+
+test_prove_it_documents_bounded_dual_review() {
+    if grep -Fq 'node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota' "$PROVE_IT"; then
+        pass "PROVE-IT documents the bounded dual-review gate"
+    else
+        fail "PROVE-IT omits the bounded dual-review gate"
     fi
 }
 
@@ -1444,6 +1459,7 @@ test_readme_documents_current_codex_hook_surface
 test_readme_documents_feedback_flow_and_repo_focus
 test_readme_documents_model_profiles
 test_readme_documents_native_codex_review
+test_prove_it_documents_bounded_dual_review
 test_readme_uses_real_release_examples
 test_readme_puts_quick_start_near_the_top
 test_readme_has_consumer_parity_sections_without_ecosystem_reveal
