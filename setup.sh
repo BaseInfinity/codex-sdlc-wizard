@@ -1283,6 +1283,7 @@ BASH_GUARD_HASH="$(compute_hash .codex/hooks/bash-guard.sh)" \
 SESSION_START_HASH="$(compute_hash .codex/hooks/session-start.sh)" \
 GIT_GUARD_CJS_HASH="$(compute_hash .codex/hooks/git-guard.cjs)" \
 FABLE_REVIEW_CJS_HASH="$(compute_hash .codex/hooks/fable-review.cjs)" \
+DUAL_REVIEW_CJS_HASH="$(compute_hash .codex/hooks/dual-review.cjs)" \
 SESSION_START_CJS_HASH="$(compute_hash .codex/hooks/session-start.cjs)" \
 COMPACT_GUARD_CJS_HASH="$(compute_hash .codex/hooks/compact-guard.cjs)" \
 GIT_GUARD_PS1_HASH="$(compute_hash .codex/hooks/git-guard.ps1)" \
@@ -1382,6 +1383,7 @@ const manifest = {
     ".codex/hooks/session-start.sh": process.env.SESSION_START_HASH || "",
     ".codex/hooks/git-guard.cjs": process.env.GIT_GUARD_CJS_HASH || "",
     ".codex/hooks/fable-review.cjs": process.env.FABLE_REVIEW_CJS_HASH || "",
+    ".codex/hooks/dual-review.cjs": process.env.DUAL_REVIEW_CJS_HASH || "",
     ".codex/hooks/session-start.cjs": process.env.SESSION_START_CJS_HASH || "",
     ".codex/hooks/compact-guard.cjs": process.env.COMPACT_GUARD_CJS_HASH || "",
     ".codex/hooks/git-guard.ps1": process.env.GIT_GUARD_PS1_HASH || "",

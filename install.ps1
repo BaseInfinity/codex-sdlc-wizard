@@ -489,6 +489,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\git-guard.cjs") -Destination ".codex\hooks\git-guard.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\fable-review.cjs") -Destination ".codex\hooks\fable-review.cjs"
+Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\dual-review.cjs") -Destination ".codex\hooks\dual-review.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\session-start.cjs") -Destination ".codex\hooks\session-start.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\compact-guard.cjs") -Destination ".codex\hooks\compact-guard.cjs"
 Copy-Item -LiteralPath (Join-Path $scriptDir ".codex\hooks\git-guard.ps1") -Destination ".codex\hooks\git-guard.ps1"
@@ -500,6 +501,7 @@ Add-TouchedFile -Path ".codex/hooks/session-start.js"
 foreach ($touchedHook in @(
     ".codex/hooks/git-guard.cjs",
     ".codex/hooks/fable-review.cjs",
+    ".codex/hooks/dual-review.cjs",
     ".codex/hooks/session-start.cjs",
     ".codex/hooks/compact-guard.cjs",
     ".codex/hooks/git-guard.ps1",

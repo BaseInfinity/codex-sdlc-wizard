@@ -377,9 +377,17 @@ node .codex/hooks/fable-review.cjs --base main --consent-subscription-quota
 
 The consent flag is required because the review consumes Claude subscription quota. The wrapper verifies Claude first-party subscription auth, refuses API keys and alternate providers, disables tools/MCP/session persistence, reuses the current SDLC proof, and writes a candidate-bound receipt under Git metadata. It does not create a metered API-key charge when the verified subscription lane is used.
 
+When policy requires both reviewers to certify one completion candidate, use the bounded joint gate instead:
+
+```bash
+node .codex/hooks/dual-review.cjs --base main --consent-subscription-quota
+```
+
+Sol High and Fable High review the same frozen candidate independently. Clean agreement stops after those two reviews. A verdict split gets exactly one verbatim cross-feed round, then the wrapper writes one conservative candidate-bound joint receipt; it never starts an unbounded reviewer dialogue.
+
 ### Incremental checkpoints and the completion boundary
 
-For each coherent green slice, run affected proof, author-review the exact incremental diff, and use at most one risk-based reviewer before committing. During the ten-delivery pilot, the completion boundary is deliberately broader: freeze the candidate, run the broad proof once, and have Sol High and then Fable High review the whole base-to-candidate diff. Outside the pilot, use Fable only when cross-model policy requires it. Fix a blocker as one bounded corrective delta with targeted proof. A third same-plan correction means stop; human approval may authorize a replan with newly scoped work, not silently extend the exhausted plan.
+For each coherent green slice, run affected proof, author-review the exact incremental diff, and use at most one risk-based reviewer before committing. During the ten-delivery pilot, the completion boundary is deliberately broader: freeze the candidate, run the broad proof once, and send the whole base-to-candidate diff through the bounded Sol High plus Fable High joint gate above. Outside the pilot, use Fable only when cross-model policy requires it. Fix a blocker as one bounded corrective delta with targeted proof. A third same-plan correction means stop; human approval may authorize a replan with newly scoped work, not silently extend the exhausted plan.
 
 This cadence is a measured ten-delivery pilot, not permanent ceremony. Record delivery, duplicate-proof, per-reviewer disposition and confidence, reconciliation, quota/token cost, correction, tripwire, CI, milestone, and release outcomes in `benchmarks/review-cadence.csv`, then run `bash scripts/summarize-review-cadence.sh`. After ten eligible deliveries across at least two strategies, a human compares the arms and chooses whether to keep, tune, or sunset it.
 

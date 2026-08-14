@@ -110,6 +110,9 @@ repair_hooks_bundle() {
     if [ ! -e ".codex/hooks/fable-review.cjs" ] && [ ! -L ".codex/hooks/fable-review.cjs" ]; then
         copy_static_file ".codex/hooks/fable-review.cjs"
     fi
+    if [ ! -e ".codex/hooks/dual-review.cjs" ] && [ ! -L ".codex/hooks/dual-review.cjs" ]; then
+        copy_static_file ".codex/hooks/dual-review.cjs"
+    fi
     copy_static_file ".codex/hooks/session-start.cjs"
     copy_static_file ".codex/hooks/compact-guard.cjs"
     rm -f .codex/hooks/git-guard.js .codex/hooks/session-start.js
@@ -126,7 +129,7 @@ repair_hooks_bundle() {
 
 repair_missing_hook_scripts() {
     local required_hooks required_hook
-    required_hooks=".codex/hooks/git-guard.cjs .codex/hooks/fable-review.cjs .codex/hooks/session-start.cjs .codex/hooks/compact-guard.cjs"
+    required_hooks=".codex/hooks/git-guard.cjs .codex/hooks/fable-review.cjs .codex/hooks/dual-review.cjs .codex/hooks/session-start.cjs .codex/hooks/compact-guard.cjs"
     if [ "$IS_WINDOWS" = "true" ]; then
         required_hooks="$required_hooks .codex/hooks/git-guard.ps1 .codex/hooks/session-start.ps1"
     else
@@ -408,6 +411,7 @@ esac
 
 MODEL_PROFILE_METADATA_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex-sdlc/model-profile.json"]?.status || ""')"
 FABLE_REVIEW_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex/hooks/fable-review.cjs"]?.status || ""')"
+DUAL_REVIEW_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex/hooks/dual-review.cjs"]?.status || ""')"
 MANIFEST_MODEL_POLICY_SCHEMA_VERSION="$(json_get_file ".codex-sdlc/manifest.json" 'data.model_profile?.policy_schema_version || ""')"
 MODEL_POLICY_SCHEMA_MIGRATION=false
 RECORD_MODEL_POLICY_MIGRATION=false
@@ -567,6 +571,18 @@ if [ -z "$FABLE_REVIEW_STATUS" ]; then
     else
         PLAN_LINES+=(".codex/hooks/fable-review.cjs|untracked|skip (preserve customization)")
         SKIPPED_UNTRACKED_PATHS+=(".codex/hooks/fable-review.cjs")
+    fi
+fi
+
+if [ -z "$DUAL_REVIEW_STATUS" ]; then
+    if [ ! -e ".codex/hooks/dual-review.cjs" ] && [ ! -L ".codex/hooks/dual-review.cjs" ]; then
+        PLAN_LINES+=(".codex/hooks/dual-review.cjs|untracked|install")
+        CHANGES_PENDING=true
+        queue_static_repair ".codex/hooks/dual-review.cjs"
+        queue_manifest_refresh ".codex/hooks/dual-review.cjs"
+    else
+        PLAN_LINES+=(".codex/hooks/dual-review.cjs|untracked|skip (preserve customization)")
+        SKIPPED_UNTRACKED_PATHS+=(".codex/hooks/dual-review.cjs")
     fi
 fi
 
