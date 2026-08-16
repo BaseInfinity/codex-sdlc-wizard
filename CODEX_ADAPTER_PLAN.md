@@ -139,7 +139,7 @@ BaseInfinity/codex-sdlc-wizard/
 
 ### AGENTS.md
 
-Translated from our SDLC wizard, adapted for Codex. Since we can't hard-block file edits, AGENTS.md carries the TDD enforcement:
+Translated from our SDLC wizard, adapted for Codex. Since we can't hard-block file edits, AGENTS.md carries the evidence policy:
 
 ```markdown
 # SDLC Enforcement
@@ -147,15 +147,15 @@ Translated from our SDLC wizard, adapted for Codex. Since we can't hard-block fi
 ## Before Every Task
 1. Plan before coding — outline steps, state confidence (HIGH/MEDIUM/LOW)
 2. LOW confidence? Research more or ASK USER
-3. Write failing test FIRST (TDD RED), then implement (TDD GREEN)
+3. Choose the honest evidence lane: RED for writable behavior, EVAL for agent guidance, Plain-assert for mechanical contracts, or Review for judgment prose
 4. ALL tests must pass before commit — no exceptions
 
-## TDD Workflow (MANDATORY)
-1. Write the test file FIRST — the test MUST FAIL initially
-2. Run the test — confirm it fails (RED)
-3. Write the minimum implementation to make the test pass
-4. Run the test — confirm it passes (GREEN)
-5. Only then: commit
+## Evidence Workflow (MANDATORY)
+1. Use RED only when a RED mutation is writable; any executable observable input/output or side-effect makes it writable
+2. EVAL agent-facing guidance in a real scenario
+3. Plain-assert mechanical contracts
+4. Review judgment-call prose; the meaning exception applies only to prose
+5. Use implement-first only when a named gate blocks the required RED/evidence act, and require cross-model APPROVE for that same act and scope
 
 ## After Implementation
 1. Self-review: read back your changes, check for bugs
@@ -219,7 +219,7 @@ Keep concise — shorter = better model attention. Codex official limit is 32KiB
 cat << 'EOF'
 SDLC BASELINE:
 1. Plan before coding — state confidence level
-2. TDD: Write failing test FIRST, then implement
+2. Choose honest RED/eval/assert/review evidence before implementation
 3. ALL tests must pass before commit
 4. Self-review before presenting to user
 EOF
@@ -462,7 +462,7 @@ jobs:
 1. **Claude** writes this plan (DONE)
 2. **Codex** cross-reviews until CERTIFIED (DONE — 9/10, round 5)
 3. **Claude** creates the GitHub repo `BaseInfinity/codex-sdlc-wizard` (DONE)
-4. **Codex** implements from this plan (TDD: tests first, then code)
+4. **Codex** implements from this plan using the honest evidence lane for each change
 5. **Claude** reviews the implementation
 6. **User** verifies and ships
 

@@ -471,7 +471,8 @@ test_sdlc_workflow_is_bounded_and_repairable() {
         grep -Fqi 'code-review findings only' "$file" || valid=false
         grep -Eqi 'builder (owns|implements) every correction' "$file" || valid=false
         grep -Eqi 'harness.repair|repair.*enforcement' "$file" || valid=false
-        grep -Eqi 'test.*immediately after|immediately.*test' "$file" || valid=false
+        grep -Eqi 'implement-first.*named gate blocks.*(RED|evidence act)' "$file" || valid=false
+        grep -Eqi '(final|completion).*(proof|review).*(review|proof)|(proof|review).*(final|completion).*(review|proof)' "$file" || valid=false
         grep -Eqi 'loop until clean|repeat.*review.*until.*clean' "$file" && valid=false
     done
 
@@ -479,6 +480,48 @@ test_sdlc_workflow_is_bounded_and_repairable() {
         pass "SDLC workflow terminates, controls scope, and permits bounded harness repair"
     else
         fail "SDLC workflow is missing bounded review, scope, severity, reconciliation, or harness-repair rules"
+    fi
+}
+
+test_sdlc_scopes_red_to_writable_behavior() {
+    local file
+    local valid=true
+    local workflow_files=(
+        "$REPO_SDLC_SKILL"
+        "$SHIPPED_SDLC_SKILL"
+        "$SDLC_LOOP"
+        "$AGENTS_BASELINE"
+        "$AGENTS_TEMPLATE"
+    )
+    local active_surfaces=(
+        "${workflow_files[@]}"
+        "$REPO_AGENTS"
+        "$REPO_DIR/README.md"
+        "$REPO_DIR/CODEX_ADAPTER_PLAN.md"
+        "$REPO_DIR/templates/GOALS.md.tmpl"
+        "$REPO_DIR/templates/SDLC.md.tmpl"
+        "$REPO_DIR/TESTING.md"
+        "$REPO_DIR/templates/TESTING.md.tmpl"
+    )
+
+    for file in "${workflow_files[@]}"; do
+        grep -Fqi 'RED mutation is writable' "$file" || valid=false
+        grep -Eqi 'EVAL it|eval.*observable scenario' "$file" || valid=false
+        grep -Fqi 'Plain-assert it' "$file" || valid=false
+        grep -Eqi 'Review it|DON.T TEST IT|judg(e)?ment-call prose' "$file" || valid=false
+        grep -Eqi 'observable input/output or side-effect' "$file" || valid=false
+        grep -Eqi 'meaning exception.*only.*prose|only.*prose.*meaning exception' "$file" || valid=false
+        grep -Eqi 'cross-model.*APPROVE.*same act.*scope|same act.*scope.*cross-model.*APPROVE' "$file" || valid=false
+    done
+
+    for file in "${active_surfaces[@]}"; do
+        grep -Eqi 'TDD is mandatory: write the failing test first|Write a failing test FIRST|Every bug fix starts with a failing test' "$file" && valid=false
+    done
+
+    if [ "$valid" = "true" ]; then
+        pass "SDLC scopes RED to writable behavior and routes other evidence honestly"
+    else
+        fail "SDLC still mandates fake RED evidence or omits the three-way evidence rule"
     fi
 }
 
@@ -585,6 +628,7 @@ test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
 test_sdlc_workflow_is_bounded_and_repairable
+test_sdlc_scopes_red_to_writable_behavior
 test_sdlc_review_reuses_one_broad_proof
 test_sdlc_documents_bounded_dual_review
 test_sdlc_documents_incremental_completion_cadence

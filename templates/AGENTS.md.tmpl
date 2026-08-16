@@ -33,9 +33,10 @@ Use skills for the visible workflow contract, let hooks enforce silently, and ke
    - LOW (<60%): Not sure — do more research or ASK the user before proceeding
    - Always state confidence on meaningful work, and keep slices small enough that confidence stays high in practice
    - Freeze one issue, a closed behavior allowlist, one risk lane, and explicit exclusions. Feature creep becomes a separate follow-up issue unless omission would make the active change unsafe or nonfunctional.
-2. **TDD Red:** Write a failing test FIRST that proves the feature/fix is needed
-3. **TDD Green:** Implement the minimum code to make the test pass
-   - Harness-repair lane: if broken enforcement prevents RED for its own repair, declare the failing observable and exact file allowlist, make the smallest repair, then write and run the missing regression test immediately after. This does not waive final proof or review.
+2. **Honest evidence:** Use RED only when a RED mutation is writable. **EVAL it** for observable agent guidance, **Plain-assert it** for a mechanical contract, and **Review it** for judgment-call prose; cross-model review is the guard.
+   - For executable behavior, any observable input/output or side-effect difference makes a RED mutation writable; the meaning exception applies only to prose judged by a reader.
+3. **Minimum change:** Implement only what the selected evidence requires.
+   - Harness-repair lane: implement-first is allowed only when a named gate blocks the required RED or evidence act itself. A gate refusing implementation because RED is missing is working, not an entry ticket. A cross-model ruling must APPROVE that same act and scope before the edit. This does not waive final proof or review.
 4. **Verify incrementally:** run focused proof for each coherent green slice; run the full required proof on the frozen completion candidate
 5. **Active goals:** When `GOALS.md` exists, complete that active scope before claiming the run is done; do not confuse active goal completion with roadmap completion.
 6. **Review to a decision:** author-review each incremental diff, then review the stable cumulative candidate once. Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix or follow-up issue; P3 never blocks. When two reviewers are required, they exchange compact findings once. Allow at most two corrective rounds; unresolved P0/P1 requires decomposition, abandonment, or escalation.
@@ -121,7 +122,7 @@ After implementation, BEFORE presenting to the user:
 - Don't add features beyond what was asked
 - Delete dead code — no legacy fallbacks, no commented-out blocks
 - Test code is production code — same quality standards
-- Every bug fix starts with a failing test that reproduces the bug
+- Every executable bug fix starts with a writable failing observable; prose claims use the honest evidence lane above
 - If you fail twice on the same problem, STOP and ask the user
 
 ## Feedback and Repo Focus

@@ -9,10 +9,10 @@ Codex does not have a native `/sdlc` command. This file is the honest replacemen
 2. Pick the reasoning level
    Default to `high` for meaningful agentic coding. Escalate the difficult slice to `xhigh` for security review, migrations, destructive operations, long-running research, or challenging coding where `high` leaves unresolved risk. Repo-local instructions may define a measured exception.
    Use Max as a single-task escalation only when `xhigh` is not enough. Use Ultra only for subagent-backed parallel work that divides cleanly. Most tasks do not need Max or Ultra.
-3. Red first
-   Write the failing test first when the task is code-shaped.
-   If the task is setup, auth, or environment repair, define the failing observable first instead of pretending it is unit-testable.
-   Harness-repair lane: when broken SDLC enforcement or test bootstrap prevents RED for its own repair, declare the failing observable and exact file allowlist, make the smallest repair, then write and run the missing regression test immediately after. This never waives final proof or review.
+3. Choose honest evidence first
+   Use RED only when a RED mutation is writable. **EVAL it** when agent-facing guidance has an observable scenario. **Plain-assert it** for a mechanical contract. **Review it** when judgment-call prose depends on meaning; cross-model review is the guard.
+   For executable behavior, any observable input/output or side-effect difference makes a RED mutation writable; the meaning exception applies only to prose judged by a reader.
+   Harness-repair lane: implement-first is allowed only when a named gate blocks the required RED or evidence act itself. A gate refusing implementation because RED is missing is working, not an entry ticket. A cross-model ruling must APPROVE that same act and scope before the edit. This never waives final proof or review.
 4. Green with the smallest change
    Make the narrowest change that can satisfy the red check.
 5. Prove it

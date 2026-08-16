@@ -58,17 +58,17 @@ Check:
 
 Before implementation, do a docs update for the relevant feature area when the code change affects behavior, assumptions, or operator workflow.
 
-### 2. TDD
+### 2. Evidence before implementation
 
-Prefer:
+Use RED only when a RED mutation is writable:
 
-1. red
-2. green
-3. prove-it
+- **EVAL it:** agent-facing guidance whose effect is observable in a real scenario.
+- **Plain-assert it:** a mechanical contract such as a byte, key, version, heading, or forbidden stale marker.
+- **Review it:** judgment-call prose whose correctness depends on meaning; cross-model review is the guard.
 
-If strict test-first is not realistic for the very first primitive or baseline slice, say so explicitly and get back to TDD as soon as the baseline exists.
+For executable behavior, any observable input/output or side-effect difference makes a RED mutation writable; the meaning exception applies only to prose judged by a reader.
 
-Harness-repair lane: when broken SDLC enforcement or test bootstrap prevents the RED step for its own repair, declare the failing observable and exact file allowlist before editing, make the smallest repair, then write and run the missing regression test immediately after. This is not a general test waiver; focused proof, final broad proof, and completion review still apply.
+Harness-repair lane: implement-first is allowed only when a named gate blocks the required RED or evidence act itself. A gate refusing implementation because RED is missing is working, not an entry ticket. A cross-model ruling must APPROVE that same act and scope before the edit. This is not a general test waiver; focused proof, final broad proof, and completion review still apply.
 
 ### 3. Prove-it
 

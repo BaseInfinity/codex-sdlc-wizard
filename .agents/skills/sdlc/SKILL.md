@@ -20,8 +20,12 @@ Use this skill for implementation, bug-fix, refactor, testing, release, publish,
 5. If confidence is below 95% for the next slice, research more before coding. Ask the user only if the uncertainty stays material.
    Keep slices small enough that confidence stays high in practice. If confidence is not high, say why plainly and tighten the slice.
    Freeze one issue, a closed behavior allowlist, one risk lane, and explicit exclusions. Feature creep becomes a separate follow-up issue unless omitting it would make the active change unsafe or nonfunctional.
-6. TDD is mandatory: write the failing test first, run it red, implement the minimum fix, then run it green.
-   Harness-repair lane: when broken SDLC enforcement or test bootstrap prevents the RED step for its own repair, declare the failing observable and exact file allowlist before editing, make the smallest repair, then write and run the missing regression test immediately after. This exception is only for repairing the harness itself; focused proof, final broad proof, and completion review still apply.
+6. Choose honest evidence before editing. Use RED only when a RED mutation is writable.
+   - **EVAL it:** agent-facing guidance whose effect is observable in a real scenario.
+   - **Plain-assert it:** a mechanical contract such as a byte, key, version, heading, or forbidden stale marker.
+   - **Review it:** judgment-call prose whose correctness depends on meaning; cross-model review is the guard.
+   For executable behavior, any observable input/output or side-effect difference makes a RED mutation writable; the meaning exception applies only to prose judged by a reader.
+   Harness-repair lane: implement-first is allowed only when a named gate blocks the required RED or evidence act itself. A gate refusing implementation because RED is missing is working, not an entry ticket. A cross-model ruling must APPROVE that same act and scope before the edit. Focused proof, final broad proof, and completion review still apply.
 7. Run the narrowest relevant verification first, then the full required suite before shipping.
 8. Self-review the exact diff. Check for regressions, scope creep, stale docs, and dead code.
 9. For release or publish work, treat version bump, docs, tests, publish, and verification as one SDLC slice.

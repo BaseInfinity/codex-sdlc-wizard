@@ -7,8 +7,9 @@ Read `TESTING.md` and `ARCHITECTURE.md` when present and relevant. If `GOALS.md`
 1. Plan before coding. State the task, scope, confidence, and verification gate.
    Freeze one issue, a closed behavior allowlist, one risk lane, and explicit exclusions. Feature creep becomes a separate follow-up issue unless omission would make the active change unsafe or nonfunctional.
 2. If confidence is not high, research more before editing and ask only when material uncertainty remains.
-3. Write a failing test first for code-shaped changes, then implement the minimum fix.
-   Harness-repair lane: if broken enforcement prevents RED for its own repair, declare the failing observable and exact file allowlist, make the smallest repair, then write and run the missing regression test immediately after. Final proof and review remain mandatory.
+3. Use RED only when a RED mutation is writable. **EVAL it** for observable agent guidance, **Plain-assert it** for a mechanical contract, and **Review it** for judgment-call prose; cross-model review is the guard.
+   For executable behavior, any observable input/output or side-effect difference makes a RED mutation writable; the meaning exception applies only to prose judged by a reader.
+   Harness-repair lane: implement-first is allowed only when a named gate blocks the required RED or evidence act itself. A gate refusing implementation because RED is missing is working, not an entry ticket. A cross-model ruling must APPROVE that same act and scope before the edit. Final proof and review remain mandatory.
 4. Run focused checks, the broader relevant suite, and a self-review before commit.
 5. Never claim completion without fresh proof.
 6. Author-review and commit coherent green slices. Freeze the cumulative candidate for one fresh broad proof and completion review.
@@ -34,8 +35,8 @@ Read `TESTING.md` and `ARCHITECTURE.md` when present and relevant. If `GOALS.md`
 
 ## TDD Workflow
 
-1. Write the failing test or failing observable.
-2. Run it and confirm RED.
+1. Choose the honest evidence lane: EVAL it, Plain-assert it, or Review it.
+2. When a RED mutation is writable, run it and confirm RED.
 3. Implement the smallest coherent change.
 4. Run the focused check and confirm GREEN.
 5. Run the full relevant proof and review the exact diff.

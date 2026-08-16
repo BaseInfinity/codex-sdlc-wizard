@@ -83,13 +83,13 @@ A good goal should include:
 - `$sdlc` as the mandatory delivery contract
 - any additional repo-local skills that are already installed and relevant
 - the 95% confidence rule, including stopping to research or hand back when confidence drops
-- RED/GREEN tests, focused checks, full tests/lint when code or config changed, and native review/self-review
+- honest RED/eval/assert/review evidence, focused checks, full tests/lint when code or config changed, and native review/self-review
 - a clean break requirement: docs updated, evidence recorded, and changes committed locally before claiming the active task is done
 
 Suggested manual `/goal` text:
 
 ```text
-Get as far as possible through GOALS.md in small, shippable slices. Follow $sdlc for every code/doc change and include any relevant repo-local skills already installed here. Keep confidence >=95%; if confidence drops, research or stop at a clean handoff point. Use RED/GREEN tests, focused checks, full tests/lint when code or config changed, and native review/self-review before shipping. Stop only at a clean break with evidence recorded and changes committed locally.
+Get as far as possible through GOALS.md in small, shippable slices. Follow $sdlc for every code/doc change and include any relevant repo-local skills already installed here. Keep confidence >=95%; if confidence drops, research or stop at a clean handoff point. Choose honest RED/eval/assert/review evidence, use focused checks, run full tests/lint when code or config changed, and complete native review/self-review before shipping. Stop only at a clean break with evidence recorded and changes committed locally.
 ```
 
 ## What This Repo Is
@@ -139,7 +139,7 @@ Skip the `mv` when the legacy path does not exist. If the backup destination alr
 You want Codex to follow engineering discipline automatically:
 
 - **Plan before coding** instead of jumping straight to edits
-- **Write tests first** and keep TDD visible in the repo contract
+- **Choose honest evidence first**: RED for writable behavior, evaluation for agent guidance, assertions for mechanical contracts, and review for judgment prose
 - **State confidence** so low-confidence work triggers research instead of guessing
 - **Self-review before presenting** using Codex-native review where appropriate
 - **Prove the work is shippable** with fresh test/review evidence before commit or push
@@ -593,7 +593,7 @@ CODEX_E2E=1 bash tests/test-e2e.sh
 |----------|----------------|
 | [AGENTS.md](AGENTS.md) | Repo contract for planning, confidence, TDD, review, and model profile policy |
 | [START-SDLC.md](START-SDLC.md) | Quick operator entrypoint for starting SDLC work in an installed repo |
-| [SDLC-LOOP.md](SDLC-LOOP.md) | Repeatable plan -> test -> implement -> review -> prove loop |
+| [SDLC-LOOP.md](SDLC-LOOP.md) | Repeatable plan -> evidence -> implement -> review -> prove loop |
 | [PROVE-IT.md](PROVE-IT.md) | Proof-stamp gate for commit/push and examples for explicit check commands |
 | `GOALS.md` | Optional active-scope contract for long-running work; generated with `setup --goals` |
 | [RELEASE.md](RELEASE.md) | Maintainer release checklist before semver tags and npm/GitHub release publish |

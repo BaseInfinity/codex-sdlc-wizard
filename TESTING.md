@@ -118,7 +118,8 @@ them.
    not.
 3. Self-review the diff. Do not claim a review passed that you did not run.
 
-Follow a failing observable first: write or identify the failing test, watch it
-go red, make the smallest change that turns it green. For setup, authentication,
-or environment repair work, the failing observable replaces an artificial unit
-test — see `SDLC-LOOP.md` and `PROVE-IT.md`.
+Use RED only when a RED mutation is writable. EVAL agent-facing guidance through
+an observable scenario, Plain-assert mechanical contracts, and use cross-model
+review for judgment-call prose. For executable behavior, any observable
+input/output or side-effect difference is writable; the meaning exception applies
+only to prose judged by a reader. See `SDLC-LOOP.md` and `PROVE-IT.md`.
