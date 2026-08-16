@@ -547,6 +547,23 @@ test_sdlc_documents_incremental_completion_cadence() {
     fi
 }
 
+test_sdlc_exposes_linked_worktree_git_target_to_hooks() {
+    local file
+    local valid=true
+
+    for file in "$REPO_SDLC_SKILL" "$SHIPPED_SDLC_SKILL" "$SDLC_LOOP" "$AGENTS_BASELINE" "$AGENTS_TEMPLATE"; do
+        grep -Fq 'git -C <absolute-worktree>' "$file" || valid=false
+        grep -Eqi 'linked worktree.*(commit|push)|(commit|push).*linked worktree' "$file" || valid=false
+        grep -Eqi '(do not|never).*(rely|depend).*tool.*workdir|tool.*workdir.*(may|can).*(drop|omit|missing)' "$file" || valid=false
+    done
+
+    if [ "$valid" = "true" ]; then
+        pass "SDLC workflow exposes linked-worktree Git targets to PreToolUse hooks"
+    else
+        fail "SDLC workflow can hide linked-worktree Git targets in a dropped tool workdir"
+    fi
+}
+
 test_skill_manifest_exists
 test_plugin_skill_resolves_bundled_scripts_from_plugin_root
 test_plugin_skill_handles_legacy_standalone_install
@@ -567,6 +584,7 @@ test_sdlc_workflow_is_bounded_and_repairable
 test_sdlc_review_reuses_one_broad_proof
 test_sdlc_documents_bounded_dual_review
 test_sdlc_documents_incremental_completion_cadence
+test_sdlc_exposes_linked_worktree_git_target_to_hooks
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

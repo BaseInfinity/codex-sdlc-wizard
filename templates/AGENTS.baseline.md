@@ -43,6 +43,7 @@ Read `TESTING.md` and `ARCHITECTURE.md` when present and relevant. If `GOALS.md`
 
 - Do not commit without passing proof.
 - Do not push without self-review.
+- For a commit or push from a linked worktree, use a standalone `git -C <absolute-worktree> commit ...` or `git -C <absolute-worktree> push ...`; never rely only on the execution tool's `workdir`, because some Codex surfaces omit it from PreToolUse payloads.
 - Preserve unrelated user changes in a dirty worktree.
 - Never use destructive git commands unless the user explicitly requests them.
 

@@ -102,6 +102,7 @@ Flaky tests are bugs. Investigate and fix them — never skip or retry blindly.
 - Do NOT run `git commit` without the focused proof for that coherent slice passing
 - Do NOT claim completion or merge without the full required proof passing on the frozen cumulative candidate
 - Do NOT run `git push` without a self-review
+- For a commit or push from a linked worktree, use a standalone `git -C <absolute-worktree> commit ...` or `git -C <absolute-worktree> push ...`; never rely only on the execution tool's `workdir`, because some Codex surfaces omit it from PreToolUse payloads.
 - These are enforced by hooks — violations are blocked automatically
 
 ## Self-Review

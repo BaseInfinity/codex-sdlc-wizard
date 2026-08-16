@@ -53,8 +53,8 @@ After either path changes skills, hooks, hook config, or helper scripts, restart
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.36 check
-npx codex-sdlc-wizard@0.7.36 update
+npx codex-sdlc-wizard@0.7.37 check
+npx codex-sdlc-wizard@0.7.37 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -269,6 +269,10 @@ directory. Unrelated repositories and other context changes—including `cd`,
 must be handled from a session rooted in the target repository. Inherited
 `GIT_NAMESPACE` and `GIT_OBJECT_DIRECTORY` also remain blocked because they
 retarget ref or object writes even when the worktree path itself is unchanged.
+When an agent commits or pushes from a linked worktree, it must put the absolute
+target directly in the standalone `git -C <path> ...` command instead of relying
+only on the execution tool's `workdir`; some Codex surfaces omit that field from
+the PreToolUse payload.
 
 ## Model Profiles
 
@@ -281,10 +285,10 @@ How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.36 --model-profile maximum
+npx codex-sdlc-wizard@0.7.37 --model-profile maximum
 
 # experimental efficiency trial when you explicitly choose it
-npx codex-sdlc-wizard@0.7.36 --model-profile mixed
+npx codex-sdlc-wizard@0.7.37 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
@@ -444,11 +448,11 @@ This keeps dogfooding useful without turning every implementation session into w
 
 ## Releases
 
-`0.7.36` delivers the harness improvements already proven on `main`: bounded
-review and repair loops, proof-aware review without duplicate broad-suite
-runs, Fable cross-model review transport, one bounded Sol/Fable reconciliation,
-and the merged Windows proof/npm fixes. The exact-integration and remaining
-1.0 trust-contract work stays out of this interim release until it is complete.
+`0.7.37` adds Desktop-safe linked-worktree delivery guidance: commit and push
+commands expose their absolute worktree target through `git -C`, so PreToolUse
+hooks can bind proof correctly even when a Codex surface omits the tool
+`workdir`. It includes the bounded-review, proof-aware review, Fable transport,
+bounded reconciliation, and Windows proof/npm improvements from `0.7.36`.
 
 Versioned releases for this adapter live at:
 
@@ -458,7 +462,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.36
+npx codex-sdlc-wizard@0.7.37
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -468,7 +472,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.36 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.37 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow

@@ -37,6 +37,7 @@ Use this skill for implementation, bug-fix, refactor, testing, release, publish,
    Severity ladder: P0 stops the line; P1 blocks completion; P2 is a bounded fix now or a follow-up issue; P3 never blocks and is recorded only when worthwhile.
    When two reviewers are required, run `node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota`. Sol High and Fable High assess the same frozen candidate independently. Clean agreement stops immediately; a verdict split receives one verbatim cross-feed round of findings and then produces one conservative joint receipt. Do not add another reconciliation exchange. Allow at most two corrective rounds; if P0/P1 remains, decompose, abandon, or escalate rather than waiving it or continuing an unbounded loop.
    For every corrective finding, check its provenance against the base. If the blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
+   For a commit or push from a linked worktree, use a standalone `git -C <absolute-worktree> commit ...` or `git -C <absolute-worktree> push ...`; never rely only on the execution tool's `workdir`, because some Codex surfaces omit it from PreToolUse payloads.
    If the work is in a product repo, keep that session focused on the product repo. File a direct GitHub issue for proven reusable wizard findings and only switch to live wizard work if the product repo is actually blocked.
 11. Present a final summary with what changed, what was verified, and any residual risk.
 

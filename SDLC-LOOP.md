@@ -29,6 +29,7 @@ Codex does not have a native `/sdlc` command. This file is the honest replacemen
    Reviewer role: inspect the frozen diff and return prioritized code-review findings only; do not edit, implement, run tests, re-plan, or perform follow-up work. The builder owns every correction through the normal SDLC loop.
    When two reviewers are required, run `node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota`. Sol High and Fable High assess the same frozen candidate independently. Clean agreement stops immediately; a verdict split gets one verbatim cross-feed of findings before one conservative joint receipt. Consent acknowledges Claude subscription-quota use. Do not add another reconciliation exchange. Allow at most two corrective rounds. If P0/P1 remains, decompose, abandon, or escalate; never waive it or continue an unbounded review loop.
    Check every corrective finding against the base. If the blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
+   For a commit or push from a linked worktree, use a standalone `git -C <absolute-worktree> commit ...` or `git -C <absolute-worktree> push ...`; never rely only on the execution tool's `workdir`, because some Codex surfaces omit it from PreToolUse payloads.
 9. Escalate honestly
    If blocked, name the blocker, show the evidence, and propose the next move.
 
