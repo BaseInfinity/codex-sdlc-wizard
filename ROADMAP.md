@@ -11,8 +11,9 @@
 
 ## Current State
 
-- Current GitHub release: [`v0.7.35`](https://github.com/BaseInfinity/codex-sdlc-wizard/releases/tag/v0.7.35).
-- Current npm release: [`codex-sdlc-wizard@0.7.35`](https://www.npmjs.com/package/codex-sdlc-wizard/v/0.7.35).
+- Current release candidate: `v0.7.36`, containing the already-merged bounded-review, proof-aware review, Fable transport, bounded reconciliation, and Windows proof/npm improvements.
+- Current GitHub release after this candidate is published: [`v0.7.36`](https://github.com/BaseInfinity/codex-sdlc-wizard/releases/tag/v0.7.36).
+- Current npm release after this candidate is published: [`codex-sdlc-wizard@0.7.36`](https://www.npmjs.com/package/codex-sdlc-wizard/v/0.7.36).
 - Next release milestone: [`1.0.0 — Bounded autonomous delivery`](https://github.com/BaseInfinity/codex-sdlc-wizard/milestone/2).
 - The ten-delivery cadence pilot is installed on `main`; its measurement issue remains open until the recorded evidence supports a permanent policy.
 - Real Windows Codex Desktop and CLI acceptance is the last hardware-dependent gate. Mac/Linux implementation and proof continue before that handoff.
