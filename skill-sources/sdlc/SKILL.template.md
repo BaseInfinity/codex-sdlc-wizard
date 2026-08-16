@@ -117,6 +117,8 @@ When two reviewers are required, they assess the same frozen candidate independe
 
 For every corrective finding, check its provenance against the base. If the blocker is candidate-born and outside the allowlist, remove that accretion instead of repairing it.
 
+For a commit or push from a linked worktree, use a standalone `git -C <absolute-worktree> commit ...` or `git -C <absolute-worktree> push ...`; never rely only on the execution tool's `workdir`, because some Codex surfaces omit it from PreToolUse payloads.
+
 ### 5. CI and Merge Guard
 
 Never use auto-merge in this repo.

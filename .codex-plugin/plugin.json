@@ -1,6 +1,6 @@
 {
   "name": "codex-sdlc-wizard",
-  "version": "0.7.36",
+  "version": "0.7.37",
   "description": "Install and maintain Codex SDLC enforcement in local repositories.",
   "author": {
     "name": "BaseInfinity",
