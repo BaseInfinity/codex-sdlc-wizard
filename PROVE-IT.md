@@ -74,6 +74,28 @@ Clean agreement stops immediately. A verdict split receives exactly one
 verbatim structured cross-feed round; the gate then emits one joint receipt and
 stops. It never permits a third reviewer exchange.
 
+After the joint receipt is certified, use the fixed-argv delivery boundary
+instead of separate raw commit, push, PR, and merge commands:
+
+```bash
+node .codex/hooks/dual-review.cjs deliver github \
+  --message "feat: describe the certified change" \
+  --branch feature-branch \
+  --base main \
+  --title "Describe the certified change" \
+  --body "Closes #123"
+```
+
+It commits the certified staged tree while honoring configured Git hooks,
+pushes that immutable commit, verifies the authoritative PR head/base and at
+least one completed check, then atomically advances the unchanged base to the
+certified commit. An empty check rollup fails closed unless the caller
+explicitly chooses `--allow-no-checks` for a repository with no GitHub checks.
+A changed base, failing hook, failing check, or protected branch fails closed
+before integration. For an
+explicit non-GitHub path, `deliver direct` pushes and verifies the exact remote
+ref but does not claim GitHub CI semantics.
+
 For this repository, run and stamp the complete maintainer suite once with:
 
 ```bash

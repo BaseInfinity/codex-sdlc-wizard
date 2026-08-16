@@ -14,6 +14,31 @@ const SENSITIVE_AUTH_ENV = [
   "CLAUDE_CODE_USE_VERTEX",
 ];
 
+const DELIVERY_RETARGET_ENV = [
+  "GH_HOST",
+  "GH_REPO",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CEILING_DIRECTORIES",
+  "GIT_COMMON_DIR",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_NOSYSTEM",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_SYSTEM",
+  "GIT_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_ASKPASS",
+  "GIT_EXEC_PATH",
+  "GIT_NAMESPACE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_PREFIX",
+  "GIT_PROXY_COMMAND",
+  "GIT_SSH",
+  "GIT_SSH_COMMAND",
+  "GIT_WORK_TREE",
+  "GH_CONFIG_DIR",
+];
+
 const REVIEW_SCHEMA = {
   type: "object",
   description: "Code-review verdict only. Do not edit files, implement changes, re-plan work, or rerun tests.",
@@ -51,6 +76,43 @@ function help() {
     "Runs independent Sol High and Fable High reviews over one frozen candidate.",
     "A verdict split receives one verbatim cross-feed round; agreement stops immediately.",
   ].join("\n");
+}
+
+function deliveryHelp() {
+  return [
+    "Usage:",
+    "  node .codex/hooks/dual-review.cjs deliver github --message <text> --branch <name> --base <name> --title <text> --body <text> [--allow-no-checks]",
+    "  node .codex/hooks/dual-review.cjs deliver direct --message <text> --branch <name> [--remote <name>]",
+    "",
+    "Commits and publishes only the immutable candidate certified by the current dual-review receipt.",
+  ].join("\n");
+}
+
+function parseDeliveryArgs(args) {
+  const mode = String(args[0] || "");
+  if (mode === "--help" || mode === "-h") return { help: true };
+  if (mode !== "github" && mode !== "direct") return { error: "Delivery mode must be github or direct." };
+  const values = { mode, remote: "origin", message: "", branch: "", base: "", title: "", body: "", allowNoChecks: false };
+  const known = mode === "github"
+    ? new Set(["--remote", "--message", "--branch", "--base", "--title", "--body", "--allow-no-checks"])
+    : new Set(["--remote", "--message", "--branch"]);
+  for (let index = 1; index < args.length; index += 1) {
+    const flag = args[index];
+    if (!known.has(flag)) return { error: `Unknown delivery argument: ${flag}` };
+    if (flag === "--allow-no-checks") {
+      values.allowNoChecks = true;
+      continue;
+    }
+    const value = String(args[index + 1] || "");
+    if (value === "" || known.has(value)) return { error: `${flag} requires a value.` };
+    values[flag.slice(2)] = value;
+    index += 1;
+  }
+  if (values.message === "" || values.branch === "") return { error: "Delivery requires --message and --branch." };
+  if (mode === "github" && (values.base === "" || values.title === "" || values.body === "")) {
+    return { error: "GitHub delivery requires --base, --title, and --body." };
+  }
+  return values;
 }
 
 function parseArgs(args) {
@@ -279,16 +341,338 @@ function assertSubscriptionLane() {
   return auth;
 }
 
-function sanitizedEnvironment() {
-  const environment = { ...process.env };
-  for (const name of SENSITIVE_AUTH_ENV) delete environment[name];
+function environmentWithout(names) {
+  const blocked = new Set(names.map((name) => name.toUpperCase()));
+  const environment = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!blocked.has(name.toUpperCase())) environment[name] = value;
+  }
   return environment;
+}
+
+function sanitizedEnvironment() {
+  return environmentWithout(SENSITIVE_AUTH_ENV);
+}
+
+function deliveryEnvironment() {
+  return { ...environmentWithout(DELIVERY_RETARGET_ENV), GIT_NO_REPLACE_OBJECTS: "1" };
+}
+
+function deliveryGitLaunch() {
+  const testPath = process.env.CODEX_SDLC_TEST_MODE === "1"
+    ? String(process.env.CODEX_SDLC_GIT_PATH || "")
+    : "";
+  return testPath === "" ? { command: "git", prefix: [] } : { command: process.execPath, prefix: [path.resolve(testPath)] };
+}
+
+function deliveryGit(root, args, options = {}) {
+  const launch = deliveryGitLaunch();
+  const result = run(launch.command, [...launch.prefix, "-C", root, ...args], { env: deliveryEnvironment(), ...options });
+  if (result.status !== 0) throw new Error(result.stderr.trim() || `git ${args.join(" ")} failed`);
+  return result.stdout.trim();
+}
+
+function deliveryCommit(root, message) {
+  return deliveryGit(root, ["commit", "-m", message]);
+}
+
+function deliveryPush(root, args) {
+  return deliveryGit(root, ["push", "--no-follow-tags", "--recurse-submodules=no", ...args]);
+}
+
+function deliveryRepositoryRoot() {
+  const result = run("git", ["-C", process.cwd(), "rev-parse", "--show-toplevel"], { env: deliveryEnvironment() });
+  return result.status === 0 ? path.resolve(result.stdout.trim()) : "";
+}
+
+function ghLaunch() {
+  const testPath = process.env.CODEX_SDLC_TEST_MODE === "1"
+    ? String(process.env.CODEX_SDLC_GH_PATH || "")
+    : "";
+  return testPath === "" ? { command: "gh", prefix: [] } : { command: process.execPath, prefix: [path.resolve(testPath)] };
+}
+
+function gh(root, args) {
+  const launch = ghLaunch();
+  const result = run(launch.command, [...launch.prefix, ...args], { cwd: root, env: deliveryEnvironment() });
+  if (result.status !== 0) throw new Error(result.stderr.trim() || `gh ${args.join(" ")} failed`);
+  return result.stdout.trim();
+}
+
+function reviewReceipt(root) {
+  const relative = deliveryGit(root, ["rev-parse", "--git-path", "codex-sdlc/dual-review.json"]);
+  const target = path.isAbsolute(relative) ? relative : path.join(root, relative);
+  let receipt;
+  try {
+    receipt = JSON.parse(fs.readFileSync(target, "utf8"));
+  } catch {
+    throw new Error("Certified dual-review receipt is missing or unreadable.");
+  }
+  if (receipt.status !== "certified" || receipt.joint_verdict !== "CERTIFIED") {
+    throw new Error("Dual-review receipt is not certified.");
+  }
+  for (const field of ["base_commit", "head_before_commit", "candidate_tree", "proof_workspace_fingerprint", "proof_created_at", "reviewer_policy"]) {
+    if (typeof receipt[field] !== "string" || receipt[field] === "") throw new Error(`Dual-review receipt lacks ${field}.`);
+  }
+  return { target, receipt };
+}
+
+function deliveryUntracked(root) {
+  return deliveryGit(root, ["ls-files", "--others", "--exclude-standard"])
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((entry) => entry !== ".reviews" && !entry.startsWith(".reviews/"));
+}
+
+function certifiedCommit(root, message, receipt) {
+  const head = deliveryGit(root, ["rev-parse", "HEAD"]);
+  const headTree = deliveryGit(root, ["rev-parse", "HEAD^{tree}"]);
+  const stagedTree = deliveryGit(root, ["write-tree"]);
+  const unstaged = run("git", ["-C", root, "diff", "--quiet", "--ignore-submodules", "--"], { env: deliveryEnvironment() });
+  const untracked = deliveryUntracked(root);
+  if (unstaged.status !== 0 || untracked.length > 0) throw new Error("Candidate changed after review; tracked and untracked source state must be frozen.");
+
+  if (head === receipt.head_before_commit) {
+    if (stagedTree !== receipt.candidate_tree) throw new Error("Staged candidate tree does not match the certified review receipt.");
+    if (headTree !== receipt.candidate_tree) deliveryCommit(root, message);
+  } else {
+    let parent = "";
+    try { parent = deliveryGit(root, ["rev-parse", "HEAD^"]); } catch { /* root commit cannot resume here */ }
+    if (headTree !== receipt.candidate_tree || parent !== receipt.head_before_commit || stagedTree !== headTree) {
+      throw new Error("HEAD is not the immutable commit produced from the certified candidate.");
+    }
+  }
+
+  const commit = deliveryGit(root, ["rev-parse", "HEAD"]);
+  if (deliveryGit(root, ["rev-parse", "HEAD^{tree}"]) !== receipt.candidate_tree) {
+    throw new Error("Created commit tree does not match the certified candidate tree.");
+  }
+  return commit;
+}
+
+function validateBranch(root, branch) {
+  deliveryGit(root, ["check-ref-format", "--branch", branch]);
+}
+
+function validateRemote(root, remote) {
+  if (remote.startsWith("-")) throw new Error("Delivery remote must be a configured remote name, not a Git option.");
+  const remotes = deliveryGit(root, ["remote"]).split(/\r?\n/).filter(Boolean);
+  if (!remotes.includes(remote)) throw new Error(`Delivery remote ${remote} is not configured in this repository.`);
+}
+
+function parseGitHubRepository(url, label) {
+  const match = url.match(/^(?:(?:https?|ssh):\/\/(?:git@)?|git@)github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  if (!match) throw new Error(`${label} is not a recognizable GitHub repository URL.`);
+  return `${match[1]}/${match[2]}`;
+}
+
+function githubRepository(root, remote) {
+  const fetchUrls = deliveryGit(root, ["config", "--get-all", `remote.${remote}.url`]).split(/\r?\n/).filter(Boolean);
+  const pushResult = run("git", ["-C", root, "config", "--get-all", `remote.${remote}.pushurl`], { env: deliveryEnvironment() });
+  const pushUrls = pushResult.status === 0 ? pushResult.stdout.trim().split(/\r?\n/).filter(Boolean) : [];
+  if (fetchUrls.length !== 1 || pushUrls.length > 1) throw new Error(`Remote ${remote} must have one unambiguous fetch/push target.`);
+  const url = fetchUrls[0];
+  const pushUrl = pushUrls[0] || url;
+  if (pushUrl !== url) throw new Error(`Remote ${remote} has different fetch and push targets.`);
+  const repository = parseGitHubRepository(url, `Remote ${remote}`);
+  const effectiveFetch = deliveryGit(root, ["remote", "get-url", "--all", remote]).split(/\r?\n/).filter(Boolean);
+  const effectivePush = deliveryGit(root, ["remote", "get-url", "--push", "--all", remote]).split(/\r?\n/).filter(Boolean);
+  if (effectiveFetch.length !== 1 || effectivePush.length !== 1) {
+    throw new Error(`Remote ${remote} must resolve to one effective fetch/push target.`);
+  }
+  if (parseGitHubRepository(effectiveFetch[0], `Effective fetch target for ${remote}`) !== repository
+      || parseGitHubRepository(effectivePush[0], `Effective push target for ${remote}`) !== repository) {
+    throw new Error(`Remote ${remote} is rewritten to a different repository.`);
+  }
+  return repository;
+}
+
+function parseJson(value, label) {
+  try { return JSON.parse(value); } catch { throw new Error(`${label} did not return valid JSON.`); }
+}
+
+function checkState(check) {
+  const conclusion = String(check?.conclusion || "").toUpperCase();
+  const state = String(check?.state || "").toUpperCase();
+  const status = String(check?.status || "").toUpperCase();
+  if (["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE"].includes(conclusion)
+      || ["FAILURE", "ERROR", "CANCELLED"].includes(state)) return "failed";
+  if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion) || state === "SUCCESS") return "passed";
+  if (status === "COMPLETED" && conclusion === "") return "failed";
+  return "pending";
+}
+
+function waitForPullRequest(root, repository, pullNumber, expectedHead, expectedBase, expectedHeadName, expectedBaseName, allowNoChecks) {
+  const timeout = process.env.CODEX_SDLC_TEST_MODE === "1" ? 500 : 15 * 60 * 1000;
+  const interval = process.env.CODEX_SDLC_TEST_MODE === "1" ? 10 : 10 * 1000;
+  const started = Date.now();
+  while (true) {
+    const pull = parseJson(gh(root, ["pr", "view", String(pullNumber), "--repo", repository,
+      "--json", "number,state,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,mergeable,mergeStateStatus,statusCheckRollup,mergeCommit"]), "gh pr view");
+    if (pull.number !== pullNumber) throw new Error("Authoritative PR number changed during delivery.");
+    if (pull.headRefName !== expectedHeadName || pull.baseRefName !== expectedBaseName) {
+      throw new Error("Authoritative PR refs do not match the reviewed delivery refs.");
+    }
+    if (pull.headRefOid !== expectedHead) throw new Error("Authoritative PR head does not match the certified commit.");
+    if (pull.baseRefOid !== expectedBase) throw new Error("Authoritative PR base advanced after review; rebase and review the new candidate.");
+    if (pull.state !== "OPEN") throw new Error("Authoritative PR is not open for integration.");
+    if (pull.isDraft === true) throw new Error("Authoritative PR is still a draft.");
+    if (pull.mergeable === "CONFLICTING" || pull.mergeStateStatus === "DIRTY") {
+      throw new Error("Authoritative PR has merge conflicts.");
+    }
+    const states = Array.isArray(pull.statusCheckRollup) ? pull.statusCheckRollup.map(checkState) : [];
+    if (states.includes("failed")) throw new Error("A GitHub check failed for the certified PR head.");
+    if (states.includes("pending")) {
+      if (Date.now() - started >= timeout) throw new Error("Timed out waiting for GitHub checks on the certified PR head.");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, interval);
+      continue;
+    }
+    if (pull.mergeStateStatus === "BLOCKED") throw new Error("Authoritative PR is blocked by repository policy or approvals.");
+    if (pull.mergeable !== "MERGEABLE") {
+      if (Date.now() - started >= timeout) throw new Error("Timed out waiting for the authoritative PR to become mergeable.");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, interval);
+      continue;
+    }
+    if (pull.mergeStateStatus !== "CLEAN") {
+      if (Date.now() - started >= timeout) throw new Error("Timed out waiting for the authoritative PR to reach a clean merge state.");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, interval);
+      continue;
+    }
+    if (states.length > 0) return pull;
+    if (states.length === 0 && allowNoChecks) return pull;
+    if (Date.now() - started >= timeout) throw new Error("Timed out waiting for GitHub checks on the certified PR head.");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, interval);
+  }
+}
+
+function writeDelivery(target, receipt, delivery) {
+  writeJsonAtomically(target, { ...receipt, delivery });
+}
+
+function remoteBranchCommit(root, remote, branch) {
+  const ref = `refs/heads/${branch}`;
+  const lines = deliveryGit(root, ["ls-remote", remote, ref]).split(/\r?\n/).filter(Boolean);
+  if (lines.length === 0) return "";
+  if (lines.length !== 1) throw new Error(`Remote branch ${branch} did not resolve unambiguously.`);
+  const [commit, resolvedRef] = lines[0].split(/\s+/);
+  if (resolvedRef !== ref || !/^[0-9a-f]{40,64}$/i.test(commit || "")) {
+    throw new Error(`Remote branch ${branch} returned an invalid object ID.`);
+  }
+  return commit;
+}
+
+function directDelivery(root, parsed, receiptState, commit) {
+  deliveryPush(root, [parsed.remote, `${commit}:refs/heads/${parsed.branch}`]);
+  const remote = deliveryGit(root, ["ls-remote", parsed.remote, `refs/heads/${parsed.branch}`]);
+  if (!remote.startsWith(`${commit}\t`)) throw new Error("Remote branch does not resolve to the certified commit.");
+  writeDelivery(receiptState.target, receiptState.receipt, {
+    status: "pushed", mode: "direct", commit, remote: parsed.remote, branch: parsed.branch,
+  });
+}
+
+function githubDelivery(root, parsed, receiptState, commit, repository) {
+  const ancestry = run("git", ["-C", root, "merge-base", "--is-ancestor", receiptState.receipt.base_commit, commit], {
+    env: deliveryEnvironment(),
+  });
+  if (ancestry.status !== 0) throw new Error("Certified commit is not a descendant of the reviewed base commit.");
+  if (remoteBranchCommit(root, parsed.remote, parsed.base) === commit) {
+    const checkpoint = receiptState.receipt.delivery || {};
+    if (checkpoint.status !== "validated" || checkpoint.mode !== "github" || checkpoint.commit !== commit
+        || checkpoint.repository !== repository || checkpoint.branch !== parsed.branch || checkpoint.base !== parsed.base
+        || checkpoint.checks_verified !== true || !Number.isInteger(checkpoint.pull_request)) {
+      throw new Error("Base already contains the certified commit without a matching PR/check validation checkpoint.");
+    }
+    writeDelivery(receiptState.target, receiptState.receipt, {
+      status: "integrated", mode: "github", commit, repository, branch: parsed.branch,
+      base: parsed.base, pull_request: checkpoint.pull_request, pull_state: "base_advanced", recovered: true,
+    });
+    return;
+  }
+  deliveryPush(root, [parsed.remote, `${commit}:refs/heads/${parsed.branch}`]);
+  const existing = parseJson(gh(root, ["pr", "list", "--repo", repository, "--head", parsed.branch,
+    "--base", parsed.base, "--state", "open", "--json", "number,headRefOid,baseRefOid"]), "gh pr list");
+  if (!Array.isArray(existing)) throw new Error("gh pr list returned an invalid result.");
+  let pullNumber;
+  if (existing.length === 0) {
+    const created = gh(root, ["pr", "create", "--repo", repository, "--head", parsed.branch, "--base", parsed.base,
+      "--title", parsed.title, "--body", parsed.body]);
+    const match = created.match(/\/pull\/(\d+)(?:\s|$)/);
+    if (!match) throw new Error("gh pr create did not return a pull-request URL.");
+    pullNumber = Number(match[1]);
+  } else if (existing.length !== 1) {
+    throw new Error("More than one open PR matches the reviewed delivery branch.");
+  } else {
+    if (existing[0].headRefOid !== commit || existing[0].baseRefOid !== receiptState.receipt.base_commit
+        || !Number.isInteger(existing[0].number)) {
+      throw new Error("Filtered PR identity does not match the certified delivery candidate.");
+    }
+    pullNumber = existing[0].number;
+  }
+  const pull = waitForPullRequest(root, repository, pullNumber, commit, receiptState.receipt.base_commit,
+    parsed.branch, parsed.base, parsed.allowNoChecks);
+  writeDelivery(receiptState.target, receiptState.receipt, {
+    status: "validated", mode: "github", commit, repository, branch: parsed.branch,
+    base: parsed.base, pull_request: pull.number, checks_verified: true,
+  });
+  deliveryPush(root, [`--force-with-lease=refs/heads/${parsed.base}:${receiptState.receipt.base_commit}`,
+    parsed.remote, `${commit}:refs/heads/${parsed.base}`]);
+  if (remoteBranchCommit(root, parsed.remote, parsed.base) !== commit) {
+    throw new Error("Base branch does not resolve to the certified commit.");
+  }
+  const merged = parseJson(gh(root, ["pr", "view", String(pull.number), "--repo", repository,
+    "--json", "number,state,headRefOid,baseRefOid,mergeCommit"]), "gh pr view");
+  writeDelivery(receiptState.target, receiptState.receipt, {
+    status: "integrated", mode: "github", commit, repository, branch: parsed.branch,
+    base: parsed.base, pull_request: pull.number, pull_state: merged.state,
+  });
+}
+
+function deliveryMain(args) {
+  const parsed = parseDeliveryArgs(args);
+  if (parsed.help) {
+    process.stdout.write(`${deliveryHelp()}\n`);
+    return 0;
+  }
+  if (parsed.error) {
+    process.stderr.write(`${parsed.error}\n${deliveryHelp()}\n`);
+    return 2;
+  }
+  try {
+    const root = deliveryRepositoryRoot();
+    if (root === "") throw new Error("Reviewed delivery must run from a Git worktree.");
+    validateBranch(root, parsed.branch);
+    validateRemote(root, parsed.remote);
+    let repository = "";
+    if (parsed.mode === "github") {
+      validateBranch(root, parsed.base);
+      if (parsed.branch === parsed.base) throw new Error("GitHub delivery branch must differ from its base branch.");
+      repository = githubRepository(root, parsed.remote);
+    }
+    const proof = proofStatus(root);
+    const receiptState = reviewReceipt(root);
+    if (receiptState.receipt.proof_workspace_fingerprint !== proof.workspace_fingerprint
+        || receiptState.receipt.proof_created_at !== proof.created_at) {
+      throw new Error("Current SDLC proof is not the proof certified by the reviewers.");
+    }
+    const commit = certifiedCommit(root, parsed.message, receiptState.receipt);
+    const checkpoint = receiptState.receipt.delivery || {};
+    if (checkpoint.status !== "validated" || checkpoint.mode !== "github" || checkpoint.commit !== commit) {
+      writeDelivery(receiptState.target, receiptState.receipt, { status: "committed", mode: parsed.mode, commit });
+    }
+    if (parsed.mode === "github") githubDelivery(root, parsed, receiptState, commit, repository);
+    else directDelivery(root, parsed, receiptState, commit);
+    process.stdout.write(`Reviewed ${parsed.mode} delivery completed for ${commit}.\n`);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    return 2;
+  }
 }
 
 function proofStatus(root) {
   const guard = path.join(root, ".codex", "hooks", "git-guard.cjs");
   if (!fs.existsSync(guard)) throw new Error("Missing .codex/hooks/git-guard.cjs.");
-  const result = run(process.execPath, [guard, "verify-proof", "--json"], { cwd: root });
+  const result = run(process.execPath, [guard, "verify-proof", "--json"], { cwd: root, env: deliveryEnvironment() });
   let status = null;
   try {
     status = JSON.parse(result.stdout);
@@ -298,12 +682,13 @@ function proofStatus(root) {
   if (result.status !== 0 || status?.ok !== true) {
     throw new Error(`SDLC proof is ${status?.reason || "missing or stale"}.`);
   }
-}
-
-function proofReceipt(root) {
-  const relative = git(root, ["rev-parse", "--git-path", "codex-sdlc/proof.json"]);
+  const relative = deliveryGit(root, ["rev-parse", "--git-path", "codex-sdlc/proof.json"]);
   const target = path.isAbsolute(relative) ? relative : path.join(root, relative);
-  return JSON.parse(fs.readFileSync(target, "utf8"));
+  try {
+    return JSON.parse(fs.readFileSync(target, "utf8"));
+  } catch {
+    throw new Error("SDLC proof receipt is missing or unreadable.");
+  }
 }
 
 function reviewReceiptPath(root) {
@@ -526,8 +911,7 @@ async function main() {
     requireFrozenIndex(root);
     const baseCommit = git(root, ["rev-parse", "--verify", `${parsed.base}^{commit}`]);
     const binding = currentBinding(root, baseCommit);
-    proofStatus(root);
-    const proof = proofReceipt(root);
+    const proof = proofStatus(root);
     const patchBuffer = gitBuffer(root, ["diff", "--cached", "--binary", baseCommit]);
     if (patchBuffer.length === 0) throw new Error("The staged candidate patch is empty.");
 
@@ -606,5 +990,6 @@ async function main() {
 module.exports = { buildWindowsCommandLine };
 
 if (require.main === module) {
-  main().then((status) => { process.exitCode = status; });
+  if (process.argv[2] === "deliver") process.exitCode = deliveryMain(process.argv.slice(3));
+  else main().then((status) => { process.exitCode = status; });
 }

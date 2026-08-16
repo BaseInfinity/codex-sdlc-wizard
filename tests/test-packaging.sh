@@ -989,6 +989,7 @@ test_readme_documents_native_codex_review() {
     grep -Eqi 'targeted verification.*concrete suspected defect|concrete suspected defect.*targeted verification' "$README" || has_targeted_verification_boundary=false
     grep -Eqi 'Base: <base-[^>]+>.*Candidate: <candidate-[^>]+>' "$README" || binds_base_and_candidate=false
     grep -Fq 'node .codex/hooks/dual-review.cjs --base main --consent-subscription-quota' "$README" || documents_bounded_dual_review=false
+    grep -Fq 'node .codex/hooks/dual-review.cjs deliver github' "$README" || documents_bounded_dual_review=false
 
     if [ "$has_review_command" = "true" ] &&
        [ "$has_uncommitted" = "true" ] &&
@@ -1011,7 +1012,8 @@ test_readme_documents_native_codex_review() {
 }
 
 test_prove_it_documents_bounded_dual_review() {
-    if grep -Fq 'node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota' "$PROVE_IT"; then
+    if grep -Fq 'node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota' "$PROVE_IT" \
+        && grep -Fq 'node .codex/hooks/dual-review.cjs deliver github' "$PROVE_IT"; then
         pass "PROVE-IT documents the bounded dual-review gate"
     else
         fail "PROVE-IT omits the bounded dual-review gate"

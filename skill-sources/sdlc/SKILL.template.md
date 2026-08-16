@@ -101,6 +101,8 @@ Use native Codex review for a second pass when the slice warrants it:
 
 When repo policy requires both reviewers, run `node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota`. Sol High and Fable High independently review the same frozen candidate. Clean agreement stops immediately; a verdict split receives one verbatim cross-feed round of findings and then produces one conservative joint receipt. Consent is explicit because this uses Claude subscription quota. Do not add another reconciliation exchange.
 
+After that joint receipt is certified, integrate it through `node .codex/hooks/dual-review.cjs deliver github --message <text> --branch <name> --base <name> --title <text> --body <text>`. Do not reconstruct the reviewed delivery with separate raw commit, push, PR, or merge commands. The fixed-argv delivery path honors configured Git hooks, commits the certified tree, pushes its immutable SHA, verifies the authoritative PR head/base, and requires at least one completed GitHub check before atomically advancing the unchanged base to that exact commit. Use `--allow-no-checks` only when the repository intentionally has no GitHub checks. A changed base, failing hook, failing check, or protected branch fails closed before integration. Use `deliver direct` only for an explicit non-GitHub integration path; it verifies the exact remote ref but does not claim GitHub CI semantics.
+
 Run one broad proof run total on the frozen candidate through `node .codex/hooks/git-guard.cjs prove --reviewed`; do not run the suite directly and then rerun it through the guard. Use a prompt-only review when supplying custom proof-aware instructions. A custom prompt must not be combined with `--uncommitted`, `--base`, or `--commit`; those predefined target flags are for reviews without a custom prompt. Include the exact base identity, frozen candidate tree identity, proof command, and result and say `Do not rerun tests`. Targeted verification is allowed only for a concrete suspected defect; never rerun the broad suite. Missing or stale proof is a blocker to report, not permission to launch another broad suite.
 
 Reviewer role: inspect the frozen diff and return prioritized code-review findings only; do not edit, implement, run tests, re-plan, or perform follow-up work. The builder owns every correction through the normal SDLC loop.
@@ -126,6 +128,7 @@ Never use auto-merge in this repo.
 `NEVER AUTO-MERGE`
 
 Read CI logs, handle valid review feedback, and merge explicitly only after the proof matches the diff.
+The reviewed-delivery command performs that exact atomic integration immediately after its candidate and checks are verified; it does not enable GitHub auto-merge.
 
 ### 6. Final summary
 

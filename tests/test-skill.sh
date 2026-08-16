@@ -510,6 +510,7 @@ test_sdlc_documents_bounded_dual_review() {
 
     for file in "$REPO_SDLC_SKILL" "$SHIPPED_SDLC_SKILL" "$SDLC_LOOP" "$AGENTS_BASELINE" "$AGENTS_TEMPLATE"; do
         grep -Fq 'dual-review.cjs --base <ref> --consent-subscription-quota' "$file" || valid=false
+        grep -Fq 'dual-review.cjs deliver github' "$file" || valid=false
         grep -Fqi 'Sol High' "$file" || valid=false
         grep -Fqi 'Fable High' "$file" || valid=false
         grep -Eqi 'subscription[- ]quota' "$file" || valid=false

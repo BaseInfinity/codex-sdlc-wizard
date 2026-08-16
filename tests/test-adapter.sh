@@ -4529,6 +4529,7 @@ test_sdlc_skill_has_docsync_learning_and_merge_guard() {
         && grep -q 'capture learnings' "$skill" \
         && grep -q 'NEVER AUTO-MERGE' "$skill" \
         && grep -q 'dual-review.cjs' "$skill" \
+        && grep -q 'dual-review.cjs deliver github' "$skill" \
         && grep -q 'one verbatim cross-feed round' "$skill"; then
         pass "sdlc carries doc-sync, learning capture, and merge-guard rules"
     else
@@ -5498,6 +5499,14 @@ NODE
     fi
 }
 
+test_review_delivery_is_fixed_argv_and_candidate_bound() {
+    if node "$REPO_DIR/tests/test-review-delivery.cjs"; then
+        pass "Reviewed delivery uses fixed argv and integrates only the certified candidate"
+    else
+        fail "Reviewed delivery did not preserve exact candidate identity"
+    fi
+}
+
 test_pretool_blocks_commit
 test_pretool_blocks_push
 test_pretool_blocks_git_after_shell_prefixes
@@ -5610,6 +5619,7 @@ test_fable_review_is_tool_free_high_and_candidate_bound
 test_fable_review_rejects_stale_proof
 test_fable_review_uses_windows_cmd_shim_and_freezes_before_proof_check
 test_dual_review_is_independent_bounded_and_candidate_bound
+test_review_delivery_is_fixed_argv_and_candidate_bound
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

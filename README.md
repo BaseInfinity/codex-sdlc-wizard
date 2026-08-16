@@ -53,8 +53,8 @@ After either path changes skills, hooks, hook config, or helper scripts, restart
 Useful follow-ups after install:
 
 ```bash
-npx codex-sdlc-wizard@0.7.37 check
-npx codex-sdlc-wizard@0.7.37 update
+npx codex-sdlc-wizard@0.7.38 check
+npx codex-sdlc-wizard@0.7.38 update
 ```
 
 If you want pinned release examples instead of `@latest`, see [Releases](#releases).
@@ -285,10 +285,10 @@ How to choose:
 
 ```bash
 # recommended interactive bootstrap path
-npx codex-sdlc-wizard@0.7.37 --model-profile maximum
+npx codex-sdlc-wizard@0.7.38 --model-profile maximum
 
 # experimental efficiency trial when you explicitly choose it
-npx codex-sdlc-wizard@0.7.37 --model-profile mixed
+npx codex-sdlc-wizard@0.7.38 --model-profile mixed
 
 # floating latest release with the same bootstrap recommendation
 npx codex-sdlc-wizard@latest --model-profile maximum
@@ -389,6 +389,19 @@ node .codex/hooks/dual-review.cjs --base main --consent-subscription-quota
 
 Sol High and Fable High review the same frozen candidate independently. Clean agreement stops after those two reviews. A verdict split gets exactly one verbatim cross-feed round, then the wrapper writes one conservative candidate-bound joint receipt; it never starts an unbounded reviewer dialogue.
 
+Once the joint receipt is certified, deliver that exact candidate through the fixed-argv boundary rather than rebuilding the sequence with separate shell commands:
+
+```bash
+node .codex/hooks/dual-review.cjs deliver github \
+  --message "feat: describe the certified change" \
+  --branch feature-branch \
+  --base main \
+  --title "Describe the certified change" \
+  --body "Closes #123"
+```
+
+The command commits the certified staged tree while honoring configured Git hooks, pushes its immutable SHA, creates or reuses the explicitly targeted PR, verifies the authoritative head/base and at least one completed check, then atomically advances the unchanged base to that exact commit. An empty check rollup waits and fails closed by default; use `--allow-no-checks` only when the repository intentionally has no GitHub checks. A changed base, failing hook, failing check, or protected branch blocks integration. `deliver direct` is available only for an explicitly intended non-GitHub path; it verifies the exact remote ref but does not claim GitHub CI semantics. This is immediate exact-SHA integration after verification, not GitHub auto-merge.
+
 ### Incremental checkpoints and the completion boundary
 
 For each coherent green slice, run affected proof, author-review the exact incremental diff, and use at most one risk-based reviewer before committing. During the ten-delivery pilot, the completion boundary is deliberately broader: freeze the candidate, run the broad proof once, and send the whole base-to-candidate diff through the bounded Sol High plus Fable High joint gate above. Outside the pilot, use Fable only when cross-model policy requires it. Fix a blocker as one bounded corrective delta with targeted proof. A third same-plan correction means stop; human approval may authorize a replan with newly scoped work, not silently extend the exhausted plan.
@@ -448,11 +461,14 @@ This keeps dogfooding useful without turning every implementation session into w
 
 ## Releases
 
-`0.7.37` adds Desktop-safe linked-worktree delivery guidance: commit and push
-commands expose their absolute worktree target through `git -C`, so PreToolUse
-hooks can bind proof correctly even when a Codex surface omits the tool
-`workdir`. It includes the bounded-review, proof-aware review, Fable transport,
-bounded reconciliation, and Windows proof/npm improvements from `0.7.36`.
+`0.7.38` adds one fixed-argv delivery boundary for a certified candidate. It
+commits the exact reviewed tree while honoring configured Git hooks, pushes
+immutable object IDs, verifies the authoritative GitHub PR identity and at
+least one completed check by default, and
+atomically integrates only when the reviewed base is unchanged. This removes
+the fragile multi-command handoff that could read the wrong worktree or publish
+something other than the reviewed candidate. It includes the Desktop-safe
+linked-worktree guidance and bounded-review improvements from `0.7.37`.
 
 Versioned releases for this adapter live at:
 
@@ -462,7 +478,7 @@ If you are consuming this repo in a real project, prefer a tagged release over `
 
 ```bash
 # npm / npx pinned to the current release
-npx codex-sdlc-wizard@0.7.37
+npx codex-sdlc-wizard@0.7.38
 
 # npm / npx floating on the newest published release
 npx codex-sdlc-wizard@latest
@@ -472,7 +488,7 @@ npx codex-sdlc-wizard@latest
 # so $codex-sdlc-wizard is available inside Codex
 
 # git-based install
-git clone --branch v0.7.37 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
+git clone --branch v0.7.38 --depth 1 https://github.com/BaseInfinity/codex-sdlc-wizard.git /tmp/codex-sdlc-wizard
 ```
 
 ### Maintainer Release Flow
