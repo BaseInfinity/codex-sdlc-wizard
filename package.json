@@ -1,6 +1,6 @@
 {
   "name": "codex-sdlc-wizard",
-  "version": "0.7.35",
+  "version": "0.7.36",
   "description": "Codex SDLC plugin, adaptive setup wizard, and maintenance CLI",
   "license": "MIT",
   "funding": {
