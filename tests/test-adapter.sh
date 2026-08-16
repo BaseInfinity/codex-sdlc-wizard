@@ -3519,9 +3519,12 @@ test_installers_share_agents_ownership_messages() {
         grep -Fq 'AGENTS.md is user-owned or customized - preserving it' "$installer" || valid=false
     done
     grep -Fq ') -ceq $content)' "$REPO_DIR/install.ps1" || valid=false
+    grep -Fq '$manifest.generated_files.PSObject.Properties[$Path]' "$REPO_DIR/install.ps1" || valid=false
+    grep -Fq 'lib\managed-file-hash.cjs' "$REPO_DIR/install.ps1" || valid=false
+    ! grep -Fq '$manifest.managed_files.$Path' "$REPO_DIR/install.ps1" || valid=false
 
     if [ "$valid" = "true" ]; then
-        pass "shell and PowerShell installers share explicit AGENTS.md ownership messages"
+        pass "shell and PowerShell installers share AGENTS.md ownership semantics"
     else
         fail "shell and PowerShell installers do not share AGENTS.md ownership semantics"
     fi
@@ -4021,18 +4024,12 @@ test_install_refreshes_unmodified_agents_for_profile_switch() {
         bash "$REPO_DIR/setup.sh" --yes --model-profile mixed >/dev/null 2>&1
     ) || valid=false
 
-    cat > "$tmpdir/AGENTS.md" <<'EOF'
-# SDLC Enforcement
-
-- Selected profile: `mixed`
-- Baseline reasoning: `medium`
-EOF
-    MANIFEST_PATH="$tmpdir/.codex-sdlc/manifest.json" AGENTS_PATH="$tmpdir/AGENTS.md" node <<'NODE'
-const crypto = require("crypto");
+    grep -Fq -- '- Selected profile: mixed' "$tmpdir/AGENTS.md" || valid=false
+    MANIFEST_PATH="$tmpdir/.codex-sdlc/manifest.json" node <<'NODE' || valid=false
 const fs = require("fs");
 const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
-manifest.managed_files["AGENTS.md"] = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(process.env.AGENTS_PATH)).digest("hex")}`;
-fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+if (!manifest.generated_files?.["AGENTS.md"]) process.exit(1);
+if (manifest.generated_files["AGENTS.md"] !== manifest.managed_files["AGENTS.md"]) process.exit(1);
 NODE
 
     install_output=$(
@@ -4042,7 +4039,7 @@ NODE
     ) || valid=false
     output=$(cd "$tmpdir" && bash "$REPO_DIR/check.sh" 2>/dev/null)
 
-    grep -Fq -- '- Selected profile: `maximum`' "$tmpdir/AGENTS.md" || valid=false
+    grep -Fq -- '- Selected profile: maximum' "$tmpdir/AGENTS.md" || valid=false
     grep -Fq -- '- Baseline reasoning: `high`' "$tmpdir/AGENTS.md" || valid=false
     ! grep -Fq -- '- Selected profile: mixed' "$tmpdir/AGENTS.md" || valid=false
     echo "$install_output" | grep -Fq 'AGENTS.md is wizard-managed - keeping it; profile guidance will be refreshed if needed' || valid=false

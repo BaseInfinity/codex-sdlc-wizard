@@ -11,6 +11,8 @@ You are a guided update assistant. Your job is to show what changed, detect drif
 
 Do not blindly overwrite files.
 
+The deterministic updater may refresh `AGENTS.md` only when the physical file still matches the separately recorded generator-owned baseline hash. A stale `managed_files` hash is not proof of generator ownership. If provenance is missing or the physical file differs, preserve `AGENTS.md` byte-for-byte. In the AI-guided path, inspect the diff and offer a narrow semantic merge of only the required model-policy lines; never replace specialized repository rules with a generic generated contract.
+
 Version boundary: `$update-wizard` updates repo artifacts using the wizard version already installed in the active Codex skill/session. It does not self-update the npm package. To consume the newest published package first, tell the user to run `npx codex-sdlc-wizard@latest update` from the repo, then restart or resume Codex so refreshed skills/hooks/config load.
 
 ## Package upgrade preflight

@@ -197,6 +197,14 @@ file_sha256() {
     node "$SCRIPT_DIR/lib/managed-file-hash.cjs" hash "$file_path"
 }
 
+agents_matches_generated_baseline() {
+    local generated_hash
+    generated_hash="$(json_get_file ".codex-sdlc/manifest.json" 'data.generated_files?.["AGENTS.md"] || ""')"
+    [ -n "$generated_hash" ] || return 1
+    [ -f "AGENTS.md" ] || return 1
+    [ "$(file_sha256 "AGENTS.md")" = "$generated_hash" ]
+}
+
 package_source_for_managed_file() {
     local relative_path="$1"
 
@@ -627,10 +635,15 @@ for line in "${STATUS_LINES[@]}"; do
                 RUN_REGENERATE=true
                 queue_static_repair "$relative_path"
             elif [ "$relative_path" = "AGENTS.md" ] && [ "$MODEL_PROFILE_MIGRATION" = "true" ]; then
-                action="refresh generated model policy"
-                CHANGES_PENDING=true
-                RUN_REGENERATE=true
-                queue_regenerate_existing_doc "$relative_path"
+                if agents_matches_generated_baseline; then
+                    action="refresh generated model policy"
+                    CHANGES_PENDING=true
+                    RUN_REGENERATE=true
+                    queue_regenerate_existing_doc "$relative_path"
+                else
+                    action="skip (preserve customization)"
+                    SKIPPED_CUSTOMIZED_PATHS+=("$relative_path")
+                fi
             elif [ "$MODEL_PROFILE_MIGRATION" = "true" ] && is_model_policy_static_surface "$relative_path"; then
                 action="refresh model policy"
                 CHANGES_PENDING=true

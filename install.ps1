@@ -90,12 +90,17 @@ function Test-AgentsManifestMatch {
 
     try {
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-        $expected = $manifest.managed_files.$Path
-        if (-not $expected) {
+        $expectedProperty = $manifest.generated_files.PSObject.Properties[$Path]
+        if (-not $expectedProperty -or -not $expectedProperty.Value) {
             return $false
         }
-        $actual = "sha256:" + (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
-        return $actual -eq $expected
+        $expected = [string]$expectedProperty.Value
+        $hashHelper = Join-Path $PSScriptRoot "lib\managed-file-hash.cjs"
+        $actual = & node $hashHelper hash $Path
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+        return $actual.Trim() -eq $expected
     } catch {
         return $false
     }

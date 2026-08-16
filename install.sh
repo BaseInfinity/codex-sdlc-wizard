@@ -251,19 +251,8 @@ install_agents_baseline() {
       "$source"); then
       echo "AGENTS.md already matches the wizard baseline - keeping it"
     elif [ -f ".codex-sdlc/manifest.json" ] && \
-      AGENTS_TARGET="$target" node - <<'NODE'
-const crypto = require("crypto");
-const fs = require("fs");
-
-try {
-  const manifest = JSON.parse(fs.readFileSync(".codex-sdlc/manifest.json", "utf8"));
-  const expected = manifest.managed_files?.[process.env.AGENTS_TARGET];
-  const actual = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(process.env.AGENTS_TARGET)).digest("hex")}`;
-  process.exit(expected === actual ? 0 : 1);
-} catch {
-  process.exit(1);
-}
-NODE
+      [ "$(json_get_file ".codex-sdlc/manifest.json" 'data.generated_files?.["AGENTS.md"] || ""')" = \
+        "$(node "$SCRIPT_DIR/lib/managed-file-hash.cjs" hash "$target")" ]
     then
       echo "AGENTS.md is wizard-managed - keeping it; profile guidance will be refreshed if needed"
     else

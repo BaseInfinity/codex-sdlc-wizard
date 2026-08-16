@@ -1198,6 +1198,11 @@ compute_hash() {
 }
 
 MANIFEST=".codex-sdlc/manifest.json"
+PRIOR_AGENTS_GENERATED_HASH="$(json_get_file "$MANIFEST" 'data.generated_files?.["AGENTS.md"] || ""')"
+AGENTS_GENERATED_HASH="$PRIOR_AGENTS_GENERATED_HASH"
+if [ "$SETUP_GENERATED_AGENTS" = "true" ]; then
+    AGENTS_GENERATED_HASH="$(compute_hash AGENTS.md)"
+fi
 
 ADAPTER_VERSION="$ADAPTER_VERSION" \
 INSTALLED_AT="$INSTALLED_AT_VALUE" \
@@ -1267,6 +1272,7 @@ REASONING_BASELINE_SELECTED="$REASONING_BASELINE" \
 REASONING_ESCALATION_SELECTED="$REASONING_ESCALATION" \
 REASONING_RISK_SIGNALS_SELECTED="$REASONING_RISK_SIGNALS" \
 AGENTS_HASH="$(compute_hash AGENTS.md)" \
+AGENTS_GENERATED_HASH="$AGENTS_GENERATED_HASH" \
 SDLC_HASH="$(compute_hash SDLC.md)" \
 TESTING_HASH="$(compute_hash TESTING.md)" \
 ARCH_HASH="$(compute_hash ARCHITECTURE.md)" \
@@ -1367,6 +1373,7 @@ const manifest = {
     escalation_reasoning: process.env.REASONING_ESCALATION_SELECTED || "xhigh",
     repo_risk_signals: process.env.REASONING_RISK_SIGNALS_SELECTED || "none detected during setup"
   },
+  generated_files: {},
   managed_files: {
     "AGENTS.md": process.env.AGENTS_HASH || "",
     "SDLC.md": process.env.SDLC_HASH || "",
@@ -1390,6 +1397,10 @@ const manifest = {
     ".codex/hooks/session-start.ps1": process.env.SESSION_START_PS1_HASH || ""
   }
 };
+
+if (process.env.AGENTS_GENERATED_HASH) {
+  manifest.generated_files["AGENTS.md"] = process.env.AGENTS_GENERATED_HASH;
+}
 
 if (process.env.MANAGE_GOALS === "true" && process.env.GOALS_HASH) {
   manifest.managed_files["GOALS.md"] = process.env.GOALS_HASH;

@@ -1467,7 +1467,53 @@ EOF
     fi
 }
 
-# ---- Test 16: matching legacy metadata migrates without losing explicit profile choice ----
+# ---- Test 16: stale manifest ownership cannot authorize replacing specialized AGENTS ----
+test_update_preserves_specialized_agents_when_generator_provenance_is_missing() {
+    local ws output agents_before valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+
+    run_setup_local_args "$ws" --model-profile mixed
+    cat > "$ws/AGENTS.md" <<'EOF'
+# Specialized Anticheat contract
+
+- Selected profile: mixed
+- Baseline reasoning: `xhigh`
+- Preserve medical/legal review, source-quality gates, and account boundaries.
+EOF
+    agents_before=$(cat "$ws/AGENTS.md")
+    MANIFEST_PATH="$ws/.codex-sdlc/manifest.json" \
+    AGENTS_PATH="$ws/AGENTS.md" \
+    node <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+
+const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
+manifest.managed_files["AGENTS.md"] = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(process.env.AGENTS_PATH)).digest("hex")}`;
+manifest.model_profile.policy_schema_version = 1;
+delete manifest.generated_files;
+fs.writeFileSync(process.env.MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+
+    output=$(run_update "$ws") || valid=false
+
+    [ "$(cat "$ws/AGENTS.md")" = "$agents_before" ] || valid=false
+    grep -Fq 'medical/legal review' "$ws/AGENTS.md" || valid=false
+    echo "$output" | grep -Fq 'AGENTS.md: match -> skip (preserve customization)' || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "3" || valid=false
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "update preserves specialized AGENTS when generator provenance is missing"
+    else
+        echo "$output" >&2
+        fail "update trusted stale AGENTS manifest ownership without generator provenance"
+    fi
+}
+
+# ---- Test 17: matching legacy metadata migrates without losing explicit profile choice ----
 test_update_refreshes_matching_legacy_model_profile_metadata() {
     local ws output check_output valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -1516,6 +1562,7 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const hash = crypto.createHash("sha256").update(fs.readFileSync(profilePath)).digest("hex");
 manifest.managed_files[".codex-sdlc/model-profile.json"] = `sha256:${hash}`;
 manifest.managed_files["AGENTS.md"] = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(agentsPath)).digest("hex")}`;
+manifest.generated_files["AGENTS.md"] = manifest.managed_files["AGENTS.md"];
 manifest.model_profile.selected_profile = "mixed";
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE
@@ -1528,6 +1575,7 @@ NODE
     json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.main_model' "gpt-5.6-terra" || valid=false
     json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.review_model' "gpt-5.6-sol" || valid=false
     json_text_equals "$(cat "$ws/.codex-sdlc/model-profile.json")" 'data.profiles.mixed.review_effort_source' "explicit command override" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.generated_files["AGENTS.md"] === data.managed_files["AGENTS.md"]' "true" || valid=false
     grep -Fq 'Selected profile: mixed' "$ws/AGENTS.md" || valid=false
     grep -Fq 'Baseline reasoning: `medium`' "$ws/AGENTS.md" || valid=false
     grep -Fq 'legacy-mini' "$ws/AGENTS.md" && valid=false
@@ -1546,7 +1594,7 @@ NODE
     fi
 }
 
-# ---- Test 17: missing managed metadata refreshes matching generated model policy ----
+# ---- Test 18: missing managed metadata refreshes matching generated model policy ----
 test_update_refreshes_generated_policy_when_profile_metadata_is_missing() {
     local ws output valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -1571,6 +1619,7 @@ const manifestPath = process.env.MANIFEST_PATH;
 const agentsPath = process.env.AGENTS_PATH;
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 manifest.managed_files["AGENTS.md"] = `sha256:${crypto.createHash("sha256").update(fs.readFileSync(agentsPath)).digest("hex")}`;
+manifest.generated_files["AGENTS.md"] = manifest.managed_files["AGENTS.md"];
 manifest.model_profile.selected_profile = "mixed";
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE
@@ -1595,7 +1644,7 @@ NODE
     fi
 }
 
-# ---- Test 18: legacy model migration refreshes unchanged policy surfaces only ----
+# ---- Test 19: legacy model migration refreshes unchanged policy surfaces only ----
 test_update_refreshes_legacy_policy_surfaces_without_overwriting_customizations() {
     local ws output check_output valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -1657,6 +1706,7 @@ const hash = (file) => `sha256:${crypto.createHash("sha256").update(fs.readFileS
 const manifest = JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, "utf8"));
 manifest.managed_files[".codex-sdlc/model-profile.json"] = hash(process.env.PROFILE_PATH);
 manifest.managed_files["AGENTS.md"] = hash(process.env.AGENTS_PATH);
+manifest.generated_files["AGENTS.md"] = manifest.managed_files["AGENTS.md"];
 manifest.managed_files["SDLC-LOOP.md"] = hash(process.env.LOOP_PATH);
 manifest.managed_files["START-SDLC.md"] = hash(process.env.START_PATH);
 delete manifest.managed_files[".agents/skills/sdlc/SKILL.md"];
@@ -1702,7 +1752,7 @@ NODE
     fi
 }
 
-# ---- Test 19: customized legacy metadata still migrates unchanged policy surfaces ----
+# ---- Test 20: customized legacy metadata still migrates unchanged policy surfaces ----
 test_update_migrates_legacy_policy_around_customized_profile_metadata() {
     local ws output second_output profile_before check_output valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -1762,7 +1812,7 @@ EOF
     fi
 }
 
-# ---- Test 20: customized policy surfaces still record one-time migration completion ----
+# ---- Test 21: customized policy surfaces still record one-time migration completion ----
 test_update_records_schema_only_migration_when_all_policy_surfaces_are_customized() {
     local ws output second_output profile_before agents_before loop_before start_before skill_before valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
@@ -2039,6 +2089,7 @@ test_update_refreshes_playwright_mcp_policy_for_old_manifest
 test_update_refreshes_changed_playwright_mcp_policy
 test_update_repairs_missing_goals_doc_when_manifest_tracks_it
 test_update_rejects_unsupported_codex_version_before_mutation
+test_update_preserves_specialized_agents_when_generator_provenance_is_missing
 test_update_refreshes_matching_legacy_model_profile_metadata
 test_update_refreshes_generated_policy_when_profile_metadata_is_missing
 test_update_refreshes_legacy_policy_surfaces_without_overwriting_customizations
