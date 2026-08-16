@@ -12,6 +12,8 @@ case "$(uname -s)" in
 esac
 
 MODEL_PROFILE="maximum"
+CROSS_MODEL_REVIEWER="fable-high"
+CROSS_MODEL_REVIEWER_SET=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --model-profile)
@@ -25,14 +27,41 @@ while [ $# -gt 0 ]; do
     --model-profile=*)
       MODEL_PROFILE="${1#*=}"
       ;;
+    --cross-model-reviewer)
+      shift
+      if [ $# -eq 0 ]; then
+        echo "Missing value for --cross-model-reviewer (expected: fable-high or opus-4.8-xhigh)" >&2
+        exit 1
+      fi
+      CROSS_MODEL_REVIEWER="$1"
+      CROSS_MODEL_REVIEWER_SET=true
+      ;;
+    --cross-model-reviewer=*)
+      CROSS_MODEL_REVIEWER="${1#*=}"
+      CROSS_MODEL_REVIEWER_SET=true
+      ;;
   esac
   shift
 done
+
+if [ "$CROSS_MODEL_REVIEWER_SET" = "false" ]; then
+  EXISTING_CROSS_MODEL_REVIEWER="$(json_get_file ".codex-sdlc/manifest.json" 'data.model_profile?.cross_model_reviewer || ""')"
+  [ -n "$EXISTING_CROSS_MODEL_REVIEWER" ] || EXISTING_CROSS_MODEL_REVIEWER="$(json_get_file ".codex-sdlc/model-profile.json" 'data.policy?.cross_model_reviewer || ""')"
+  [ -z "$EXISTING_CROSS_MODEL_REVIEWER" ] || CROSS_MODEL_REVIEWER="$EXISTING_CROSS_MODEL_REVIEWER"
+fi
 
 case "$MODEL_PROFILE" in
   mixed|maximum) ;;
   *)
     echo "Unsupported model profile: $MODEL_PROFILE (expected: mixed or maximum)" >&2
+    exit 1
+    ;;
+esac
+
+case "$CROSS_MODEL_REVIEWER" in
+  fable-high|opus-4.8-xhigh) ;;
+  *)
+    echo "Unsupported cross-model reviewer: $CROSS_MODEL_REVIEWER (expected: fable-high or opus-4.8-xhigh)" >&2
     exit 1
     ;;
 esac
@@ -230,7 +259,7 @@ prune_legacy_global_skill() {
 }
 
 write_model_profile() {
-  write_model_profile_metadata ".codex-sdlc/model-profile.json" "$MODEL_PROFILE"
+  write_model_profile_metadata ".codex-sdlc/model-profile.json" "$MODEL_PROFILE" "$CROSS_MODEL_REVIEWER"
   mark_install_touched ".codex-sdlc/model-profile.json"
   echo "Wrote .codex-sdlc/model-profile.json ($MODEL_PROFILE)"
 }

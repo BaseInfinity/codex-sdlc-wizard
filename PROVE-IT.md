@@ -55,16 +55,16 @@ the proof-stamping command for the git gate:
 node .codex/hooks/git-guard.cjs prove --reviewed
 ```
 
-If cross-model review is required, wait for a clean Sol review and then run the bounded Fable High reviewer over the same frozen candidate:
+If a standalone Fable-only cross-model review is required, wait for a clean Sol review and then run Fable High over the same frozen candidate:
 
 ```bash
 node .codex/hooks/fable-review.cjs --base <ref> --consent-subscription-quota
 ```
 
-This consumes Claude subscription quota and refuses API-key or alternate-provider authentication.
+This consumes Claude subscription quota and refuses API-key or alternate-provider authentication. Repo-selected reviewer routing and the availability-only Opus fallback belong to the bounded joint gate below.
 
-When policy requires Sol High and Fable High to reconcile their independent
-reviews, run the single bounded gate over the same frozen candidate:
+When policy requires Sol High and the selected cross-model reviewer to reconcile
+their independent reviews, run the single bounded gate over the same frozen candidate:
 
 ```bash
 node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota
@@ -73,6 +73,8 @@ node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota
 Clean agreement stops immediately. A verdict split receives exactly one
 verbatim structured cross-feed round; the gate then emits one joint receipt and
 stops. It never permits a third reviewer exchange.
+The receipt records both the requested lane and actual provider, model, effort,
+route, and fallback reason.
 
 After the joint receipt is certified, use the fixed-argv delivery boundary
 instead of separate raw commit, push, PR, and merge commands:

@@ -69,11 +69,29 @@ const REVIEW_SCHEMA = {
   required: ["findings", "verdict", "confidence"],
 };
 
+const CROSS_MODEL_REVIEWERS = {
+  "fable-high": {
+    key: "fable-high",
+    label: "Fable High",
+    model: "fable",
+    effort: "high",
+    actualModel: /^(?:fable|claude-fable(?:-|$))/i,
+  },
+  "opus-4.8-xhigh": {
+    key: "opus-4.8-xhigh",
+    label: "Opus 4.8 xhigh",
+    model: "claude-opus-4-8",
+    effort: "xhigh",
+    actualModel: /^(?:claude-)?opus-4-8(?:-|$)/i,
+  },
+};
+
 function help() {
   return [
     "Usage: node .codex/hooks/dual-review.cjs --base <ref> --consent-subscription-quota",
     "",
-    "Runs independent Sol High and Fable High reviews over one frozen candidate.",
+    "Runs independent Sol High and the repo-selected cross-model reviewer over one frozen candidate.",
+    "A fable-high lane falls back once to Opus 4.8 xhigh only when Fable quota/model availability fails.",
     "A verdict split receives one verbatim cross-feed round; agreement stops immediately.",
   ].join("\n");
 }
@@ -279,6 +297,27 @@ function repositoryRoot() {
   }
 }
 
+function readJsonIfPresent(target) {
+  if (!fs.existsSync(target)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(target, "utf8"));
+  } catch {
+    throw new Error(`Cross-model reviewer policy is invalid JSON: ${target}`);
+  }
+}
+
+function crossModelReviewerPolicy(root) {
+  const manifest = readJsonIfPresent(path.join(root, ".codex-sdlc", "manifest.json"));
+  const profile = readJsonIfPresent(path.join(root, ".codex-sdlc", "model-profile.json"));
+  const selected = manifest?.model_profile?.cross_model_reviewer
+    || profile?.policy?.cross_model_reviewer
+    || "fable-high";
+  if (!CROSS_MODEL_REVIEWERS[selected]) {
+    throw new Error(`Unsupported repo cross-model reviewer: ${selected}`);
+  }
+  return selected;
+}
+
 function sha256(value) {
   return `sha256:${crypto.createHash("sha256").update(value).digest("hex")}`;
 }
@@ -336,7 +375,7 @@ function assertSubscriptionLane() {
     throw new Error("Claude auth status did not return JSON.");
   }
   if (auth.authMethod !== "claude.ai" || auth.apiProvider !== "firstParty" || !auth.subscriptionType) {
-    throw new Error("Fable review requires claude.ai firstParty subscription authentication.");
+    throw new Error("Cross-model review requires claude.ai firstParty subscription authentication.");
   }
   return auth;
 }
@@ -831,10 +870,27 @@ async function runSol(prompt, root, schemaPath, outputPath, signal) {
   return validateReview(review, "Sol");
 }
 
-async function runFable(prompt, temporaryDirectory, signal) {
+function reviewerAvailabilityReason(message) {
+  const text = String(message || "");
+  if (/(?:rate limit|quota|usage limit|out of (?:usage )?credits|exhausted|http\s*429)/i.test(text)) return "quota_exhausted";
+  if (/(?:model).*(?:unavailable|not available|not found|does not exist|unsupported)/i.test(text)) return "model_unavailable";
+  return "";
+}
+
+function actualClaudeModel(parsed, envelope) {
+  const entries = Array.isArray(parsed) ? parsed : [parsed];
+  const candidates = [
+    envelope?.model,
+    ...entries.map((entry) => entry?.model),
+    ...entries.flatMap((entry) => Object.keys(entry?.modelUsage || {})),
+  ];
+  return candidates.find((candidate) => typeof candidate === "string" && candidate !== "") || "";
+}
+
+async function runClaudeReviewer(prompt, temporaryDirectory, signal, reviewer, route, fallbackReason = null) {
   const launch = claudeLaunch();
   const args = [
-    "-p", "--model", "fable", "--effort", "high", "--safe-mode", "--max-turns", "1",
+    "-p", "--model", reviewer.model, "--effort", reviewer.effort, "--safe-mode", "--max-turns", "2",
     "--setting-sources", "user", "--tools", "", "--disable-slash-commands",
     "--no-session-persistence", "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config",
     "--json-schema", JSON.stringify(REVIEW_SCHEMA), "--output-format", "json",
@@ -849,21 +905,88 @@ async function runFable(prompt, temporaryDirectory, signal) {
     signal,
     windowsVerbatimArguments: prepared.windowsVerbatimArguments,
   });
-  if (result.error) throw new Error(`Cannot run Fable review: ${result.error.message}`);
-  if (result.timedOut) throw new Error("Fable review timed out.");
-  if (result.status !== 0) throw new Error(result.stderr.trim() || "Fable review failed.");
+  if (result.error) throw new Error(`Cannot run ${reviewer.label} review: ${result.error.message}`);
+  if (result.timedOut) throw new Error(`${reviewer.label} review timed out.`);
+  if (result.status !== 0) {
+    const error = new Error(result.stderr.trim() || `${reviewer.label} review failed.`);
+    error.availabilityReason = reviewerAvailabilityReason(`${result.stderr}\n${result.stdout}`);
+    throw error;
+  }
   let envelope;
+  let parsed;
   try {
-    const parsed = JSON.parse(result.stdout);
+    parsed = JSON.parse(result.stdout);
     envelope = Array.isArray(parsed) ? [...parsed].reverse().find((entry) => entry?.type === "result") : parsed;
   } catch {
-    throw new Error("Fable did not return a JSON result envelope.");
+    throw new Error(`${reviewer.label} did not return a JSON result envelope.`);
+  }
+  const actualModel = actualClaudeModel(parsed, envelope);
+  if (!reviewer.actualModel.test(actualModel)) {
+    throw new Error(`${reviewer.label} returned unexpected model identity: ${actualModel || "missing"}.`);
   }
   let review = envelope?.structured_output;
   if ((!review || typeof review !== "object") && typeof envelope?.result === "string") {
     try { review = JSON.parse(envelope.result); } catch { /* validated below */ }
   }
-  return validateReview(review, "Fable");
+  return {
+    review: validateReview(review, reviewer.label),
+    reviewer,
+    identity: {
+      provider: "anthropic",
+      model: actualModel,
+      effort: reviewer.effort,
+      route,
+      fallback_reason: fallbackReason,
+    },
+  };
+}
+
+async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, reviewer, suspectedReason) {
+  const launch = claudeLaunch();
+  const args = [
+    "-p", "--model", reviewer.model, "--effort", reviewer.effort, "--safe-mode", "--max-turns", "1",
+    "--setting-sources", "user", "--tools", "", "--disable-slash-commands",
+    "--no-session-persistence", "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config",
+  ];
+  const prepared = preparedLaunch(launch, args);
+  const result = await runAsync(prepared.command, prepared.args, {
+    cwd: temporaryDirectory,
+    env: sanitizedEnvironment(),
+    input: "CODEX SDLC AVAILABILITY PROBE\nReply exactly AVAILABLE. Do not inspect files, repositories, or prior input.",
+    timeout: configuredDuration("CODEX_SDLC_AVAILABILITY_TIMEOUT_MS", 60 * 1000),
+    killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
+    signal,
+    windowsVerbatimArguments: prepared.windowsVerbatimArguments,
+  });
+  if (result.error || result.timedOut || result.status === 0) return false;
+  return reviewerAvailabilityReason(`${result.stderr}\n${result.stdout}`) === suspectedReason;
+}
+
+async function runCrossModel(prompt, temporaryDirectory, signal, selectedReviewer) {
+  const selected = CROSS_MODEL_REVIEWERS[selectedReviewer];
+  if (selected.key === "opus-4.8-xhigh") {
+    return runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "configured");
+  }
+  try {
+    return await runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "preferred");
+  } catch (error) {
+    if (!error.availabilityReason) throw error;
+    const unavailable = await confirmClaudeReviewerUnavailable(
+      temporaryDirectory,
+      signal,
+      selected,
+      error.availabilityReason,
+    );
+    if (!unavailable) {
+      throw new Error(`${selected.label} review failed and availability fallback was not independently confirmed: ${error.message}`);
+    }
+    const fallback = CROSS_MODEL_REVIEWERS["opus-4.8-xhigh"];
+    try {
+      return await runClaudeReviewer(prompt(fallback), temporaryDirectory, signal, fallback, "fallback", error.availabilityReason);
+    } catch (fallbackError) {
+      throw new Error(`${selected.label} was unavailable (${error.availabilityReason}); ${fallback.label} fallback failed: ${fallbackError.message}`);
+    }
+  }
 }
 
 async function runReviewPair(solReview, fableReview) {
@@ -908,6 +1031,7 @@ async function main() {
   let temporaryDirectory = "";
   try {
     const auth = assertSubscriptionLane();
+    const selectedReviewer = crossModelReviewerPolicy(root);
     requireFrozenIndex(root);
     const baseCommit = git(root, ["rev-parse", "--verify", `${parsed.base}^{commit}`]);
     const binding = currentBinding(root, baseCommit);
@@ -920,35 +1044,50 @@ async function main() {
     fs.writeFileSync(schemaPath, JSON.stringify(REVIEW_SCHEMA));
     const solInitialPath = path.join(temporaryDirectory, "sol-initial.json");
     const initialStarted = Date.now();
-    const [solInitial, fableInitial] = await runReviewPair(
+    const [solInitial, crossInitialResult] = await runReviewPair(
       (signal) => runSol(independentPrompt("Sol High", binding, proof), root, schemaPath, solInitialPath, signal),
-      (signal) => runFable(independentPrompt("Fable High", binding, proof, patchBuffer), temporaryDirectory, signal),
+      (signal) => runCrossModel(
+        (reviewer) => independentPrompt(reviewer.label, binding, proof, patchBuffer),
+        temporaryDirectory,
+        signal,
+        selectedReviewer,
+      ),
     );
     assertCandidateUnchanged(root, binding);
+    const crossInitial = crossInitialResult.review;
+    const crossIdentity = crossInitialResult.identity;
+    const crossReviewer = crossInitialResult.reviewer;
 
-    let finalReviews = { sol: solInitial, fable: fableInitial };
+    let finalReviews = { sol: solInitial, cross_model: crossInitial };
     let rounds = 0;
     let skippedReason = "initial_agreement";
     let reconciliationMs = 0;
-    if (solInitial.verdict !== fableInitial.verdict) {
+    if (solInitial.verdict !== crossInitial.verdict) {
       rounds = 1;
       skippedReason = "";
       const reconciliationStarted = Date.now();
       const solFinalPath = path.join(temporaryDirectory, "sol-final.json");
-      const [solFinal, fableFinal] = await runReviewPair(
-        (signal) => runSol(reconciliationPrompt("Sol High", { name: "fable", review: fableInitial }, solInitial, binding, proof), root, schemaPath, solFinalPath, signal),
-        (signal) => runFable(reconciliationPrompt("Fable High", { name: "sol", review: solInitial }, fableInitial, binding, proof, patchBuffer), temporaryDirectory, signal),
+      const [solFinal, crossFinalResult] = await runReviewPair(
+        (signal) => runSol(reconciliationPrompt("Sol High", { name: "cross_model", review: crossInitial }, solInitial, binding, proof), root, schemaPath, solFinalPath, signal),
+        (signal) => runClaudeReviewer(
+          reconciliationPrompt(crossReviewer.label, { name: "sol", review: solInitial }, crossInitial, binding, proof, patchBuffer),
+          temporaryDirectory,
+          signal,
+          crossReviewer,
+          crossIdentity.route,
+          crossIdentity.fallback_reason,
+        ),
       );
       reconciliationMs = Date.now() - reconciliationStarted;
       assertCandidateUnchanged(root, binding);
-      finalReviews = { sol: solFinal, fable: fableFinal };
+      finalReviews = { sol: solFinal, cross_model: crossFinalResult.review };
     }
 
-    const jointVerdict = finalReviews.sol.verdict === "CERTIFIED" && finalReviews.fable.verdict === "CERTIFIED"
+    const jointVerdict = finalReviews.sol.verdict === "CERTIFIED" && finalReviews.cross_model.verdict === "CERTIFIED"
       ? "CERTIFIED"
       : "NOT CERTIFIED";
     const receipt = {
-      schema_version: 1,
+      schema_version: 2,
       status: jointVerdict === "CERTIFIED" ? "certified" : "not_certified",
       created_at: new Date().toISOString(),
       base_commit: binding.baseCommit,
@@ -957,13 +1096,18 @@ async function main() {
       patch_sha256: binding.patchSha256,
       proof_workspace_fingerprint: proof.workspace_fingerprint,
       proof_created_at: proof.created_at,
-      reviewer_policy: "sol-high+fable-high/independent-cross-feed-on-split/v1",
-      auth: {
-        fable_auth_method: auth.authMethod,
-        fable_api_provider: auth.apiProvider,
-        fable_subscription_type: auth.subscriptionType,
+      reviewer_policy: `sol-high+${selectedReviewer}/availability-fallback-opus-4.8-xhigh/independent-cross-feed-on-split/v2`,
+      requested_cross_model_reviewer: selectedReviewer,
+      reviewers: {
+        sol: { provider: "openai", model: "gpt-5.6-sol", effort: "high", route: "configured", fallback_reason: null },
+        cross_model: crossIdentity,
       },
-      initial: { sol: solInitial, fable: fableInitial },
+      auth: {
+        cross_model_auth_method: auth.authMethod,
+        cross_model_api_provider: auth.apiProvider,
+        cross_model_subscription_type: auth.subscriptionType,
+      },
+      initial: { sol: solInitial, cross_model: crossInitial },
       final: finalReviews,
       reconciliation: {
         rounds,

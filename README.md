@@ -375,13 +375,19 @@ Do not treat `/autoreview` as a required SDLC command. `auto_review` is a Codex 
 
 Run one broad proof run total on the frozen candidate through the proof-stamping entrypoint. Do not run the suite directly and then rerun it through the guard. When supplying custom proof-aware instructions, use a prompt-only review. A custom prompt must not be combined with `--uncommitted`, `--base`, or `--commit`; those predefined target flags are for reviews without a custom prompt. Include the exact base identity, frozen candidate tree identity, proof command, and result, and say `Do not rerun tests`. Targeted verification is allowed only for a concrete suspected defect; never rerun the broad suite.
 
-When your repo policy requires a cross-model final gate, run Fable High only after the Sol review is clean:
+When your repo policy requires a cross-model final gate, select its reviewer during setup. Use `fable-high` for high-stakes/high-blast-radius repositories or `opus-4.8-xhigh` for an ordinary complex repository:
+
+```bash
+npx codex-sdlc-wizard@latest setup --yes --cross-model-reviewer opus-4.8-xhigh
+```
+
+The repo stores this choice independently of its root-driver profile. The standalone command below remains a Fable-only review for policies that explicitly require one:
 
 ```bash
 node .codex/hooks/fable-review.cjs --base main --consent-subscription-quota
 ```
 
-The consent flag is required because the review consumes Claude subscription quota. The wrapper verifies Claude first-party subscription auth, refuses API keys and alternate providers, disables tools/MCP/session persistence, reuses the current SDLC proof, and writes a candidate-bound receipt under Git metadata. It does not create a metered API-key charge when the verified subscription lane is used.
+The consent flag is required because the review consumes Claude subscription quota. The wrapper verifies Claude first-party subscription auth, refuses API keys and alternate providers, disables tools/MCP/session persistence, reuses the current SDLC proof, and writes a candidate-bound receipt under Git metadata. It does not create a metered API-key charge when the verified subscription lane is used. Repo-selected routing and fallback are handled by the bounded joint gate below.
 
 When policy requires both reviewers to certify one completion candidate, use the bounded joint gate instead:
 
@@ -389,7 +395,7 @@ When policy requires both reviewers to certify one completion candidate, use the
 node .codex/hooks/dual-review.cjs --base main --consent-subscription-quota
 ```
 
-Sol High and Fable High review the same frozen candidate independently. Clean agreement stops after those two reviews. A verdict split gets exactly one verbatim cross-feed round, then the wrapper writes one conservative candidate-bound joint receipt; it never starts an unbounded reviewer dialogue.
+Sol High and the repo-selected Fable High or Opus 4.8 xhigh reviewer inspect the same frozen candidate independently. If Fable is selected but unavailable because of quota or model availability, the joint gate may try Opus 4.8 xhigh once. Findings, timeouts, malformed output, and reviewer-identity mismatches never trigger fallback. Clean agreement stops after those two reviews. A verdict split gets exactly one verbatim cross-feed round, then the wrapper writes one conservative candidate-bound joint receipt; it never starts an unbounded reviewer dialogue. The receipt records the requested lane and actual provider, model, effort, route, and fallback reason.
 
 Once the joint receipt is certified, deliver that exact candidate through the fixed-argv boundary rather than rebuilding the sequence with separate shell commands:
 
@@ -406,7 +412,7 @@ The command commits the certified staged tree while honoring configured Git hook
 
 ### Incremental checkpoints and the completion boundary
 
-For each coherent green slice, run affected proof, author-review the exact incremental diff, and use at most one risk-based reviewer before committing. During the ten-delivery pilot, the completion boundary is deliberately broader: freeze the candidate, run the broad proof once, and send the whole base-to-candidate diff through the bounded Sol High plus Fable High joint gate above. Outside the pilot, use Fable only when cross-model policy requires it. Fix a blocker as one bounded corrective delta with targeted proof. A third same-plan correction means stop; human approval may authorize a replan with newly scoped work, not silently extend the exhausted plan.
+For each coherent green slice, run affected proof, author-review the exact incremental diff, and use at most one risk-based reviewer before committing. During the ten-delivery pilot, the completion boundary is deliberately broader: freeze the candidate, run the broad proof once, and send the whole base-to-candidate diff through the bounded Sol High plus repo-selected cross-model joint gate above. Outside the pilot, invoke the cross-model reviewer only when policy requires it. Fix a blocker as one bounded corrective delta with targeted proof. A third same-plan correction means stop; human approval may authorize a replan with newly scoped work, not silently extend the exhausted plan.
 
 This cadence is a measured ten-delivery pilot, not permanent ceremony. Record delivery, duplicate-proof, per-reviewer disposition and confidence, reconciliation, quota/token cost, correction, tripwire, CI, milestone, and release outcomes in `benchmarks/review-cadence.csv`, then run `bash scripts/summarize-review-cadence.sh`. After ten eligible deliveries across at least two strategies, a human compares the arms and chooses whether to keep, tune, or sunset it.
 

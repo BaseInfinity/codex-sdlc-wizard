@@ -353,6 +353,8 @@ FORCE=false
 SETUP_MODE="normal"
 MODEL_PROFILE="maximum"
 MODEL_PROFILE_SET=false
+CROSS_MODEL_REVIEWER="fable-high"
+CROSS_MODEL_REVIEWER_SET=false
 GENERATE_GOALS=false
 MANAGE_GOALS=false
 while [ $# -gt 0 ]; do
@@ -375,6 +377,19 @@ while [ $# -gt 0 ]; do
             MODEL_PROFILE="${1#*=}"
             MODEL_PROFILE_SET=true
             ;;
+        --cross-model-reviewer)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Missing value for --cross-model-reviewer (expected: fable-high or opus-4.8-xhigh)" >&2
+                exit 1
+            fi
+            CROSS_MODEL_REVIEWER="$1"
+            CROSS_MODEL_REVIEWER_SET=true
+            ;;
+        --cross-model-reviewer=*)
+            CROSS_MODEL_REVIEWER="${1#*=}"
+            CROSS_MODEL_REVIEWER_SET=true
+            ;;
         *)
             echo "Unknown argument: $1" >&2
             exit 1
@@ -383,10 +398,24 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+if [ "$CROSS_MODEL_REVIEWER_SET" = "false" ]; then
+    EXISTING_CROSS_MODEL_REVIEWER="$(json_get_file ".codex-sdlc/manifest.json" 'data.model_profile?.cross_model_reviewer || ""')"
+    [ -n "$EXISTING_CROSS_MODEL_REVIEWER" ] || EXISTING_CROSS_MODEL_REVIEWER="$(json_get_file ".codex-sdlc/model-profile.json" 'data.policy?.cross_model_reviewer || ""')"
+    [ -z "$EXISTING_CROSS_MODEL_REVIEWER" ] || CROSS_MODEL_REVIEWER="$EXISTING_CROSS_MODEL_REVIEWER"
+fi
+
 case "$MODEL_PROFILE" in
     mixed|maximum) ;;
     *)
         echo "Unsupported model profile: $MODEL_PROFILE (expected: mixed or maximum)" >&2
+        exit 1
+        ;;
+esac
+
+case "$CROSS_MODEL_REVIEWER" in
+    fable-high|opus-4.8-xhigh) ;;
+    *)
+        echo "Unsupported cross-model reviewer: $CROSS_MODEL_REVIEWER (expected: fable-high or opus-4.8-xhigh)" >&2
         exit 1
         ;;
 esac
@@ -1180,7 +1209,8 @@ generate_testing_md
 if [ "$SETUP_MODE" != "regenerate" ]; then
     echo ""
     CODEX_SDLC_SETUP_GENERATED_AGENTS="$SETUP_GENERATED_AGENTS" \
-        bash "$SCRIPT_DIR/install.sh" --model-profile "$MODEL_PROFILE"
+        bash "$SCRIPT_DIR/install.sh" --model-profile "$MODEL_PROFILE" \
+            --cross-model-reviewer "$CROSS_MODEL_REVIEWER"
 fi
 
 # ---- Step 5: Write manifest ----
@@ -1267,6 +1297,7 @@ CONF_DOMAIN="$DOMAIN_STATE" \
 CONF_MCP_BROWSER_TOOLING="$MCP_BROWSER_TOOLING_STATE" \
 CONF_MCP_BROWSER_PROFILE_POLICY="$MCP_BROWSER_PROFILE_POLICY_STATE" \
 MODEL_PROFILE_SELECTED="$MODEL_PROFILE" \
+CROSS_MODEL_REVIEWER_SELECTED="$CROSS_MODEL_REVIEWER" \
 MODEL_POLICY_SCHEMA_VERSION_SELECTED="$MODEL_POLICY_SCHEMA_VERSION" \
 REASONING_BASELINE_SELECTED="$REASONING_BASELINE" \
 REASONING_ESCALATION_SELECTED="$REASONING_ESCALATION" \
@@ -1368,7 +1399,8 @@ const manifest = {
   },
   model_profile: {
     selected_profile: process.env.MODEL_PROFILE_SELECTED || "",
-    policy_schema_version: Number(process.env.MODEL_POLICY_SCHEMA_VERSION_SELECTED || "3"),
+    cross_model_reviewer: process.env.CROSS_MODEL_REVIEWER_SELECTED || "fable-high",
+    policy_schema_version: Number(process.env.MODEL_POLICY_SCHEMA_VERSION_SELECTED || "4"),
     baseline_reasoning: process.env.REASONING_BASELINE_SELECTED || "high",
     escalation_reasoning: process.env.REASONING_ESCALATION_SELECTED || "xhigh",
     repo_risk_signals: process.env.REASONING_RISK_SIGNALS_SELECTED || "none detected during setup"

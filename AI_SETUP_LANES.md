@@ -4,6 +4,19 @@ Adaptive GPT-5.6 guidance for repositories installed by this wizard. Sol `high` 
 
 This is guidance, not a hard lock. Maintainers may choose another profile explicitly, and update preserves that choice.
 
+## Repo-Owned Cross-Model Review
+
+Cross-model review is selected by the repository, independently of its root-driver profile:
+
+| Reviewer lane | Best fit |
+|---------------|----------|
+| `fable-high` | High-stakes, security-sensitive, or unusually high-blast-radius repositories |
+| `opus-4.8-xhigh` | Ordinary complex repositories that still benefit from a different model family |
+
+Fresh setup defaults to `fable-high`; choose Opus explicitly with `--cross-model-reviewer opus-4.8-xhigh`. The choice is stored in `.codex-sdlc/manifest.json` and `.codex-sdlc/model-profile.json`, and update preserves it. The root-driver and reviewer choices are separate: a Sol High repo may use either reviewer lane.
+
+When `fable-high` is selected but Fable is unavailable because of quota or model availability, the joint gate may try Opus 4.8 xhigh once. It never falls back because of substantive findings, timeout, malformed output, or reviewer-identity mismatch. Receipts record the requested lane and actual provider, model, effort, route, and fallback reason. This maintainer repo remains on `fable-high`.
+
 ## Current Model Baseline
 
 | Tier | Model | Standard API token price | Best fit |

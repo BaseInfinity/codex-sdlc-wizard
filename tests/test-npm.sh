@@ -551,6 +551,43 @@ EOF
     fi
 }
 
+test_interactive_handoff_preserves_existing_reviewer_when_flag_is_omitted() {
+    local ws fakebin codex_home codex_bin input_file output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
+    fakebin=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-bin.XXXXXX")
+    codex_home=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-home.XXXXXX")
+    input_file="$ws/handoff-input.txt"
+    codex_bin=$(make_supported_codex_stub "$fakebin")
+
+    printf '%s' '{"name":"reviewer-preservation","scripts":{"test":"npm test"}}' > "$ws/package.json"
+    mkdir -p "$ws/.codex-sdlc"
+    printf '%s' '{"policy":{"cross_model_reviewer":"opus-4.8-xhigh"}}' > "$ws/.codex-sdlc/model-profile.json"
+    printf '\n' > "$input_file"
+
+    output=$(
+        cd "$ws" && \
+        CI=false \
+        CODEX_HOME="$codex_home" \
+        CODEX_SDLC_CODEX_BIN="$codex_bin" \
+        CODEX_SDLC_DISABLE_REASONING=1 \
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" < "$input_file" 2>&1
+    ) || true
+
+    json_has_truthy_file "$ws/.codex-sdlc/model-profile.json" 'data.policy?.cross_model_reviewer === "opus-4.8-xhigh"' || valid=false
+
+    if [ "$valid" != "true" ]; then
+        printf '%s\n' "--- reviewer-preservation handoff output ---" "$output" >&2
+    fi
+
+    rm -rf "$ws" "$fakebin" "$codex_home"
+
+    if [ "$valid" = "true" ]; then
+        pass "interactive handoff preserves the repo reviewer when the CLI flag is omitted"
+    else
+        fail "interactive handoff reset the repo reviewer when the CLI flag was omitted"
+    fi
+}
+
 test_failed_optional_handoff_keeps_successful_install_successful() {
     local ws fakebin fakebin_win codex_bin codex_path_entry codex_home input_file output package_version status valid=true
     ws=$(mktemp -d "$MKTEMP_DIR/sdlc-npx-target.XXXXXX")
@@ -598,7 +635,7 @@ EOF
         CODEX_SDLC_CODEX_BIN="$codex_bin" \
         CODEX_SDLC_DISABLE_REASONING=1 \
         PATH="$codex_path_entry:$PATH" \
-        node "$REPO_DIR/bin/codex-sdlc-wizard.js" --model-profile mixed --goals < "$input_file" 2>&1
+        node "$REPO_DIR/bin/codex-sdlc-wizard.js" --model-profile mixed --cross-model-reviewer opus-4.8-xhigh --goals < "$input_file" 2>&1
     )
     status=$?
     set -e
@@ -609,7 +646,7 @@ EOF
     echo "$output" | grep -Eqi 'artifacts.*installed|install.*succeeded' || valid=false
     echo "$output" | grep -Eqi 'handoff.*failed|could not.*handoff|Codex.*exited' || valid=false
     package_version=$(json_get_file "$PACKAGE_JSON" 'data.version')
-    echo "$output" | grep -Fq "npx codex-sdlc-wizard@$package_version setup --yes --model-profile mixed --goals" || valid=false
+    echo "$output" | grep -Fq "npx codex-sdlc-wizard@$package_version setup --yes --model-profile mixed --cross-model-reviewer opus-4.8-xhigh --goals" || valid=false
 
     if [ "$valid" != "true" ]; then
         printf '%s\n' "--- failed optional handoff output ---" "$output" >&2
@@ -1655,6 +1692,7 @@ test_local_npx_setup_honors_model_profile_flag
 test_default_cli_updates_initialized_repo_without_explicit_subcommand
 test_packed_tarball_scratch_smoke
 test_default_interactive_hands_off_to_codex
+test_interactive_handoff_preserves_existing_reviewer_when_flag_is_omitted
 test_failed_optional_handoff_keeps_successful_install_successful
 test_signal_terminated_optional_handoff_preserves_failure_status
 test_unsupported_codex_version_blocks_handoff_before_mutation

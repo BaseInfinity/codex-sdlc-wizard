@@ -1,6 +1,8 @@
 param(
     [ValidateSet("mixed", "maximum")]
-    [string]$ModelProfile = "maximum"
+    [string]$ModelProfile = "maximum",
+    [ValidateSet("fable-high", "opus-4.8-xhigh")]
+    [string]$CrossModelReviewer = "fable-high"
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,6 +10,23 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $minimumGpt56CodexVersion = [version]"0.144.0"
 $touchedFiles = [System.Collections.Generic.List[string]]::new()
+
+if (-not $PSBoundParameters.ContainsKey("CrossModelReviewer")) {
+    foreach ($reviewerSource in @(
+        @{ Path = ".codex-sdlc\manifest.json"; Parent = "model_profile" },
+        @{ Path = ".codex-sdlc\model-profile.json"; Parent = "policy" }
+    )) {
+        if (-not (Test-Path -LiteralPath $reviewerSource.Path)) { continue }
+        $reviewerDocument = Get-Content -LiteralPath $reviewerSource.Path -Raw | ConvertFrom-Json
+        $reviewerParent = $reviewerDocument.($reviewerSource.Parent)
+        if ($null -eq $reviewerParent) { continue }
+        $reviewerProperty = $reviewerParent.PSObject.Properties["cross_model_reviewer"]
+        if ($reviewerProperty -and $reviewerProperty.Value) {
+            $CrossModelReviewer = [string]$reviewerProperty.Value
+            break
+        }
+    }
+}
 
 function Add-TouchedFile {
     param([string]$Path)
@@ -394,7 +413,9 @@ function Merge-CodexModelConfig {
 function Write-ModelProfile {
     param(
         [ValidateSet("mixed", "maximum")]
-        [string]$Profile
+        [string]$Profile,
+        [ValidateSet("fable-high", "opus-4.8-xhigh")]
+        [string]$Reviewer
     )
 
     New-Item -ItemType Directory -Path ".codex-sdlc" -Force | Out-Null
@@ -426,6 +447,7 @@ function Write-ModelProfile {
             default_profile = "maximum"
             default_driver = "gpt-5.6-sol"
             default_reasoning = "high"
+            cross_model_reviewer = $Reviewer
             low_confidence_rule = "Research more first. If confidence stays below 95%, escalate the difficult slice or review to xhigh."
             reasoning_effort_rule = "Use Sol high as the normal root driver for meaningful SDLC work. Escalate only difficult or high-risk slices to xhigh."
             mixed_profile_rule = "Mixed is experimental and requires explicit opt-in. Preserve an existing explicit selection, but do not select it automatically."
@@ -480,7 +502,7 @@ $configPath = ".codex\config.toml"
 Merge-CodexModelConfig -ConfigPath $configPath -Profile $ModelProfile
 Add-TouchedFile -Path ".codex/config.toml"
 Write-Host "Merged repo-local Codex config for model profile '$ModelProfile'"
-Write-ModelProfile -Profile $ModelProfile
+Write-ModelProfile -Profile $ModelProfile -Reviewer $CrossModelReviewer
 
 if (Test-Path -LiteralPath $hooksPath) {
     $timestamp = Get-Date -Format "yyyyMMddHHmmss"

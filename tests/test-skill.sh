@@ -495,7 +495,7 @@ test_sdlc_review_reuses_one_broad_proof() {
         grep -Eqi 'proof command and result|proof.*command.*result' "$file" || valid=false
     done
 
-    grep -Fq 'MODEL_POLICY_SCHEMA_VERSION=3' "$REPO_DIR/lib/codex-config.sh" || valid=false
+    grep -Fq 'MODEL_POLICY_SCHEMA_VERSION=4' "$REPO_DIR/lib/codex-config.sh" || valid=false
 
     if [ "$valid" = "true" ]; then
         pass "SDLC review consumes one proof receipt without rerunning broad suites"
@@ -512,14 +512,17 @@ test_sdlc_documents_bounded_dual_review() {
         grep -Fq 'dual-review.cjs --base <ref> --consent-subscription-quota' "$file" || valid=false
         grep -Fq 'dual-review.cjs deliver github' "$file" || valid=false
         grep -Fqi 'Sol High' "$file" || valid=false
-        grep -Fqi 'Fable High' "$file" || valid=false
+        grep -Eqi 'Fable High|fable-high' "$file" || valid=false
+        grep -Fqi 'opus-4.8-xhigh' "$file" || valid=false
+        grep -Eqi 'requested.*actual reviewer|requested and actual reviewer|requested.*actual provider' "$file" || valid=false
+        grep -Eqi 'quota/model unavailability|quota or model availability' "$file" || valid=false
         grep -Eqi 'subscription[- ]quota' "$file" || valid=false
         grep -Eqi 'independent|independently' "$file" || valid=false
         grep -Eqi 'cross-feed|exchange.*findings.*once|one.*exchange.*findings' "$file" || valid=false
     done
 
     if [ "$valid" = "true" ]; then
-        pass "SDLC workflow documents the bounded consent-based Sol High and Fable High joint review"
+        pass "SDLC workflow documents the bounded consent-based Sol High and repo-selected cross-model review"
     else
         fail "SDLC workflow does not consistently document the bounded dual-review gate"
     fi

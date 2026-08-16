@@ -48,6 +48,11 @@ Options:
                 explicit opt-in for measured efficiency trials: gpt-5.6-terra
                 medium with gpt-5.6-sol review and an explicit high review
                 effort override.
+  --cross-model-reviewer <fable-high|opus-4.8-xhigh>
+                Repo-owned cross-model completion reviewer. Use Fable High for
+                high-stakes/high-blast-radius repos, or Opus 4.8 xhigh for an
+                ordinary complex repo. Fable availability may fall back once
+                to Opus 4.8 xhigh and records the actual reviewer identity.
   --goals       During setup, also generate optional GOALS.md active-scope contract
   --help, -h     Show this help
 
@@ -97,6 +102,19 @@ function getSetupModelProfile(args) {
   }
 
   return "maximum";
+}
+
+function getCrossModelReviewer(args) {
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === "--cross-model-reviewer" && typeof args[i + 1] === "string") {
+      return args[i + 1];
+    }
+    if (args[i].startsWith("--cross-model-reviewer=")) {
+      return args[i].slice("--cross-model-reviewer=".length);
+    }
+  }
+
+  return null;
 }
 
 function shouldGenerateGoals(args) {
@@ -240,7 +258,15 @@ function printHandoffRecovery(reason) {
 }
 
 function printOptionalHandoffWarning(reason, modelProfile, options) {
-  const recoveryArgs = ["setup", "--yes", "--model-profile", modelProfile];
+  const recoveryArgs = [
+    "setup",
+    "--yes",
+    "--model-profile",
+    modelProfile
+  ];
+  if (options.crossModelReviewer) {
+    recoveryArgs.push("--cross-model-reviewer", options.crossModelReviewer);
+  }
   if (options.generateGoals) {
     recoveryArgs.push("--goals");
   }
@@ -446,10 +472,14 @@ function isCiEnvironment() {
 
 function isHandoffCompatibleArg(arg) {
   return arg === "--model-profile" ||
+    arg === "--cross-model-reviewer" ||
     arg === "--goals" ||
     arg.startsWith("--model-profile=") ||
+    arg.startsWith("--cross-model-reviewer=") ||
     arg === "mixed" ||
-    arg === "maximum";
+    arg === "maximum" ||
+    arg === "fable-high" ||
+    arg === "opus-4.8-xhigh";
 }
 
 function shouldHandoffToCodex() {
@@ -525,6 +555,9 @@ async function askHandoffMode() {
 
 async function handoffToCodex(modelProfile, options) {
   const installArgs = ["--model-profile", modelProfile];
+  if (options.crossModelReviewer) {
+    installArgs.push("--cross-model-reviewer", options.crossModelReviewer);
+  }
   const installResult = runScript("install.sh", installArgs);
 
   if (installResult.error) {
@@ -576,6 +609,7 @@ async function handoffToCodex(modelProfile, options) {
 async function main() {
   if (shouldHandoffToCodex()) {
     process.exit(await handoffToCodex(getSetupModelProfile(scriptArgs), {
+      crossModelReviewer: getCrossModelReviewer(scriptArgs),
       generateGoals: shouldGenerateGoals(scriptArgs)
     }));
   }

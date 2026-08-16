@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MINIMUM_GPT56_CODEX_VERSION="${MINIMUM_GPT56_CODEX_VERSION:-0.144.0}"
-MODEL_POLICY_SCHEMA_VERSION=3
+MODEL_POLICY_SCHEMA_VERSION=4
 
 require_gpt56_codex_version() {
     local version_output=""
@@ -69,18 +69,26 @@ profile_review_model() {
 write_model_profile_metadata() {
     local output_path="$1"
     local model_profile="$2"
+    local cross_model_reviewer="${3:-fable-high}"
 
     case "$model_profile" in
         mixed|maximum) ;;
         *) return 1 ;;
     esac
 
+    case "$cross_model_reviewer" in
+        fable-high|opus-4.8-xhigh) ;;
+        *) return 1 ;;
+    esac
+
     mkdir -p "$(dirname "$output_path")"
-    CODEX_MODEL_PROFILE_PATH="$output_path" CODEX_MODEL_PROFILE="$model_profile" node <<'NODE'
+    CODEX_MODEL_PROFILE_PATH="$output_path" CODEX_MODEL_PROFILE="$model_profile" \
+      CODEX_CROSS_MODEL_REVIEWER="$cross_model_reviewer" node <<'NODE'
 const fs = require("fs");
 
 const outputPath = process.env.CODEX_MODEL_PROFILE_PATH;
 const selectedProfile = process.env.CODEX_MODEL_PROFILE;
+const crossModelReviewer = process.env.CODEX_CROSS_MODEL_REVIEWER;
 const metadata = {
   schema_version: 2,
   selected_profile: selectedProfile,
@@ -109,6 +117,7 @@ const metadata = {
     default_profile: "maximum",
     default_driver: "gpt-5.6-sol",
     default_reasoning: "high",
+    cross_model_reviewer: crossModelReviewer,
     low_confidence_rule: "Research more first. If confidence stays below 95%, escalate the difficult slice or review to xhigh.",
     reasoning_effort_rule: "Use Sol high as the normal root driver for meaningful SDLC work. Escalate only difficult or high-risk slices to xhigh.",
     mixed_profile_rule: "Mixed is experimental and requires explicit opt-in. Preserve an existing explicit selection, but do not select it automatically.",
@@ -125,14 +134,17 @@ NODE
 model_profile_metadata_needs_refresh() {
     local profile_path="$1"
     local selected_profile="$2"
+    local cross_model_reviewer="${3:-fable-high}"
 
     [ -f "$profile_path" ] || return 0
 
-    CODEX_MODEL_PROFILE_PATH="$profile_path" CODEX_MODEL_PROFILE="$selected_profile" node <<'NODE'
+    CODEX_MODEL_PROFILE_PATH="$profile_path" CODEX_MODEL_PROFILE="$selected_profile" \
+      CODEX_CROSS_MODEL_REVIEWER="$cross_model_reviewer" node <<'NODE'
 const fs = require("fs");
 
 const profilePath = process.env.CODEX_MODEL_PROFILE_PATH;
 const selectedProfile = process.env.CODEX_MODEL_PROFILE;
+const crossModelReviewer = process.env.CODEX_CROSS_MODEL_REVIEWER;
 let metadata;
 
 try {
@@ -157,7 +169,8 @@ const needsRefresh =
   maximum.review_reasoning !== "high" ||
   metadata.policy?.default_profile !== "maximum" ||
   metadata.policy?.default_driver !== "gpt-5.6-sol" ||
-  metadata.policy?.default_reasoning !== "high";
+  metadata.policy?.default_reasoning !== "high" ||
+  metadata.policy?.cross_model_reviewer !== crossModelReviewer;
 
 process.exit(needsRefresh ? 0 : 1);
 NODE

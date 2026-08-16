@@ -1501,7 +1501,7 @@ NODE
     [ "$(cat "$ws/AGENTS.md")" = "$agents_before" ] || valid=false
     grep -Fq 'medical/legal review' "$ws/AGENTS.md" || valid=false
     echo "$output" | grep -Fq 'AGENTS.md: match -> skip (preserve customization)' || valid=false
-    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "3" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "4" || valid=false
 
     rm -rf "$ws"
 
@@ -1796,7 +1796,7 @@ EOF
     [ "$(cat "$ws/.codex-sdlc/model-profile.json")" = "$profile_before" ] || valid=false
     echo "$output" | grep -Fq '.codex-sdlc/model-profile.json: customized -> skip' || valid=false
     json_text_equals "$check_output" 'data.managed_files[".codex-sdlc/model-profile.json"].status' "customized" || valid=false
-    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "3" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "4" || valid=false
     echo "$second_output" | grep -Fq 'No changes applied.' || valid=false
     echo "$second_output" | grep -Fq 'refresh model policy' && valid=false
     echo "$second_output" | grep -Fq 'refresh generated model policy' && valid=false
@@ -1855,7 +1855,7 @@ NODE
     output=$(run_update "$ws") || valid=false
     second_output=$(run_update "$ws") || valid=false
 
-    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "3" || valid=false
+    json_text_equals "$(cat "$ws/.codex-sdlc/manifest.json")" 'data.model_profile.policy_schema_version' "4" || valid=false
     [ "$(cat "$ws/.codex-sdlc/model-profile.json")" = "$profile_before" ] || valid=false
     [ "$(cat "$ws/AGENTS.md")" = "$agents_before" ] || valid=false
     [ "$(cat "$ws/SDLC-LOOP.md")" = "$loop_before" ] || valid=false

@@ -160,7 +160,7 @@ repair_managed_file() {
             merge_codex_config_profile ".codex/config.toml" "$MODEL_PROFILE"
             ;;
         .codex-sdlc/model-profile.json)
-            write_model_profile_metadata ".codex-sdlc/model-profile.json" "$MODEL_PROFILE"
+            write_model_profile_metadata ".codex-sdlc/model-profile.json" "$MODEL_PROFILE" "$CROSS_MODEL_REVIEWER"
             ;;
         *)
             copy_static_file "$relative_path"
@@ -385,13 +385,15 @@ NODE
 record_model_policy_migration() {
     local manifest_path=".codex-sdlc/manifest.json"
 
-    MANIFEST_PATH="$manifest_path" MODEL_POLICY_SCHEMA_VERSION_SELECTED="$MODEL_POLICY_SCHEMA_VERSION" node - <<'NODE'
+    MANIFEST_PATH="$manifest_path" MODEL_POLICY_SCHEMA_VERSION_SELECTED="$MODEL_POLICY_SCHEMA_VERSION" \
+      CROSS_MODEL_REVIEWER_SELECTED="$CROSS_MODEL_REVIEWER" node - <<'NODE'
 const fs = require("fs");
 
 const manifestPath = process.env.MANIFEST_PATH;
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 manifest.model_profile = manifest.model_profile || {};
 manifest.model_profile.policy_schema_version = Number(process.env.MODEL_POLICY_SCHEMA_VERSION_SELECTED);
+manifest.model_profile.cross_model_reviewer = process.env.CROSS_MODEL_REVIEWER_SELECTED;
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE
 }
@@ -417,6 +419,17 @@ case "$MODEL_PROFILE" in
         ;;
 esac
 
+CROSS_MODEL_REVIEWER="$(json_get_file ".codex-sdlc/manifest.json" 'data.model_profile?.cross_model_reviewer || ""')"
+[ -n "$CROSS_MODEL_REVIEWER" ] || CROSS_MODEL_REVIEWER="$(json_get_file ".codex-sdlc/model-profile.json" 'data.policy?.cross_model_reviewer || ""')"
+[ -n "$CROSS_MODEL_REVIEWER" ] || CROSS_MODEL_REVIEWER="fable-high"
+case "$CROSS_MODEL_REVIEWER" in
+    fable-high|opus-4.8-xhigh) ;;
+    *)
+        echo "Update cannot continue: unsupported repo cross-model reviewer '$CROSS_MODEL_REVIEWER'." >&2
+        exit 1
+        ;;
+esac
+
 MODEL_PROFILE_METADATA_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex-sdlc/model-profile.json"]?.status || ""')"
 FABLE_REVIEW_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex/hooks/fable-review.cjs"]?.status || ""')"
 DUAL_REVIEW_STATUS="$(printf '%s' "$CHECK_JSON" | json_get_stdin 'data.managed_files?.[".codex/hooks/dual-review.cjs"]?.status || ""')"
@@ -438,7 +451,7 @@ if [ "$MODEL_POLICY_SCHEMA_MIGRATION" = "true" ]; then
 fi
 if [ "$MODEL_PROFILE_METADATA_STATUS" = "missing" ]; then
     MODEL_PROFILE_MIGRATION=true
-elif [ "$MODEL_PROFILE_METADATA_STATUS" = "match" ] && model_profile_metadata_needs_refresh ".codex-sdlc/model-profile.json" "$MODEL_PROFILE"; then
+elif [ "$MODEL_PROFILE_METADATA_STATUS" = "match" ] && model_profile_metadata_needs_refresh ".codex-sdlc/model-profile.json" "$MODEL_PROFILE" "$CROSS_MODEL_REVIEWER"; then
     MODEL_PROFILE_MIGRATION=true
 elif [ "$MODEL_PROFILE_METADATA_STATUS" = "customized" ] && [ "$MODEL_POLICY_SCHEMA_MIGRATION" = "true" ] && model_profile_metadata_is_legacy ".codex-sdlc/model-profile.json"; then
     MODEL_PROFILE_MIGRATION=true
