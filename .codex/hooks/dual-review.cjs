@@ -1084,6 +1084,39 @@ function reviewerAvailabilityReason(message) {
   return "";
 }
 
+function explicitClaudeAvailabilityReason(stdout) {
+  let events;
+  try { events = parseClaudeEvents(stdout); } catch { return ""; }
+  for (const event of events) {
+    if (event?.type === "rate_limit_event" && event?.rate_limit_info?.status === "rejected") {
+      return "quota_exhausted";
+    }
+    if (event?.type !== "result") continue;
+    const explicitError = event?.is_error === true
+      || event?.terminal_reason === "api_error"
+      || Number(event?.api_error_status || 0) >= 400;
+    if (!explicitError) continue;
+    if (Number(event?.api_error_status || 0) === 429) return "quota_exhausted";
+    const reason = reviewerAvailabilityReason(JSON.stringify({
+      terminal_reason: event?.terminal_reason,
+      api_error_status: event?.api_error_status,
+      error: event?.error,
+      result: event?.result,
+    }));
+    if (reason !== "") return reason;
+  }
+  return "";
+}
+
+function claudeAvailabilityReason(result) {
+  const explicitReason = explicitClaudeAvailabilityReason(result?.stdout);
+  if (explicitReason !== "") return explicitReason;
+  if (result?.status !== 0 || result?.error) {
+    return reviewerAvailabilityReason(`${result?.stderr || ""}\n${result?.stdout || ""}`);
+  }
+  return "";
+}
+
 function actualClaudeModel(parsed, envelope) {
   const entries = Array.isArray(parsed) ? parsed : [parsed];
   const candidates = [
@@ -1118,12 +1151,20 @@ async function runClaudeReviewer(prompt, temporaryDirectory, signal, reviewer, r
       logPath: path.join(logDirectory, `cross-model-${phase}-attempt-${attempt}.log`),
       windowsVerbatimArguments: prepared.windowsVerbatimArguments,
     });
-    if (result.status !== 0 || result.error || result.timedOut || result.cancelled) {
-      const availabilityReason = reviewerAvailabilityReason(`${result.stderr}\n${result.stdout}`);
+    const availabilityReason = claudeAvailabilityReason(result);
+    if (availabilityReason !== "") {
       return {
         ...result,
         availabilityReason,
-        retryable: availabilityReason === "" && result.terminal_state === REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE,
+        retryable: false,
+        terminal_state: REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE,
+      };
+    }
+    if (result.status !== 0 || result.error || result.timedOut || result.cancelled) {
+      return {
+        ...result,
+        availabilityReason: "",
+        retryable: result.terminal_state === REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE,
       };
     }
     try {
@@ -1169,6 +1210,7 @@ async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, revi
     "-p", "--model", reviewer.model, "--effort", reviewer.effort, "--safe-mode", "--max-turns", "1",
     "--setting-sources", "user", "--tools", "", "--disable-slash-commands",
     "--no-session-persistence", "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config",
+    "--output-format", "stream-json", "--verbose",
   ];
   const prepared = preparedLaunch(launch, args);
   const result = await runSupervisedProcess(prepared.command, prepared.args, {
@@ -1179,13 +1221,14 @@ async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, revi
     stallTimeout: configuredDuration("CODEX_SDLC_AVAILABILITY_TIMEOUT_MS", 60 * 1000),
     heartbeatInterval: configuredDuration("CODEX_SDLC_REVIEW_HEARTBEAT_MS", 30 * 1000),
     killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
+    structuredEventsRequired: true,
     signal,
     label: `${reviewer.label} availability probe`,
     logPath: path.join(logDirectory, "cross-model-availability-probe.log"),
     windowsVerbatimArguments: prepared.windowsVerbatimArguments,
   });
-  if (result.error || result.timedOut || result.status === 0) return false;
-  return reviewerAvailabilityReason(`${result.stderr}\n${result.stdout}`) === suspectedReason;
+  if (result.error || result.timedOut || result.cancelled) return false;
+  return claudeAvailabilityReason(result) === suspectedReason;
 }
 
 async function runCrossModel(prompt, temporaryDirectory, signal, selectedReviewer, logDirectory, phase) {

@@ -5626,9 +5626,31 @@ if (model === "fable" && ["fallback", "both-unavailable"].includes(mode)) {
   process.stdout.write("You're out of usage credits. Run /usage-credits to keep using Fable 5.\n");
   process.exit(1);
 }
+if (model === "fable" && mode === "zero-exit-quota") {
+  process.stdout.write(`${JSON.stringify({ type: "rate_limit_event", rate_limit_info: { status: "rejected" } })}\n`);
+  process.stdout.write(`${JSON.stringify({
+    type: "result",
+    subtype: "success",
+    is_error: true,
+    terminal_reason: "api_error",
+    api_error_status: 429,
+    result: "Weekly usage limit reached.",
+  })}\n`);
+  process.exit(0);
+}
 if (model === "fable" && mode === "spoofed-unavailability" && !probe) {
   process.stdout.write("You're out of usage credits. Run /usage-credits to keep using Fable 5.\n");
   process.exit(1);
+}
+if (model === "fable" && mode === "zero-exit-malformed" && !probe) {
+  process.stdout.write(JSON.stringify({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    model: "claude-fable-5",
+    result: "quota exhausted",
+  }));
+  process.exit(0);
 }
 if (probe) {
   process.stdout.write("available\n");
@@ -5718,6 +5740,41 @@ if (receipt.reviewers.cross_model.effort !== "xhigh" || receipt.reviewers.cross_
 if (receipt.reviewers.cross_model.fallback_reason !== "quota_exhausted") process.exit(1);
 if (!receipt.initial.cross_model || Object.hasOwn(receipt.initial, "fable")) process.exit(1);
 NODE
+
+    rm -f "$receipt"
+    : > "$calls"
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MODE=1 CODEX_SDLC_CODEX_PATH="$fake_codex" \
+        CODEX_SDLC_CLAUDE_PATH="$fake_claude" CLAUDE_CALLS="$calls" \
+        FALLBACK_TEST_MODE=zero-exit-quota node .codex/hooks/dual-review.cjs --base HEAD \
+        --consent-subscription-quota 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 0 ] || valid=false
+    RECEIPT_PATH="$receipt" CLAUDE_CALLS="$calls" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const receipt = JSON.parse(fs.readFileSync(process.env.RECEIPT_PATH, "utf8"));
+const calls = fs.readFileSync(process.env.CLAUDE_CALLS, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
+if (calls.length !== 3 || !calls[1].probe) process.exit(1);
+if (calls[0].model !== "fable" || calls[1].model !== "fable" || calls[2].model !== "claude-opus-4-8") process.exit(1);
+if (receipt.reviewers.cross_model.route !== "fallback") process.exit(1);
+if (receipt.reviewers.cross_model.fallback_reason !== "quota_exhausted") process.exit(1);
+if (receipt.reviewers.cross_model.model !== "claude-opus-4-8-20260801") process.exit(1);
+NODE
+
+    rm -f "$receipt"
+    : > "$calls"
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MODE=1 CODEX_SDLC_CODEX_PATH="$fake_codex" \
+        CODEX_SDLC_CLAUDE_PATH="$fake_claude" CLAUDE_CALLS="$calls" \
+        FALLBACK_TEST_MODE=zero-exit-malformed node .codex/hooks/dual-review.cjs --base HEAD \
+        --consent-subscription-quota 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || valid=false
+    [ "$(wc -l < "$calls" | tr -d ' ')" -eq 1 ] || valid=false
+    grep -q 'claude-opus-4-8' "$calls" && valid=false
+    [ ! -f "$receipt" ] || valid=false
 
     rm -f "$receipt"
     : > "$calls"
