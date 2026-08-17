@@ -76,6 +76,20 @@ stops. It never permits a third reviewer exchange.
 The receipt records both the requested lane and actual provider, model, effort,
 route, and fallback reason.
 
+The joint gate reports three different facts; do not treat them as synonyms:
+
+- A heartbeat means the reviewer process is alive. It is not approval.
+- A successful process exit means the host completed and returned valid output.
+  It is not a clean code-review verdict.
+- `CLEAN` or `FINDINGS` is the review decision for the exact frozen candidate.
+
+Infrastructure failures, auth/input blocks, timeouts, cancellation, and invalid
+verdicts remain distinct terminal states. The gate retries at most once, and
+only for a provider or transport failure. It never retries findings. Concise
+heartbeats contain timing and event-type metadata only; complete stdout/stderr
+logs stay private under Git metadata in `codex-sdlc/review-logs/`, alongside the
+sanitized machine-readable `codex-sdlc/review-run.json` lifecycle record.
+
 After the joint receipt is certified, use the fixed-argv delivery boundary
 instead of separate raw commit, push, PR, and merge commands:
 

@@ -5428,6 +5428,9 @@ const receipt = JSON.parse(fs.readFileSync(process.env.RECEIPT_PATH, "utf8"));
 const solCalls = fs.readFileSync(process.env.SOL_MARKER, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
 const fableCalls = fs.readFileSync(process.env.FABLE_MARKER, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
 if (receipt.status !== "certified" || receipt.candidate_tree === "" || receipt.base_commit === "") process.exit(1);
+if (receipt.schema_version !== 3 || receipt.runtime.initial.sol.terminal_state !== "CLEAN") process.exit(1);
+if (receipt.runtime.initial.cross_model.terminal_state !== "CLEAN") process.exit(1);
+if (!receipt.runtime.initial.sol.attempts[0].log_path || !receipt.runtime.initial.cross_model.attempts[0].log_path) process.exit(1);
 if (receipt.reconciliation.rounds !== 0 || receipt.reconciliation.skipped_reason !== "initial_agreement") process.exit(1);
 if (solCalls.length !== 1 || fableCalls.length !== 1) process.exit(1);
 if (!solCalls[0].prompt.includes("INDEPENDENT REVIEW") || !fableCalls[0].prompt.includes("INDEPENDENT REVIEW")) process.exit(1);
@@ -5438,7 +5441,9 @@ if (solCalls[0].args.includes("review") || solCalls[0].args.includes("--base")) 
 if (solCalls[0].prompt.includes("BEGIN UNTRUSTED PATCH")) process.exit(1);
 if (!fableCalls[0].prompt.includes("BEGIN UNTRUSTED PATCH")) process.exit(1);
 if (!solCalls[0].args.includes("gpt-5.6-sol") || !solCalls[0].args.some((arg) => arg.includes('model_reasoning_effort="high"'))) process.exit(1);
+if (!solCalls[0].args.includes("--json")) process.exit(1);
 if (!fableCalls[0].args.includes("fable") || !fableCalls[0].args.includes("high")) process.exit(1);
+if (!fableCalls[0].args.includes("stream-json") || !fableCalls[0].args.includes("--verbose")) process.exit(1);
 const expectedPatch = require("node:child_process").spawnSync(
   "git", ["-C", process.env.REPO_PATH, "diff", "--cached", "--binary", "HEAD"],
 ).stdout;
@@ -5500,7 +5505,7 @@ NODE
     set -e
     [ "$status" -eq 2 ] || valid=false
     [ ! -f "$receipt" ] || valid=false
-    [[ "$output" == *"Sol review timed out"* ]] || valid=false
+    [[ "$output" == *"Sol review TIMED_OUT"* ]] || valid=false
 
     rm -f "$cancel_marker"
     local started_ms finished_ms elapsed_ms
@@ -5520,7 +5525,9 @@ NODE
     [ "$elapsed_ms" -lt 1500 ] || valid=false
     [ -f "$cancel_marker" ] || valid=false
     [ ! -f "$receipt" ] || valid=false
-    [[ "$output" == *"intentional Sol failure"* ]] || valid=false
+    [[ "$output" == *"Sol review INVALID_VERDICT"* ]] || valid=false
+    [[ "$output" == *"Full output:"* ]] || valid=false
+    [[ "$output" != *"intentional Sol failure"* ]] || valid=false
 
     DUAL_REVIEW_PATH="$DUAL_REVIEW_SCRIPT" node <<'NODE' || valid=false
 const fs = require("node:fs");
@@ -5550,6 +5557,14 @@ NODE
     else
         echo "$output"
         fail "Dual review did not preserve independent bounded reconciliation"
+    fi
+}
+
+test_review_supervisor_has_bounded_lifecycle() {
+    if node "$REPO_DIR/tests/test-review-supervision.cjs"; then
+        pass "Review supervisor emits heartbeats, bounds retries, classifies failures, and reaps descendants"
+    else
+        fail "Review supervisor did not preserve its bounded lifecycle contract"
     fi
 }
 
@@ -5877,6 +5892,7 @@ test_fable_review_rejects_stale_proof
 test_fable_review_uses_windows_cmd_shim_and_freezes_before_proof_check
 test_dual_review_is_independent_bounded_and_candidate_bound
 test_dual_review_uses_truthful_opus_fallback_only_for_fable_unavailability
+test_review_supervisor_has_bounded_lifecycle
 test_review_delivery_is_fixed_argv_and_candidate_bound
 
 echo ""

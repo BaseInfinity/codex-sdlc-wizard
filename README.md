@@ -397,6 +397,8 @@ node .codex/hooks/dual-review.cjs --base main --consent-subscription-quota
 
 Sol High and the repo-selected Fable High or Opus 4.8 xhigh reviewer inspect the same frozen candidate independently. If Fable is selected but unavailable because of quota or model availability, the joint gate may try Opus 4.8 xhigh once. Findings, timeouts, malformed output, and reviewer-identity mismatches never trigger fallback. Clean agreement stops after those two reviews. A verdict split gets exactly one verbatim cross-feed round, then the wrapper writes one conservative candidate-bound joint receipt; it never starts an unbounded reviewer dialogue. The receipt records the requested lane and actual provider, model, effort, route, and fallback reason.
 
+Reviewer supervision keeps liveness separate from correctness. A heartbeat says only that the child process is alive; a successful exit says only that the host produced valid structured output; `CLEAN` or `FINDINGS` is the candidate verdict. Auth/input blocks, provider failures, timeouts, cancellation, and malformed verdicts are recorded separately. Only a provider/transport failure receives one retry, while findings never do. The console prints sanitized timing/event heartbeats, and full reviewer streams stay in private Git metadata under `codex-sdlc/review-logs/` with a machine-readable `codex-sdlc/review-run.json` lifecycle record.
+
 Once the joint receipt is certified, deliver that exact candidate through the fixed-argv boundary rather than rebuilding the sequence with separate shell commands:
 
 ```bash

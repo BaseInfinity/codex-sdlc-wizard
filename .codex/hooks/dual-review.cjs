@@ -169,6 +169,31 @@ function configuredDuration(name, fallback) {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+const REVIEW_STATES = Object.freeze({
+  CLEAN: "CLEAN",
+  FINDINGS: "FINDINGS",
+  AUTH_OR_INPUT_BLOCKED: "AUTH_OR_INPUT_BLOCKED",
+  PROVIDER_OR_TRANSPORT_FAILURE: "PROVIDER_OR_TRANSPORT_FAILURE",
+  TIMED_OUT: "TIMED_OUT",
+  CANCELLED: "CANCELLED",
+  INVALID_VERDICT: "INVALID_VERDICT",
+  INTERNAL_RUNNER_FAILURE: "INTERNAL_RUNNER_FAILURE",
+});
+
+function classifyReviewFailure(result) {
+  if (result?.timedOut) return REVIEW_STATES.TIMED_OUT;
+  if (result?.cancelled) return REVIEW_STATES.CANCELLED;
+  if (result?.error) return REVIEW_STATES.INTERNAL_RUNNER_FAILURE;
+  const output = `${result?.stdout || ""}\n${result?.stderr || ""}`;
+  if (/(?:authentication required|not authenticated|please (?:log|sign) in|run \/login|api key required|oauth.*required|interactive input|requires a tty)/i.test(output)) {
+    return REVIEW_STATES.AUTH_OR_INPUT_BLOCKED;
+  }
+  if (/(?:rate limit|quota|usage limit|http\s*429|provider|transport|network|connection|socket|websocket|econn|timed?\s*out|service unavailable|http\s*5\d\d)/i.test(output)) {
+    return REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE;
+  }
+  return REVIEW_STATES.INVALID_VERDICT;
+}
+
 function terminateProcessTree(child, signal) {
   if (!child.pid) return;
   if (process.platform === "win32") {
@@ -185,8 +210,20 @@ function terminateProcessTree(child, signal) {
   }
 }
 
-function runAsync(command, args, options = {}) {
+function runSupervisedProcess(command, args, options = {}) {
   return new Promise((resolve) => {
+    const startedAt = Date.now();
+    let lastActivityAt = startedAt;
+    let lastEventAt = null;
+    let lastEventType = "none";
+    const heartbeatInterval = options.heartbeatInterval || 30 * 1000;
+    const stallTimeout = options.stallTimeout || 3 * 60 * 1000;
+    const wallTimeout = options.timeout || 10 * 60 * 1000;
+    const logPath = options.logPath || "";
+    if (logPath !== "") {
+      fs.mkdirSync(path.dirname(logPath), { recursive: true });
+      fs.writeFileSync(logPath, "", { mode: 0o600 });
+    }
     const child = childProcess.spawn(command, args, {
       cwd: options.cwd,
       env: options.env,
@@ -199,53 +236,172 @@ function runAsync(command, args, options = {}) {
     let stderr = "";
     let settled = false;
     let timer = null;
+    let stallTimer = null;
+    let heartbeatTimer = null;
     let forceTimer = null;
     let abortHandler = null;
+    let cancelled = false;
+    let timeoutReason = null;
+    let terminationRequested = false;
+    let lineBuffer = "";
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    const recordChunk = (stream, chunk) => {
+      lastActivityAt = Date.now();
+      if (logPath !== "") fs.appendFileSync(logPath, `[${stream}] ${chunk}`);
+    };
+    const recordEvents = (chunk) => {
+      lineBuffer += chunk;
+      const lines = lineBuffer.split(/\r?\n/);
+      lineBuffer = lines.pop() || "";
+      for (const line of lines) {
+        if (line.trim() === "") continue;
+        try {
+          const event = JSON.parse(line);
+          lastEventAt = Date.now();
+          lastEventType = String(event.type || event.event || event.subtype || "json");
+          options.onEvent?.(event);
+        } catch {
+          // Human-readable diagnostics remain in the local log and terminal result.
+        }
+      }
+    };
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      recordChunk("stdout", chunk);
+      recordEvents(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+      recordChunk("stderr", chunk);
+    });
     child.stdin.on("error", (error) => {
       if (error.code === "EPIPE" || error.code === "ERR_STREAM_DESTROYED") return;
-      finish({ error, status: null, stdout, stderr, timedOut });
+      finish({ error, status: null, stdout, stderr, timedOut, cancelled });
     });
     let timedOut = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      if (stallTimer) clearInterval(stallTimer);
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
       if (forceTimer) clearTimeout(forceTimer);
       if (abortHandler) options.signal?.removeEventListener("abort", abortHandler);
-      resolve(result);
+      const finishedAt = Date.now();
+      resolve({
+        ...result,
+        timedOut,
+        cancelled,
+        timeout_reason: timeoutReason,
+        terminal_state: timedOut
+          ? REVIEW_STATES.TIMED_OUT
+          : cancelled
+            ? REVIEW_STATES.CANCELLED
+            : result.error
+              ? REVIEW_STATES.INTERNAL_RUNNER_FAILURE
+              : result.status === 0
+                ? REVIEW_STATES.CLEAN
+                : classifyReviewFailure({ ...result, timedOut, cancelled }),
+        started_at: new Date(startedAt).toISOString(),
+        finished_at: new Date(finishedAt).toISOString(),
+        elapsed_ms: finishedAt - startedAt,
+        last_event_at: lastEventAt === null ? null : new Date(lastEventAt).toISOString(),
+        last_event_type: lastEventType,
+        log_path: logPath || null,
+      });
     };
     const requestTermination = () => {
+      if (terminationRequested) return;
+      terminationRequested = true;
       terminateProcessTree(child, "SIGTERM");
-      if (forceTimer) return;
       forceTimer = setTimeout(() => {
         terminateProcessTree(child, "SIGKILL");
         child.stdin.destroy();
         child.stdout.destroy();
         child.stderr.destroy();
-        finish({ status: null, signal: "SIGKILL", stdout, stderr, timedOut });
+        finish({ status: null, signal: "SIGKILL", stdout, stderr });
       }, options.killGrace || 2000);
     };
     timer = setTimeout(() => {
       timedOut = true;
+      timeoutReason = "wall";
       requestTermination();
-    }, options.timeout || 10 * 60 * 1000);
+    }, wallTimeout);
+    stallTimer = setInterval(() => {
+      const progressAt = options.structuredEventsRequired ? (lastEventAt || startedAt) : lastActivityAt;
+      if (Date.now() - progressAt < stallTimeout) return;
+      timedOut = true;
+      timeoutReason = "stall";
+      requestTermination();
+    }, Math.min(heartbeatInterval, stallTimeout));
+    heartbeatTimer = setInterval(() => {
+      const now = Date.now();
+      const heartbeat = {
+        elapsed_ms: now - startedAt,
+        last_activity_ms_ago: now - lastActivityAt,
+        last_event_ms_ago: lastEventAt === null ? null : now - lastEventAt,
+        last_event_type: lastEventType,
+      };
+      if (options.onHeartbeat) options.onHeartbeat(heartbeat);
+      else if (options.label) {
+        process.stderr.write(`${options.label}: running ${Math.floor(heartbeat.elapsed_ms / 1000)}s; last event ${heartbeat.last_event_type}.\n`);
+      }
+    }, heartbeatInterval);
     if (options.signal) {
-      abortHandler = requestTermination;
-      if (options.signal.aborted) requestTermination();
+      abortHandler = () => {
+        cancelled = true;
+        requestTermination();
+      };
+      if (options.signal.aborted) abortHandler();
       else options.signal.addEventListener("abort", abortHandler, { once: true });
     }
     child.on("error", (error) => {
       finish({ error, status: null, stdout, stderr, timedOut });
     });
     child.on("close", (status, signal) => {
-      finish({ status, signal, stdout, stderr, timedOut });
+      finish({ status, signal, stdout, stderr });
     });
     child.stdin.end(options.input || "");
   });
+}
+
+async function runWithInfrastructureRetry(runAttempt) {
+  const attempts = [];
+  for (let index = 0; index < 2; index += 1) {
+    const result = await runAttempt(index + 1);
+    const retrying = result.terminal_state === REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE
+      && result.retryable !== false
+      && index === 0;
+    attempts.push(retrying ? { ...result, retry_reason: result.terminal_state } : result);
+    if (!retrying) {
+      return { ...result, attempts };
+    }
+  }
+  throw new Error("unreachable review retry state");
+}
+
+function runtimeAttemptMetadata(attempt) {
+  return {
+    terminal_state: attempt.terminal_state,
+    started_at: attempt.started_at,
+    finished_at: attempt.finished_at,
+    elapsed_ms: attempt.elapsed_ms,
+    exit_code: attempt.status ?? null,
+    signal: attempt.signal || null,
+    timeout_reason: attempt.timeout_reason || null,
+    last_event_at: attempt.last_event_at || null,
+    last_event_type: attempt.last_event_type || "none",
+    log_path: attempt.log_path || null,
+    retry_reason: attempt.retry_reason || null,
+  };
+}
+
+function reviewRuntime(outcome) {
+  return {
+    terminal_state: outcome.terminal_state,
+    attempts: outcome.attempts.map(runtimeAttemptMetadata),
+  };
 }
 
 function quoteWindowsCmdCommand(value) {
@@ -735,6 +891,19 @@ function reviewReceiptPath(root) {
   return path.isAbsolute(relative) ? relative : path.join(root, relative);
 }
 
+function reviewRunPath(root) {
+  const relative = git(root, ["rev-parse", "--git-path", "codex-sdlc/review-run.json"]);
+  return path.isAbsolute(relative) ? relative : path.join(root, relative);
+}
+
+function reviewLogDirectory(root, binding) {
+  const runName = `${Date.now()}-${binding.candidateTree.slice(0, 12)}`;
+  const relative = git(root, ["rev-parse", "--git-path", `codex-sdlc/review-logs/${runName}`]);
+  const target = path.isAbsolute(relative) ? relative : path.join(root, relative);
+  fs.mkdirSync(target, { recursive: true, mode: 0o700 });
+  return target;
+}
+
 function writeJsonAtomically(target, value) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const temporary = `${target}.tmp.${process.pid}`;
@@ -836,7 +1005,37 @@ function reconciliationPrompt(reviewer, peer, own, binding, proof, patch = null)
   return promptWithPatch(sections, patch);
 }
 
-async function runSol(prompt, root, schemaPath, outputPath, signal) {
+function terminalStateForReview(review) {
+  return review.verdict === "CERTIFIED" ? REVIEW_STATES.CLEAN : REVIEW_STATES.FINDINGS;
+}
+
+function parseClaudeEvents(stdout) {
+  const trimmed = String(stdout || "").trim();
+  if (trimmed === "") throw new Error("Claude did not return a JSON result envelope.");
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    const events = [];
+    for (const line of trimmed.split(/\r?\n/)) {
+      if (line.trim() === "") continue;
+      try { events.push(JSON.parse(line)); } catch { /* validated below */ }
+    }
+    if (events.length === 0) throw new Error("Claude did not return a JSON result envelope.");
+    return events;
+  }
+}
+
+function reviewFailure(label, outcome) {
+  const state = outcome.terminal_state || classifyReviewFailure(outcome);
+  const logHint = outcome.log_path ? ` Full output: ${outcome.log_path}.` : "";
+  const error = new Error(`${label} review ${state}.${logHint}`);
+  error.runtime = reviewRuntime(outcome);
+  error.availabilityReason = outcome.availabilityReason || "";
+  return error;
+}
+
+async function runSol(prompt, root, schemaPath, outputPath, signal, logDirectory, phase) {
   const launch = codexLaunch();
   const args = [
     "exec", "--ephemeral", "--ignore-user-config", "--ignore-rules",
@@ -844,30 +1043,38 @@ async function runSol(prompt, root, schemaPath, outputPath, signal) {
     "-m", "gpt-5.6-sol",
     "-c", 'model_reasoning_effort="high"',
     "-s", "read-only",
+    "--json",
     "--output-schema", schemaPath,
     "--output-last-message", outputPath,
   ];
   args.push("-");
   const prepared = preparedLaunch(launch, args);
-  const result = await runAsync(prepared.command, prepared.args, {
-    cwd: root,
-    env: process.env,
-    timeout: configuredDuration("CODEX_SDLC_REVIEW_TIMEOUT_MS", 10 * 60 * 1000),
-    killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
-    input: prompt,
-    signal,
-    windowsVerbatimArguments: prepared.windowsVerbatimArguments,
+  const outcome = await runWithInfrastructureRetry(async (attempt) => {
+    try { fs.rmSync(outputPath, { force: true }); } catch { /* parse reports a useful error */ }
+    const result = await runSupervisedProcess(prepared.command, prepared.args, {
+      cwd: root,
+      env: process.env,
+      timeout: configuredDuration("CODEX_SDLC_REVIEW_TIMEOUT_MS", 10 * 60 * 1000),
+      stallTimeout: configuredDuration("CODEX_SDLC_REVIEW_STALL_TIMEOUT_MS", 3 * 60 * 1000),
+      heartbeatInterval: configuredDuration("CODEX_SDLC_REVIEW_HEARTBEAT_MS", 30 * 1000),
+      killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
+      structuredEventsRequired: true,
+      input: prompt,
+      signal,
+      label: `Sol High ${phase}`,
+      logPath: path.join(logDirectory, `sol-${phase}-attempt-${attempt}.log`),
+      windowsVerbatimArguments: prepared.windowsVerbatimArguments,
+    });
+    if (result.status !== 0 || result.error || result.timedOut || result.cancelled) return result;
+    try {
+      const review = validateReview(JSON.parse(fs.readFileSync(outputPath, "utf8")), "Sol");
+      return { ...result, review, terminal_state: terminalStateForReview(review) };
+    } catch (error) {
+      return { ...result, parseError: error, terminal_state: REVIEW_STATES.INVALID_VERDICT };
+    }
   });
-  if (result.error) throw new Error(`Cannot run Sol review: ${result.error.message}`);
-  if (result.timedOut) throw new Error("Sol review timed out.");
-  if (result.status !== 0) throw new Error(result.stderr.trim() || "Sol review failed.");
-  let review;
-  try {
-    review = JSON.parse(fs.readFileSync(outputPath, "utf8"));
-  } catch {
-    throw new Error("Sol did not return the required structured review.");
-  }
-  return validateReview(review, "Sol");
+  if (!outcome.review) throw reviewFailure("Sol", outcome);
+  return { review: outcome.review, runtime: reviewRuntime(outcome) };
 }
 
 function reviewerAvailabilityReason(message) {
@@ -887,61 +1094,76 @@ function actualClaudeModel(parsed, envelope) {
   return candidates.find((candidate) => typeof candidate === "string" && candidate !== "") || "";
 }
 
-async function runClaudeReviewer(prompt, temporaryDirectory, signal, reviewer, route, fallbackReason = null) {
+async function runClaudeReviewer(prompt, temporaryDirectory, signal, reviewer, route, fallbackReason = null, logDirectory, phase = "initial") {
   const launch = claudeLaunch();
   const args = [
     "-p", "--model", reviewer.model, "--effort", reviewer.effort, "--safe-mode", "--max-turns", "2",
     "--setting-sources", "user", "--tools", "", "--disable-slash-commands",
     "--no-session-persistence", "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config",
-    "--json-schema", JSON.stringify(REVIEW_SCHEMA), "--output-format", "json",
+    "--json-schema", JSON.stringify(REVIEW_SCHEMA), "--output-format", "stream-json", "--verbose",
   ];
   const prepared = preparedLaunch(launch, args);
-  const result = await runAsync(prepared.command, prepared.args, {
-    cwd: temporaryDirectory,
-    env: sanitizedEnvironment(),
-    input: prompt,
-    timeout: configuredDuration("CODEX_SDLC_REVIEW_TIMEOUT_MS", 10 * 60 * 1000),
-    killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
-    signal,
-    windowsVerbatimArguments: prepared.windowsVerbatimArguments,
+  const outcome = await runWithInfrastructureRetry(async (attempt) => {
+    const result = await runSupervisedProcess(prepared.command, prepared.args, {
+      cwd: temporaryDirectory,
+      env: sanitizedEnvironment(),
+      input: prompt,
+      timeout: configuredDuration("CODEX_SDLC_REVIEW_TIMEOUT_MS", 10 * 60 * 1000),
+      stallTimeout: configuredDuration("CODEX_SDLC_REVIEW_STALL_TIMEOUT_MS", 3 * 60 * 1000),
+      heartbeatInterval: configuredDuration("CODEX_SDLC_REVIEW_HEARTBEAT_MS", 30 * 1000),
+      killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
+      structuredEventsRequired: true,
+      signal,
+      label: `${reviewer.label} ${phase}`,
+      logPath: path.join(logDirectory, `cross-model-${phase}-attempt-${attempt}.log`),
+      windowsVerbatimArguments: prepared.windowsVerbatimArguments,
+    });
+    if (result.status !== 0 || result.error || result.timedOut || result.cancelled) {
+      const availabilityReason = reviewerAvailabilityReason(`${result.stderr}\n${result.stdout}`);
+      return {
+        ...result,
+        availabilityReason,
+        retryable: availabilityReason === "" && result.terminal_state === REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE,
+      };
+    }
+    try {
+      const events = parseClaudeEvents(result.stdout);
+      const envelope = [...events].reverse().find((entry) => entry?.type === "result");
+      const actualModel = actualClaudeModel(events, envelope);
+      if (!reviewer.actualModel.test(actualModel)) {
+        throw new Error(`${reviewer.label} returned unexpected model identity: ${actualModel || "missing"}.`);
+      }
+      let review = envelope?.structured_output;
+      if ((!review || typeof review !== "object") && typeof envelope?.result === "string") {
+        try { review = JSON.parse(envelope.result); } catch { /* validated below */ }
+      }
+      review = validateReview(review, reviewer.label);
+      return {
+        ...result,
+        review,
+        actualModel,
+        terminal_state: terminalStateForReview(review),
+      };
+    } catch (error) {
+      return { ...result, parseError: error, terminal_state: REVIEW_STATES.INVALID_VERDICT };
+    }
   });
-  if (result.error) throw new Error(`Cannot run ${reviewer.label} review: ${result.error.message}`);
-  if (result.timedOut) throw new Error(`${reviewer.label} review timed out.`);
-  if (result.status !== 0) {
-    const error = new Error(result.stderr.trim() || `${reviewer.label} review failed.`);
-    error.availabilityReason = reviewerAvailabilityReason(`${result.stderr}\n${result.stdout}`);
-    throw error;
-  }
-  let envelope;
-  let parsed;
-  try {
-    parsed = JSON.parse(result.stdout);
-    envelope = Array.isArray(parsed) ? [...parsed].reverse().find((entry) => entry?.type === "result") : parsed;
-  } catch {
-    throw new Error(`${reviewer.label} did not return a JSON result envelope.`);
-  }
-  const actualModel = actualClaudeModel(parsed, envelope);
-  if (!reviewer.actualModel.test(actualModel)) {
-    throw new Error(`${reviewer.label} returned unexpected model identity: ${actualModel || "missing"}.`);
-  }
-  let review = envelope?.structured_output;
-  if ((!review || typeof review !== "object") && typeof envelope?.result === "string") {
-    try { review = JSON.parse(envelope.result); } catch { /* validated below */ }
-  }
+  if (!outcome.review) throw reviewFailure(reviewer.label, outcome);
   return {
-    review: validateReview(review, reviewer.label),
+    review: outcome.review,
     reviewer,
     identity: {
       provider: "anthropic",
-      model: actualModel,
+      model: outcome.actualModel,
       effort: reviewer.effort,
       route,
       fallback_reason: fallbackReason,
     },
+    runtime: reviewRuntime(outcome),
   };
 }
 
-async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, reviewer, suspectedReason) {
+async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, reviewer, suspectedReason, logDirectory) {
   const launch = claudeLaunch();
   const args = [
     "-p", "--model", reviewer.model, "--effort", reviewer.effort, "--safe-mode", "--max-turns", "1",
@@ -949,26 +1171,30 @@ async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, revi
     "--no-session-persistence", "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config",
   ];
   const prepared = preparedLaunch(launch, args);
-  const result = await runAsync(prepared.command, prepared.args, {
+  const result = await runSupervisedProcess(prepared.command, prepared.args, {
     cwd: temporaryDirectory,
     env: sanitizedEnvironment(),
     input: "CODEX SDLC AVAILABILITY PROBE\nReply exactly AVAILABLE. Do not inspect files, repositories, or prior input.",
     timeout: configuredDuration("CODEX_SDLC_AVAILABILITY_TIMEOUT_MS", 60 * 1000),
+    stallTimeout: configuredDuration("CODEX_SDLC_AVAILABILITY_TIMEOUT_MS", 60 * 1000),
+    heartbeatInterval: configuredDuration("CODEX_SDLC_REVIEW_HEARTBEAT_MS", 30 * 1000),
     killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
     signal,
+    label: `${reviewer.label} availability probe`,
+    logPath: path.join(logDirectory, "cross-model-availability-probe.log"),
     windowsVerbatimArguments: prepared.windowsVerbatimArguments,
   });
   if (result.error || result.timedOut || result.status === 0) return false;
   return reviewerAvailabilityReason(`${result.stderr}\n${result.stdout}`) === suspectedReason;
 }
 
-async function runCrossModel(prompt, temporaryDirectory, signal, selectedReviewer) {
+async function runCrossModel(prompt, temporaryDirectory, signal, selectedReviewer, logDirectory, phase) {
   const selected = CROSS_MODEL_REVIEWERS[selectedReviewer];
   if (selected.key === "opus-4.8-xhigh") {
-    return runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "configured");
+    return runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "configured", null, logDirectory, phase);
   }
   try {
-    return await runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "preferred");
+    return await runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "preferred", null, logDirectory, phase);
   } catch (error) {
     if (!error.availabilityReason) throw error;
     const unavailable = await confirmClaudeReviewerUnavailable(
@@ -976,15 +1202,20 @@ async function runCrossModel(prompt, temporaryDirectory, signal, selectedReviewe
       signal,
       selected,
       error.availabilityReason,
+      logDirectory,
     );
     if (!unavailable) {
-      throw new Error(`${selected.label} review failed and availability fallback was not independently confirmed: ${error.message}`);
+      const failure = new Error(`${selected.label} review failed and availability fallback was not independently confirmed: ${error.message}`);
+      failure.runtime = error.runtime;
+      throw failure;
     }
     const fallback = CROSS_MODEL_REVIEWERS["opus-4.8-xhigh"];
     try {
-      return await runClaudeReviewer(prompt(fallback), temporaryDirectory, signal, fallback, "fallback", error.availabilityReason);
+      return await runClaudeReviewer(prompt(fallback), temporaryDirectory, signal, fallback, "fallback", error.availabilityReason, logDirectory, phase);
     } catch (fallbackError) {
-      throw new Error(`${selected.label} was unavailable (${error.availabilityReason}); ${fallback.label} fallback failed: ${fallbackError.message}`);
+      const failure = new Error(`${selected.label} was unavailable (${error.availabilityReason}); ${fallback.label} fallback failed: ${fallbackError.message}`);
+      failure.runtime = fallbackError.runtime || error.runtime;
+      throw failure;
     }
   }
 }
@@ -1026,34 +1257,53 @@ async function main() {
     return 2;
   }
   const receiptPath = reviewReceiptPath(root);
+  const runPath = reviewRunPath(root);
   try { fs.rmSync(receiptPath, { force: true }); } catch { /* later write reports failure */ }
 
   let temporaryDirectory = "";
+  let binding = null;
+  let logDirectory = "";
+  let runtime = null;
+  const runStartedAt = new Date().toISOString();
   try {
     const auth = assertSubscriptionLane();
     const selectedReviewer = crossModelReviewerPolicy(root);
     requireFrozenIndex(root);
     const baseCommit = git(root, ["rev-parse", "--verify", `${parsed.base}^{commit}`]);
-    const binding = currentBinding(root, baseCommit);
+    binding = currentBinding(root, baseCommit);
     const proof = proofStatus(root);
     const patchBuffer = gitBuffer(root, ["diff", "--cached", "--binary", baseCommit]);
     if (patchBuffer.length === 0) throw new Error("The staged candidate patch is empty.");
 
     temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "codex-sdlc-dual-review-"));
+    logDirectory = reviewLogDirectory(root, binding);
+    writeJsonAtomically(runPath, {
+      schema_version: 1,
+      status: "running",
+      started_at: runStartedAt,
+      base_commit: binding.baseCommit,
+      head_before_commit: binding.headCommit,
+      candidate_tree: binding.candidateTree,
+      patch_sha256: binding.patchSha256,
+      log_directory: logDirectory,
+    });
     const schemaPath = path.join(temporaryDirectory, "review-schema.json");
     fs.writeFileSync(schemaPath, JSON.stringify(REVIEW_SCHEMA));
     const solInitialPath = path.join(temporaryDirectory, "sol-initial.json");
     const initialStarted = Date.now();
-    const [solInitial, crossInitialResult] = await runReviewPair(
-      (signal) => runSol(independentPrompt("Sol High", binding, proof), root, schemaPath, solInitialPath, signal),
+    const [solInitialResult, crossInitialResult] = await runReviewPair(
+      (signal) => runSol(independentPrompt("Sol High", binding, proof), root, schemaPath, solInitialPath, signal, logDirectory, "initial"),
       (signal) => runCrossModel(
         (reviewer) => independentPrompt(reviewer.label, binding, proof, patchBuffer),
         temporaryDirectory,
         signal,
         selectedReviewer,
+        logDirectory,
+        "initial",
       ),
     );
     assertCandidateUnchanged(root, binding);
+    const solInitial = solInitialResult.review;
     const crossInitial = crossInitialResult.review;
     const crossIdentity = crossInitialResult.identity;
     const crossReviewer = crossInitialResult.reviewer;
@@ -1062,13 +1312,20 @@ async function main() {
     let rounds = 0;
     let skippedReason = "initial_agreement";
     let reconciliationMs = 0;
+    runtime = {
+      initial: {
+        sol: solInitialResult.runtime,
+        cross_model: crossInitialResult.runtime,
+      },
+      reconciliation: null,
+    };
     if (solInitial.verdict !== crossInitial.verdict) {
       rounds = 1;
       skippedReason = "";
       const reconciliationStarted = Date.now();
       const solFinalPath = path.join(temporaryDirectory, "sol-final.json");
-      const [solFinal, crossFinalResult] = await runReviewPair(
-        (signal) => runSol(reconciliationPrompt("Sol High", { name: "cross_model", review: crossInitial }, solInitial, binding, proof), root, schemaPath, solFinalPath, signal),
+      const [solFinalResult, crossFinalResult] = await runReviewPair(
+        (signal) => runSol(reconciliationPrompt("Sol High", { name: "cross_model", review: crossInitial }, solInitial, binding, proof), root, schemaPath, solFinalPath, signal, logDirectory, "reconciliation"),
         (signal) => runClaudeReviewer(
           reconciliationPrompt(crossReviewer.label, { name: "sol", review: solInitial }, crossInitial, binding, proof, patchBuffer),
           temporaryDirectory,
@@ -1076,18 +1333,24 @@ async function main() {
           crossReviewer,
           crossIdentity.route,
           crossIdentity.fallback_reason,
+          logDirectory,
+          "reconciliation",
         ),
       );
       reconciliationMs = Date.now() - reconciliationStarted;
       assertCandidateUnchanged(root, binding);
-      finalReviews = { sol: solFinal, cross_model: crossFinalResult.review };
+      finalReviews = { sol: solFinalResult.review, cross_model: crossFinalResult.review };
+      runtime.reconciliation = {
+        sol: solFinalResult.runtime,
+        cross_model: crossFinalResult.runtime,
+      };
     }
 
     const jointVerdict = finalReviews.sol.verdict === "CERTIFIED" && finalReviews.cross_model.verdict === "CERTIFIED"
       ? "CERTIFIED"
       : "NOT CERTIFIED";
     const receipt = {
-      schema_version: 2,
+      schema_version: 3,
       status: jointVerdict === "CERTIFIED" ? "certified" : "not_certified",
       created_at: new Date().toISOString(),
       base_commit: binding.baseCommit,
@@ -1116,14 +1379,44 @@ async function main() {
         initial_review_ms: Date.now() - initialStarted - reconciliationMs,
         reconciliation_ms: reconciliationMs,
       },
+      runtime,
       joint_verdict: jointVerdict,
       joint_findings: jointFindings(finalReviews),
     };
     assertCandidateUnchanged(root, binding);
     writeJsonAtomically(receiptPath, receipt);
+    writeJsonAtomically(runPath, {
+      schema_version: 1,
+      status: receipt.status,
+      started_at: runStartedAt,
+      finished_at: new Date().toISOString(),
+      base_commit: binding.baseCommit,
+      head_before_commit: binding.headCommit,
+      candidate_tree: binding.candidateTree,
+      patch_sha256: binding.patchSha256,
+      terminal_state: jointVerdict === "CERTIFIED" ? REVIEW_STATES.CLEAN : REVIEW_STATES.FINDINGS,
+      runtime,
+      log_directory: logDirectory,
+      receipt_path: receiptPath,
+    });
     process.stdout.write(`Dual review ${receipt.status}: ${receiptPath}\n`);
     return jointVerdict === "CERTIFIED" ? 0 : 3;
   } catch (error) {
+    const terminalState = error?.runtime?.terminal_state || REVIEW_STATES.INTERNAL_RUNNER_FAILURE;
+    writeJsonAtomically(runPath, {
+      schema_version: 1,
+      status: "failed",
+      started_at: runStartedAt,
+      finished_at: new Date().toISOString(),
+      base_commit: binding?.baseCommit || null,
+      head_before_commit: binding?.headCommit || null,
+      candidate_tree: binding?.candidateTree || null,
+      patch_sha256: binding?.patchSha256 || null,
+      terminal_state: terminalState,
+      runtime: error?.runtime || runtime,
+      log_directory: logDirectory || null,
+      error: `Review ended in ${terminalState}; see the private review log for details.`,
+    });
     process.stderr.write(`${error.message}\n`);
     return 2;
   } finally {
@@ -1131,7 +1424,13 @@ async function main() {
   }
 }
 
-module.exports = { buildWindowsCommandLine };
+module.exports = {
+  REVIEW_STATES,
+  buildWindowsCommandLine,
+  classifyReviewFailure,
+  runSupervisedProcess,
+  runWithInfrastructureRetry,
+};
 
 if (require.main === module) {
   if (process.argv[2] === "deliver") process.exitCode = deliveryMain(process.argv.slice(3));
