@@ -8,7 +8,8 @@ REPO_DIR="$SCRIPT_DIR/.."
 ROADMAP="$REPO_DIR/ROADMAP.md"
 PACKAGE_JSON="$REPO_DIR/package.json"
 REPOSITORY_URL_REGEX='https://github[.]com/BaseInfinity/codex-sdlc-wizard'
-OPEN_ISSUES="58 65 66 71 72 77 79 82 84 86 88 92 93 95 96 97 99 100 101 104 105 106 107 108 109 111 112 113 114 115 116"
+OPEN_ISSUES="58 65 66 72 77 79 82 84 86 88 92 93 95 96 97 99 100 101 104 105 106 107 108 109 112 113 114 122 123 124 125 126 127 128 129 130 131 132 134 135 136 138 139 140 141 142 144 147 151 153 154 157 158 160"
+PUBLISHED_VERSION="0.7.37"
 PASSED=0
 FAILED=0
 
@@ -28,7 +29,7 @@ fail() {
 
 issue_line() {
     local issue_number="$1"
-    grep -nE "$REPOSITORY_URL_REGEX/issues/$issue_number([^0-9]|$)" "$ROADMAP" | cut -d: -f1 | head -n1 || true
+    priority_lines | grep -nE "$REPOSITORY_URL_REGEX/issues/$issue_number([^0-9]|$)" | cut -d: -f1 | head -n1 || true
 }
 
 roadmap_has_issue() {
@@ -51,6 +52,20 @@ priority_lines() {
 priority_has_issue() {
     local issue_number="$1"
     priority_lines | grep -Eq "$REPOSITORY_URL_REGEX/issues/$issue_number([^0-9]|$)"
+}
+
+test_issue_line_is_scoped_to_priority_queue() {
+    local actual
+    local expected
+
+    actual=$(issue_line 158)
+    expected=$(priority_lines | grep -nE "$REPOSITORY_URL_REGEX/issues/158([^0-9]|$)" | cut -d: -f1 | head -n1 || true)
+
+    if [ -n "$actual" ] && [ "$actual" = "$expected" ]; then
+        pass "Issue ordering is measured inside the priority queue"
+    else
+        fail "Issue ordering can be masked by links outside the priority queue"
+    fi
 }
 
 echo "=== Roadmap Tests ==="
@@ -83,15 +98,37 @@ test_roadmap_declares_order_as_priority() {
     fi
 }
 
-test_roadmap_states_current_release() {
+test_roadmap_states_release_boundary() {
     local package_version
+    local package_version_regex
+    local published_version_regex
     package_version=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$PACKAGE_JSON" | head -n1)
+    package_version_regex=${package_version//./[.]}
+    published_version_regex=${PUBLISHED_VERSION//./[.]}
 
-    if grep -Eq "GitHub release.*${package_version}|${package_version}.*GitHub release" "$ROADMAP" &&
-       grep -Eq "npm.*${package_version}|${package_version}.*npm" "$ROADMAP"; then
-        pass "Roadmap states the package-aligned current release"
+    if grep -Eqi "published GitHub release.*${published_version_regex}|${published_version_regex}.*published GitHub release" "$ROADMAP" &&
+       grep -Eqi "published npm release.*${published_version_regex}|${published_version_regex}.*published npm release" "$ROADMAP" &&
+       grep -Eqi "development package.*${package_version_regex}|${package_version_regex}.*development package" "$ROADMAP" &&
+       grep -Eqi "next (public |major )?release.*1[.]0[.]0|1[.]0[.]0.*next (public |major )?release" "$ROADMAP"; then
+        pass "Roadmap distinguishes the published release, development package, and 1.0 target"
     else
-        fail "Roadmap does not state the package-aligned GitHub and npm release"
+        fail "Roadmap does not state the exact published/development/1.0 release boundary"
+    fi
+}
+
+test_roadmap_has_current_resume_checkpoint() {
+    local issue_158
+    local issue_109
+
+    issue_158=$(issue_line 158)
+    issue_109=$(issue_line 109)
+
+    if grep -Eq '^## Cold-session checkpoint' "$ROADMAP" &&
+       grep -Eqi '#158.*(active|resume|first)|(active|resume|first).*#158' "$ROADMAP" &&
+       [ -n "$issue_158" ] && [ -n "$issue_109" ] && [ "$issue_158" -lt "$issue_109" ]; then
+        pass "Roadmap gives a current #158-first cold-session checkpoint"
+    else
+        fail "Roadmap does not give the current #158-first cold-session checkpoint"
     fi
 }
 
@@ -158,7 +195,7 @@ test_roadmap_priority_section_contains_only_numbered_items() {
 test_roadmap_excludes_resolved_issues() {
     local issue_number
     local stale=0
-    local closed_issues="64 67 73 81 91 98 110"
+    local closed_issues="64 67 71 73 81 91 98 110 111 115 116 137 143 148"
 
     for issue_number in $closed_issues; do
         if roadmap_has_issue "$issue_number"; then
@@ -202,7 +239,7 @@ test_roadmap_head_order_matches_priority() {
     local previous=0
     local current
     local issue_number
-    local ordered_issues="116 111 115 109 92 93 79 88 112 84 86 95 100 106 82 66 108 99 65 113 105 104 101 107 114 72 71 77 97 58 96"
+    local ordered_issues="158 109 157 141 131 124 127 147 92 93 79 88 129 128 86 123 84 130 153 154 82 95 106 100 151 136 135 126 112 138 132 114 72 77 66 140 108 139 99 65 113 160 105 104 101 107 144 142 134 125 122 97 58 96"
 
     for issue_number in $ordered_issues; do
         current=$(issue_line "$issue_number")
@@ -271,8 +308,10 @@ test_roadmap_removes_stale_prose_sections() {
 }
 
 test_roadmap_exists
+test_issue_line_is_scoped_to_priority_queue
 test_roadmap_declares_order_as_priority
-test_roadmap_states_current_release
+test_roadmap_states_release_boundary
+test_roadmap_has_current_resume_checkpoint
 test_roadmap_links_post_merge_open_issue_snapshot
 test_roadmap_rejects_unknown_issue_links
 test_roadmap_excludes_resolved_issues
