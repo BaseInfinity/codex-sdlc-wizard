@@ -10,6 +10,7 @@ const path = require("node:path");
 const {
   REVIEW_STATES,
   classifyReviewFailure,
+  rejectClaudeReviewerToolUse,
   runSupervisedProcess,
   runWithInfrastructureRetry,
 } = require("../.codex/hooks/dual-review.cjs");
@@ -98,6 +99,99 @@ async function testUnstructuredChatterDoesNotFakeProgress() {
   assert.equal(result.terminal_state, REVIEW_STATES.TIMED_OUT);
 }
 
+function realClaudeAdvisorEvent() {
+  return {
+    type: "assistant",
+    message: {
+      content: [
+        { type: "thinking", thinking: "" },
+        { type: "server_tool_use", name: "advisor", input: { task: "review" } },
+      ],
+    },
+  };
+}
+
+function testClaudeToolUseDetectorScansRealAssistantEnvelope() {
+  assert.equal(
+    rejectClaudeReviewerToolUse(realClaudeAdvisorEvent()),
+    "forbidden reviewer tool use: advisor",
+  );
+}
+
+function testClaudeToolUseDetectorScansArrayEnvelope() {
+  assert.equal(
+    rejectClaudeReviewerToolUse([
+      realClaudeAdvisorEvent(),
+      { type: "result", structured_output: { findings: [], verdict: "CERTIFIED", confidence: 99 } },
+    ]),
+    "forbidden reviewer tool use: advisor",
+  );
+}
+
+async function testRejectedToolUseCannotBecomeCleanResult() {
+  const source = [
+    "const forbidden={type:'assistant',message:{content:[{type:'server_tool_use',name:'advisor'}]}};",
+    "const clean={type:'result',model:'fable',structured_output:{findings:[],verdict:'CERTIFIED',confidence:99}};",
+    "process.on('SIGTERM',()=>process.exit(0));",
+    "process.stdout.write(JSON.stringify(forbidden)+'\\n'+JSON.stringify(clean)+'\\n');",
+    "setInterval(()=>{},1000);",
+  ].join("");
+  const result = await runSupervisedProcess(process.execPath, ["-e", source], {
+    heartbeatInterval: 20,
+    stallTimeout: 500,
+    timeout: 800,
+    killGrace: 30,
+    structuredEventsRequired: true,
+    rejectEvent: rejectClaudeReviewerToolUse,
+  });
+
+  assert.equal(result.timedOut, false);
+  assert.equal(result.terminal_state, REVIEW_STATES.INVALID_VERDICT);
+  assert.equal(result.rejected_event.reason, "forbidden reviewer tool use: advisor");
+  assert.match(result.stdout, /\"verdict\":\"CERTIFIED\"/);
+}
+
+async function testRejectedFinalBufferCannotBecomeCleanResult() {
+  const source = [
+    "const forbidden={type:'assistant',message:{content:[{type:'server_tool_use',name:'advisor'}]}};",
+    "const clean={type:'result',model:'fable',structured_output:{findings:[],verdict:'CERTIFIED',confidence:99}};",
+    "process.stdout.write(JSON.stringify([forbidden,clean]));",
+  ].join("");
+  const result = await runSupervisedProcess(process.execPath, ["-e", source], {
+    heartbeatInterval: 20,
+    stallTimeout: 500,
+    timeout: 800,
+    killGrace: 30,
+    structuredEventsRequired: true,
+    rejectEvent: rejectClaudeReviewerToolUse,
+  });
+
+  assert.equal(result.timedOut, false);
+  assert.equal(result.terminal_state, REVIEW_STATES.INVALID_VERDICT);
+  assert.equal(result.rejected_event.reason, "forbidden reviewer tool use: advisor");
+}
+
+async function testRejectedToolUseOutranksTimeout() {
+  const source = [
+    "process.on('SIGTERM',()=>{});",
+    "process.stdout.write(JSON.stringify({type:'assistant',message:{content:[{type:'server_tool_use',name:'advisor'}]}})+'\\n');",
+    "setInterval(()=>{},1000);",
+  ].join("");
+  const result = await runSupervisedProcess(process.execPath, ["-e", source], {
+    heartbeatInterval: 25,
+    stallTimeout: 2000,
+    timeout: 500,
+    killGrace: 650,
+    structuredEventsRequired: true,
+    rejectEvent: rejectClaudeReviewerToolUse,
+  });
+
+  assert.equal(result.timedOut, true);
+  assert.equal(result.timeout_reason, "wall");
+  assert.equal(result.terminal_state, REVIEW_STATES.INVALID_VERDICT);
+  assert.equal(result.rejected_event.reason, "forbidden reviewer tool use: advisor");
+}
+
 function testAuthAndInvalidVerdictClassification() {
   assert.equal(classifyReviewFailure({
     status: 1,
@@ -139,6 +233,11 @@ async function testOneInfrastructureRetryOnly() {
   await testHardTimeoutReapsDescendantTree();
   await testCancellationStopsReviewerAndRetainsPrivateLog();
   await testUnstructuredChatterDoesNotFakeProgress();
+  testClaudeToolUseDetectorScansRealAssistantEnvelope();
+  testClaudeToolUseDetectorScansArrayEnvelope();
+  await testRejectedToolUseCannotBecomeCleanResult();
+  await testRejectedFinalBufferCannotBecomeCleanResult();
+  await testRejectedToolUseOutranksTimeout();
   testAuthAndInvalidVerdictClassification();
   await testOneInfrastructureRetryOnly();
   process.stdout.write("review supervision tests passed\n");

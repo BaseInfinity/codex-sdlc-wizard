@@ -243,6 +243,8 @@ function runSupervisedProcess(command, args, options = {}) {
     let cancelled = false;
     let timeoutReason = null;
     let terminationRequested = false;
+    let rejectedEvent = null;
+    let requestTermination = () => {};
     let lineBuffer = "";
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -250,10 +252,11 @@ function runSupervisedProcess(command, args, options = {}) {
       lastActivityAt = Date.now();
       if (logPath !== "") fs.appendFileSync(logPath, `[${stream}] ${chunk}`);
     };
-    const recordEvents = (chunk) => {
+    const recordEvents = (chunk, flush = false) => {
       lineBuffer += chunk;
       const lines = lineBuffer.split(/\r?\n/);
-      lineBuffer = lines.pop() || "";
+      if (flush) lineBuffer = "";
+      else lineBuffer = lines.pop() || "";
       for (const line of lines) {
         if (line.trim() === "") continue;
         try {
@@ -261,6 +264,14 @@ function runSupervisedProcess(command, args, options = {}) {
           lastEventAt = Date.now();
           lastEventType = String(event.type || event.event || event.subtype || "json");
           options.onEvent?.(event);
+          const rejection = options.rejectEvent?.(event);
+          if (rejectedEvent === null && rejection) {
+            rejectedEvent = {
+              type: lastEventType,
+              reason: String(rejection),
+            };
+            requestTermination();
+          }
         } catch {
           // Human-readable diagnostics remain in the local log and terminal result.
         }
@@ -271,6 +282,7 @@ function runSupervisedProcess(command, args, options = {}) {
       recordChunk("stdout", chunk);
       recordEvents(chunk);
     });
+    child.stdout.on("end", () => recordEvents("", true));
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
       recordChunk("stderr", chunk);
@@ -294,9 +306,12 @@ function runSupervisedProcess(command, args, options = {}) {
         timedOut,
         cancelled,
         timeout_reason: timeoutReason,
-        terminal_state: timedOut
-          ? REVIEW_STATES.TIMED_OUT
-          : cancelled
+        rejected_event: rejectedEvent,
+        terminal_state: rejectedEvent !== null
+          ? REVIEW_STATES.INVALID_VERDICT
+          : timedOut
+            ? REVIEW_STATES.TIMED_OUT
+            : cancelled
             ? REVIEW_STATES.CANCELLED
             : result.error
               ? REVIEW_STATES.INTERNAL_RUNNER_FAILURE
@@ -311,7 +326,7 @@ function runSupervisedProcess(command, args, options = {}) {
         log_path: logPath || null,
       });
     };
-    const requestTermination = () => {
+    requestTermination = () => {
       if (terminationRequested) return;
       terminationRequested = true;
       terminateProcessTree(child, "SIGTERM");
@@ -392,6 +407,7 @@ function runtimeAttemptMetadata(attempt) {
     timeout_reason: attempt.timeout_reason || null,
     last_event_at: attempt.last_event_at || null,
     last_event_type: attempt.last_event_type || "none",
+    rejected_event: attempt.rejected_event || null,
     log_path: attempt.log_path || null,
     retry_reason: attempt.retry_reason || null,
   };
@@ -1127,11 +1143,23 @@ function actualClaudeModel(parsed, envelope) {
   return candidates.find((candidate) => typeof candidate === "string" && candidate !== "") || "";
 }
 
+function rejectClaudeReviewerToolUse(event) {
+  const events = Array.isArray(event) ? event : [event];
+  const blocks = events.flatMap((entry) => [
+    entry,
+    entry?.content_block,
+    ...(Array.isArray(entry?.message?.content) ? entry.message.content : []),
+  ]).filter((block) => block && typeof block === "object");
+  const toolBlock = blocks.find((block) => /(?:^|_)tool_use$/.test(String(block.type || "")));
+  if (!toolBlock) return "";
+  return `forbidden reviewer tool use: ${toolBlock.name || "unknown"}`;
+}
+
 async function runClaudeReviewer(prompt, temporaryDirectory, signal, reviewer, route, fallbackReason = null, logDirectory, phase = "initial") {
   const launch = claudeLaunch();
   const args = [
     "-p", "--model", reviewer.model, "--effort", reviewer.effort, "--safe-mode", "--max-turns", "2",
-    "--setting-sources", "user", "--tools", "", "--disable-slash-commands",
+    "--setting-sources", "user", "--tools", "", "--disallowedTools", "advisor", "--disable-slash-commands",
     "--no-session-persistence", "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config",
     "--json-schema", JSON.stringify(REVIEW_SCHEMA), "--output-format", "stream-json", "--verbose",
   ];
@@ -1146,11 +1174,19 @@ async function runClaudeReviewer(prompt, temporaryDirectory, signal, reviewer, r
       heartbeatInterval: configuredDuration("CODEX_SDLC_REVIEW_HEARTBEAT_MS", 30 * 1000),
       killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
       structuredEventsRequired: true,
+      rejectEvent: rejectClaudeReviewerToolUse,
       signal,
       label: `${reviewer.label} ${phase}`,
       logPath: path.join(logDirectory, `cross-model-${phase}-attempt-${attempt}.log`),
       windowsVerbatimArguments: prepared.windowsVerbatimArguments,
     });
+    if (result.rejected_event) {
+      return {
+        ...result,
+        retryable: false,
+        terminal_state: REVIEW_STATES.INVALID_VERDICT,
+      };
+    }
     const availabilityReason = claudeAvailabilityReason(result);
     if (availabilityReason !== "") {
       return {
@@ -1208,7 +1244,7 @@ async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, revi
   const launch = claudeLaunch();
   const args = [
     "-p", "--model", reviewer.model, "--effort", reviewer.effort, "--safe-mode", "--max-turns", "1",
-    "--setting-sources", "user", "--tools", "", "--disable-slash-commands",
+    "--setting-sources", "user", "--tools", "", "--disallowedTools", "advisor", "--disable-slash-commands",
     "--no-session-persistence", "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config",
     "--output-format", "stream-json", "--verbose",
   ];
@@ -1222,12 +1258,13 @@ async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, revi
     heartbeatInterval: configuredDuration("CODEX_SDLC_REVIEW_HEARTBEAT_MS", 30 * 1000),
     killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
     structuredEventsRequired: true,
+    rejectEvent: rejectClaudeReviewerToolUse,
     signal,
     label: `${reviewer.label} availability probe`,
     logPath: path.join(logDirectory, "cross-model-availability-probe.log"),
     windowsVerbatimArguments: prepared.windowsVerbatimArguments,
   });
-  if (result.error || result.timedOut || result.cancelled) return false;
+  if (result.rejected_event || result.error || result.timedOut || result.cancelled) return false;
   return claudeAvailabilityReason(result) === suspectedReason;
 }
 
@@ -1471,6 +1508,7 @@ module.exports = {
   REVIEW_STATES,
   buildWindowsCommandLine,
   classifyReviewFailure,
+  rejectClaudeReviewerToolUse,
   runSupervisedProcess,
   runWithInfrastructureRetry,
 };

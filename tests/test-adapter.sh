@@ -5394,6 +5394,13 @@ if (args[0] === "auth" && args[1] === "status") {
 const promptBuffer = fs.readFileSync(0);
 const prompt = promptBuffer.toString("utf8");
 const mode = process.env.DUAL_TEST_MODE || "clean";
+if (mode === "forbidden-tool-then-clean") {
+  const forbidden = { type: "assistant", message: { content: [{ type: "server_tool_use", name: "advisor" }] } };
+  const clean = { type: "result", model: "fable", structured_output: { findings: [], verdict: "CERTIFIED", confidence: 99 } };
+  fs.appendFileSync(process.env.FABLE_MARKER, `${JSON.stringify({ args, prompt, promptBase64: promptBuffer.toString("base64") })}\n`);
+  process.stdout.write(JSON.stringify([forbidden, clean]));
+  return;
+}
 if (mode === "sol-fail-fable-hang") {
   process.on("SIGTERM", () => {
     fs.writeFileSync(process.env.CANCEL_MARKER, "cancelled\n");
@@ -5444,6 +5451,8 @@ if (!solCalls[0].args.includes("gpt-5.6-sol") || !solCalls[0].args.some((arg) =>
 if (!solCalls[0].args.includes("--json")) process.exit(1);
 if (!fableCalls[0].args.includes("fable") || !fableCalls[0].args.includes("high")) process.exit(1);
 if (!fableCalls[0].args.includes("stream-json") || !fableCalls[0].args.includes("--verbose")) process.exit(1);
+const denyIndex = fableCalls[0].args.indexOf("--disallowedTools");
+if (denyIndex === -1 || fableCalls[0].args[denyIndex + 1] !== "advisor") process.exit(1);
 const expectedPatch = require("node:child_process").spawnSync(
   "git", ["-C", process.env.REPO_PATH, "diff", "--cached", "--binary", "HEAD"],
 ).stdout;
@@ -5452,6 +5461,19 @@ if (receipt.patch_sha256 !== expectedHash) process.exit(1);
 const fablePrompt = Buffer.from(fableCalls[0].promptBase64, "base64");
 if (!fablePrompt.includes(expectedPatch)) process.exit(1);
 NODE
+
+    : > "$fable_marker"
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MODE=1 CODEX_SDLC_CODEX_PATH="$fake_codex" \
+        CODEX_SDLC_CLAUDE_PATH="$fake_claude" SOL_MARKER="$sol_marker" \
+        FABLE_MARKER="$fable_marker" DUAL_TEST_MODE=forbidden-tool-then-clean \
+        node .codex/hooks/dual-review.cjs --base HEAD --consent-subscription-quota 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || valid=false
+    [ ! -f "$receipt" ] || valid=false
+    [ "$(wc -l < "$fable_marker" | tr -d ' ')" -eq 1 ] || valid=false
+    [[ "$output" == *"review INVALID_VERDICT"* ]] || valid=false
 
     : > "$sol_marker"
     : > "$fable_marker"
@@ -5626,6 +5648,10 @@ if (model === "fable" && ["fallback", "both-unavailable"].includes(mode)) {
   process.stdout.write("You're out of usage credits. Run /usage-credits to keep using Fable 5.\n");
   process.exit(1);
 }
+if (model === "fable" && mode === "probe-tool-use" && !probe) {
+  process.stdout.write("You're out of usage credits. Run /usage-credits to keep using Fable 5.\n");
+  process.exit(1);
+}
 if (model === "fable" && mode === "zero-exit-quota") {
   process.stdout.write(`${JSON.stringify({ type: "rate_limit_event", rate_limit_info: { status: "rejected" } })}\n`);
   process.stdout.write(`${JSON.stringify({
@@ -5650,6 +5676,13 @@ if (model === "fable" && mode === "zero-exit-malformed" && !probe) {
     model: "claude-fable-5",
     result: "quota exhausted",
   }));
+  process.exit(0);
+}
+if (probe && mode === "probe-tool-use") {
+  process.stdout.write(JSON.stringify([
+    { type: "assistant", message: { content: [{ type: "server_tool_use", name: "advisor" }] } },
+    { type: "rate_limit_event", rate_limit_info: { status: "rejected" } },
+  ]));
   process.exit(0);
 }
 if (probe) {
@@ -5759,8 +5792,23 @@ if (calls.length !== 3 || !calls[1].probe) process.exit(1);
 if (calls[0].model !== "fable" || calls[1].model !== "fable" || calls[2].model !== "claude-opus-4-8") process.exit(1);
 if (receipt.reviewers.cross_model.route !== "fallback") process.exit(1);
 if (receipt.reviewers.cross_model.fallback_reason !== "quota_exhausted") process.exit(1);
-if (receipt.reviewers.cross_model.model !== "claude-opus-4-8-20260801") process.exit(1);
+    if (receipt.reviewers.cross_model.model !== "claude-opus-4-8-20260801") process.exit(1);
 NODE
+
+    rm -f "$receipt"
+    : > "$calls"
+    set +e
+    output=$(cd "$ws" && CODEX_SDLC_TEST_MODE=1 CODEX_SDLC_CODEX_PATH="$fake_codex" \
+        CODEX_SDLC_CLAUDE_PATH="$fake_claude" CLAUDE_CALLS="$calls" \
+        FALLBACK_TEST_MODE=probe-tool-use node .codex/hooks/dual-review.cjs --base HEAD \
+        --consent-subscription-quota 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || valid=false
+    [ "$(wc -l < "$calls" | tr -d ' ')" -eq 2 ] || valid=false
+    [ "$(grep -c '"model":"fable"' "$calls")" -eq 2 ] || valid=false
+    grep -q 'claude-opus-4-8' "$calls" && valid=false
+    [ ! -f "$receipt" ] || valid=false
 
     rm -f "$receipt"
     : > "$calls"
