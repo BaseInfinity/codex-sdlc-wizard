@@ -1,0 +1,16 @@
+{
+  "type": "assistant",
+  "message": {
+    "model": "claude-fable-5",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "server_tool_use",
+        "name": "advisor",
+        "input": {}
+      }
+    ]
+  },
+  "parent_tool_use_id": null
+}

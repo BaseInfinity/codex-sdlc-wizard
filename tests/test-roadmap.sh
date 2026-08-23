@@ -8,7 +8,7 @@ REPO_DIR="$SCRIPT_DIR/.."
 ROADMAP="$REPO_DIR/ROADMAP.md"
 PACKAGE_JSON="$REPO_DIR/package.json"
 REPOSITORY_URL_REGEX='https://github[.]com/BaseInfinity/codex-sdlc-wizard'
-OPEN_ISSUES="58 65 66 72 77 79 82 84 86 88 92 93 95 96 97 99 100 101 104 105 106 107 108 109 112 113 114 122 123 124 125 126 127 128 129 130 131 132 134 135 136 138 139 140 141 142 144 147 151 153 154 157 160 162 163 164"
+OPEN_ISSUES="58 65 66 72 77 79 82 84 86 88 92 93 95 96 97 99 100 101 104 105 106 107 108 109 112 113 114 122 123 124 125 126 127 128 129 130 131 132 134 135 136 138 139 140 141 142 144 147 151 153 154 160 162 163 164 167"
 PUBLISHED_VERSION="0.7.37"
 PASSED=0
 FAILED=0
@@ -58,8 +58,8 @@ test_issue_line_is_scoped_to_priority_queue() {
     local actual
     local expected
 
-    actual=$(issue_line 157)
-    expected=$(priority_lines | grep -nE "$REPOSITORY_URL_REGEX/issues/157([^0-9]|$)" | cut -d: -f1 | head -n1 || true)
+    actual=$(issue_line 167)
+    expected=$(priority_lines | grep -nE "$REPOSITORY_URL_REGEX/issues/167([^0-9]|$)" | cut -d: -f1 | head -n1 || true)
 
     if [ -n "$actual" ] && [ "$actual" = "$expected" ]; then
         pass "Issue ordering is measured inside the priority queue"
@@ -117,18 +117,29 @@ test_roadmap_states_release_boundary() {
 }
 
 test_roadmap_has_current_resume_checkpoint() {
-    local issue_157
+    local issue_167
+    local issue_86
     local issue_109
 
-    issue_157=$(issue_line 157)
+    issue_167=$(issue_line 167)
+    issue_86=$(issue_line 86)
     issue_109=$(issue_line 109)
 
     if grep -Eq '^## Cold-session checkpoint' "$ROADMAP" &&
-       grep -Eqi '#157.*(active|resume|first)|(active|resume|first).*#157' "$ROADMAP" &&
-       [ -n "$issue_157" ] && [ -n "$issue_109" ] && [ "$issue_157" -lt "$issue_109" ]; then
-        pass "Roadmap gives a current #157-first cold-session checkpoint"
+       grep -Eqi '#167.*(active|resume|first)|(active|resume|first).*#167' "$ROADMAP" &&
+       [ -n "$issue_167" ] && [ -n "$issue_86" ] && [ -n "$issue_109" ] &&
+       [ "$issue_167" -lt "$issue_86" ] && [ "$issue_86" -lt "$issue_109" ]; then
+        pass "Roadmap gives the current #167, #86, #109 release checkpoint"
     else
-        fail "Roadmap does not give the current #157-first cold-session checkpoint"
+        fail "Roadmap does not give the current #167, #86, #109 release checkpoint"
+    fi
+}
+
+test_roadmap_states_milestone_snapshot() {
+    if grep -Eqi 'milestone.*nine open.*thirteen completed|nine open.*thirteen completed.*milestone' "$ROADMAP"; then
+        pass "Roadmap states the live 1.0 milestone snapshot"
+    else
+        fail "Roadmap does not state the live nine-open, thirteen-completed 1.0 snapshot"
     fi
 }
 
@@ -195,7 +206,7 @@ test_roadmap_priority_section_contains_only_numbered_items() {
 test_roadmap_excludes_resolved_issues() {
     local issue_number
     local stale=0
-    local closed_issues="64 67 71 73 81 91 98 110 111 115 116 137 143 148 158"
+    local closed_issues="64 67 71 73 81 91 98 110 111 115 116 137 143 148 157 158"
 
     for issue_number in $closed_issues; do
         if roadmap_has_issue "$issue_number"; then
@@ -239,7 +250,7 @@ test_roadmap_head_order_matches_priority() {
     local previous=0
     local current
     local issue_number
-    local ordered_issues="157 109 141 127 92 93 79 88 129 128 86 123 84 130 153 154 82 95 106 100 151 136 135 126 112 138 132 124 131 147 162 164 114 72 77 66 140 108 139 99 65 113 160 105 104 101 107 144 142 134 125 122 97 58 96 163"
+    local ordered_issues="167 86 109 141 127 92 93 79 88 129 128 123 84 130 153 154 82 95 106 100 151 136 135 126 112 138 132 124 131 147 162 164 114 72 77 66 140 108 139 99 65 113 160 105 104 101 107 144 142 134 125 122 97 58 96 163"
 
     for issue_number in $ordered_issues; do
         current=$(issue_line "$issue_number")
@@ -312,6 +323,7 @@ test_issue_line_is_scoped_to_priority_queue
 test_roadmap_declares_order_as_priority
 test_roadmap_states_release_boundary
 test_roadmap_has_current_resume_checkpoint
+test_roadmap_states_milestone_snapshot
 test_roadmap_links_post_merge_open_issue_snapshot
 test_roadmap_rejects_unknown_issue_links
 test_roadmap_excludes_resolved_issues

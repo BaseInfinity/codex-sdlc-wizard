@@ -4,6 +4,12 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const {
+  assertClaudeAdvertisesNoTools,
+  claudeToolFreeArgs,
+  rejectClaudeReviewerToolUse,
+  validateClaudeToolFreePreflight,
+} = require("./dual-review.cjs");
 
 const SENSITIVE_AUTH_ENV = [
   "ANTHROPIC_API_KEY",
@@ -13,28 +19,6 @@ const SENSITIVE_AUTH_ENV = [
   "CLAUDE_CODE_USE_FOUNDRY",
   "CLAUDE_CODE_USE_VERTEX",
 ];
-
-const REVIEW_SCHEMA = JSON.stringify({
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    findings: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          priority: { enum: ["P0", "P1", "P2", "P3"] },
-          title: { type: "string" },
-          details: { type: "string" },
-        },
-        required: ["priority", "title", "details"],
-      },
-    },
-    verdict: { enum: ["CERTIFIED", "NOT CERTIFIED"] },
-  },
-  required: ["findings", "verdict"],
-});
 
 function help() {
   return [
@@ -143,8 +127,13 @@ function assertSubscriptionLane() {
 }
 
 function sanitizedEnvironment() {
-  const environment = { ...process.env };
-  for (const name of SENSITIVE_AUTH_ENV) delete environment[name];
+  const blocked = new Set([...SENSITIVE_AUTH_ENV, "CLAUDE_CODE_DISABLE_ADVISOR_TOOL"]
+    .map((name) => name.toUpperCase()));
+  const environment = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!blocked.has(name.toUpperCase())) environment[name] = value;
+  }
+  environment.CLAUDE_CODE_DISABLE_ADVISOR_TOOL = "1";
   return environment;
 }
 
@@ -229,7 +218,8 @@ function promptFor(binding, proof, patch) {
     "Return prioritized code-review findings only; do not edit, implement, re-plan, or perform follow-up work.",
     "P0/P1 findings block certification. P2/P3 are non-blocking follow-ups unless a tiny in-scope fix is obvious.",
     "Do not rerun tests. The frozen candidate already has current proof.",
-    "Return the requested structured review result. CERTIFIED is allowed only when there are no P0/P1 findings.",
+    "CERTIFIED is allowed only when there are no P0/P1 findings.",
+    "Return exactly one JSON object as plain text, with no Markdown fence or surrounding prose. The object must contain only findings and verdict; each finding must contain only priority, title, and details.",
     "",
     `Base commit: ${binding.baseCommit}`,
     `HEAD before commit: ${binding.headCommit}`,
@@ -244,30 +234,43 @@ function promptFor(binding, proof, patch) {
   ].join("\n");
 }
 
-function parseClaudeResult(stdout) {
-  let parsedOutput;
+function parseClaudeEvents(stdout) {
+  const trimmed = String(stdout || "").trim();
+  if (trimmed === "") throw new Error("Claude did not return a JSON result envelope.");
   try {
-    parsedOutput = JSON.parse(stdout);
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : [parsed];
   } catch {
-    throw new Error("Claude did not return a JSON result envelope.");
+    const events = [];
+    for (const line of trimmed.split(/\r?\n/)) {
+      if (line.trim() === "") continue;
+      try { events.push(JSON.parse(line)); } catch { /* validated below */ }
+    }
+    if (events.length === 0) throw new Error("Claude did not return a JSON result envelope.");
+    return events;
   }
-  const envelope = Array.isArray(parsedOutput)
-    ? [...parsedOutput].reverse().find((entry) => entry?.type === "result")
-    : parsedOutput;
+}
+
+function parseClaudeResult(stdout) {
+  const events = parseClaudeEvents(stdout);
+  const forbidden = rejectClaudeReviewerToolUse(events);
+  if (forbidden !== "") throw new Error(forbidden);
+  assertClaudeAdvertisesNoTools(events, "Fable review");
+  const envelope = [...events].reverse().find((entry) => entry?.type === "result");
   if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
     throw new Error("Claude did not return a final JSON result envelope.");
   }
-  let structured = envelope.structured_output;
-  if ((!structured || typeof structured !== "object" || Array.isArray(structured))
-    && typeof envelope.result === "string") {
-    try {
-      structured = JSON.parse(envelope.result);
-    } catch {
-      // The concise structured-result error below is more useful than JSON syntax details.
-    }
+  let structured = null;
+  if (typeof envelope.result === "string") {
+    try { structured = JSON.parse(envelope.result); } catch { /* validated below */ }
   }
   if (!structured || typeof structured !== "object" || Array.isArray(structured)) {
     throw new Error("Fable did not return the required structured review result.");
+  }
+  const unexpectedReviewField = Object.keys(structured)
+    .find((field) => !["findings", "verdict"].includes(field));
+  if (unexpectedReviewField) {
+    throw new Error(`Fable returned an unexpected review field: ${unexpectedReviewField}.`);
   }
   if (!Array.isArray(structured.findings)
     || !["CERTIFIED", "NOT CERTIFIED"].includes(structured.verdict)) {
@@ -276,6 +279,12 @@ function parseClaudeResult(stdout) {
 
   const priorities = new Set(["P0", "P1", "P2", "P3"]);
   for (const finding of structured.findings) {
+    const unexpectedFindingField = finding && typeof finding === "object" && !Array.isArray(finding)
+      ? Object.keys(finding).find((field) => !["priority", "title", "details"].includes(field))
+      : "";
+    if (unexpectedFindingField) {
+      throw new Error(`Fable returned an unexpected review finding field: ${unexpectedFindingField}.`);
+    }
     if (!finding || typeof finding !== "object"
       || !priorities.has(finding.priority)
       || typeof finding.title !== "string"
@@ -333,24 +342,34 @@ function main() {
     const binding = { baseCommit, candidateTree, headCommit, patchSha256: sha256(patch) };
     const prompt = promptFor(binding, proof, patch);
     const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "codex-sdlc-fable-"));
+    const reviewer = {
+      label: "Fable High",
+      model: "fable",
+      effort: "high",
+      actualModel: /^(?:fable|claude-fable(?:-|$))/i,
+    };
+    const claudeArgs = claudeToolFreeArgs(reviewer);
 
     let result;
     try {
-      result = runClaude([
-        "-p",
-        "--model", "fable",
-        "--effort", "high",
-        "--safe-mode",
-        "--max-turns", "1",
-        "--setting-sources", "user",
-        "--tools", "",
-        "--disable-slash-commands",
-        "--no-session-persistence",
-        "--mcp-config", '{"mcpServers":{}}',
-        "--strict-mcp-config",
-        "--json-schema", REVIEW_SCHEMA,
-        "--output-format", "json",
-      ], {
+      const preflight = runClaude(claudeArgs, {
+        cwd: temporaryDirectory,
+        env: sanitizedEnvironment(),
+        input: [
+          "CODEX SDLC TOOL-FREE PREFLIGHT",
+          "Do not inspect files, repositories, or prior input.",
+          'Reply exactly {"tool_free":true} as plain text with no Markdown or surrounding prose.',
+        ].join("\n"),
+        timeout: 60 * 1000,
+        killSignal: "SIGTERM",
+      });
+      if (preflight.error) throw new Error(`Cannot run Fable tool-free preflight: ${preflight.error.message}`);
+      if (preflight.status !== 0) throw new Error(preflight.stderr.trim() || "Fable tool-free preflight failed.");
+      if (preflight.stderr.trim() !== "") {
+        throw new Error(`Fable tool-free preflight emitted diagnostics: ${preflight.stderr.trim()}`);
+      }
+      validateClaudeToolFreePreflight(preflight.stdout, reviewer);
+      result = runClaude(claudeArgs, {
         cwd: temporaryDirectory,
         env: sanitizedEnvironment(),
         input: prompt,

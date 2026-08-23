@@ -12,12 +12,12 @@
 
 ## Cold-session checkpoint — resume here
 
-- The active engineering slice is [#157](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/157) in `/private/tmp/codex-sdlc-issue157` on `fix/issue-157-review-outcomes`, based on `af037604a6f8d8ac2b9a3279b176aebed61aefb5`.
-- Keep its allowlist narrow: truthful invocation/auth/quota/timeout/invalid-execution/verdict outcomes, retained completed-peer evidence, explicitly non-certifying partial receipts, transient-only retry guidance, and all-required-reviewers fail-closed certification.
-- #158 is integrated through PR #165. Its one-time meta-review owner exception is consumed; do not reuse or broaden it.
-- Finish #157 through focused proof, one canonical 11/11 proof, author self-review, and the normal required Sol High plus Fable High gate. No review exception is available.
+- The active engineering slice is [#167](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/167) in `/Users/stefanayala/codex-sdlc-issue167` on `fix/issue-167-prevent-fable-tools`, based on `a07fc3d3fb77767de4c6e677e24bce628256668a`.
+- Make the required Fable lane tool-free by construction: no user settings, no built-in/client/server tools, wildcard denial, plain-JSON review transport, and a bounded preflight that fails before candidate review unless Claude advertises `tools: []` and returns the exact acknowledgement.
+- #157 is integrated through PR #166 and #158 through PR #165. #158's one-time meta-review owner exception is consumed; do not reuse or broaden it.
+- Finish #167 through focused proof, one canonical 11/11 proof, author self-review, and the normal required Sol High plus Fable High gate. No review exception is available.
 - Do not edit, stage, clean, or merge the dirty root checkout. It contains unrelated historical work.
-- After #157 integrates, deliberately refresh the frozen [#109](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/109) v4 pilot onto then-current `main` without resetting its cumulative correction budget. Do not resume its obsolete v2 or v3 candidates.
+- After #167 integrates, complete [#86](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/86) so Sol High is the only autonomous Sol effort. Then create a fresh authorized plan for the frozen [#109](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/109) v4 candidate; do not reuse its consumed gate attempt or its obsolete v2/v3 plans.
 - Continue through the complete `1.0.0` block below. Do not start post-1.0 work while an earlier release blocker remains open.
 
 ## Current State
@@ -26,24 +26,24 @@
 - Latest published npm release: [`codex-sdlc-wizard@0.7.37`](https://www.npmjs.com/package/codex-sdlc-wizard/v/0.7.37).
 - Development package metadata: `0.7.38`; it is not a published release.
 - Next major release: [`1.0.0 — Bounded autonomous delivery`](https://github.com/BaseInfinity/codex-sdlc-wizard/milestone/2).
-- The synchronized 1.0 milestone contains eight open release issues and twelve completed issues as of 2026-08-22.
+- The synchronized 1.0 milestone contains nine open release issues and thirteen completed issues as of 2026-08-23.
 - The release objective is bounded autonomous delivery: exact-candidate proof, terminating independent review, honest failures, one canonical workflow entry, trustworthy Windows behavior, real Windows acceptance, and immutable publish verification.
 - Real Windows Codex Desktop and CLI acceptance remains the final hardware-dependent gate before publish verification.
 - `1.0.0` is the next public release. Do not divert the release train into another 0.7.x feature batch.
 
 ## Priority queue
 
-1. **Classify reviewer failures without losing peer evidence** — [#157: distinguish infrastructure failure from reviewer verdict](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/157) (`1.0.0`, P0, active).
-2. **Complete the measured bounded-correction pilot** — [#109: incremental corrective commits with a final whole-PR gate](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/109) (`1.0.0`, P0, frozen until #157 lands).
-3. **Block executable Git configuration at delivery** — [#141: reject exec-capable Git config in exact-candidate commands](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/141) (`1.0.0`).
-4. **Restore one canonical workflow entry** — [#127: remove duplicate global and repo-local `$sdlc` exposure](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/127) (`1.0.0`).
-5. **Eliminate nondeterministic Windows proof cleanup** — [#92: fix access-denied proof-stamp teardown](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/92) (`1.0.0`).
-6. **Keep Windows review evidence honest** — [#93: detect WindowsApps PowerShell before trusting review validation](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/93) (`1.0.0`).
-7. **Run the final real-Windows acceptance gate** — [#79: validate the 1.0 candidate in Codex Desktop and CLI](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/79) (`1.0.0`, human-required).
-8. **Publish and verify the major release** — [#88: publish `codex-sdlc-wizard` 1.0.0 to npm and GitHub](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/88) (`1.0.0`, human-required where credentials require it).
-9. **Audit host-managed memory before premium rollout** — [#129: compare host memory with checked-in repository truth](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/129) (`1.1.0`).
-10. **Implement the premium Codex host lane** — [#128: Fable High plans/reviews and Sol High builds with one reconciliation](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/128) (`1.1.0`).
-11. **Finish the High-only planning and review policy** — [#86: preserve explicit implementation overrides](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/86) (`1.1.0`).
+1. **Prevent forbidden Fable tools before required review** — [#167: make the Fable lane tool-free by construction](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/167) (`1.0.0`, P0, active).
+2. **Enforce High-only autonomous Sol work** — [#86: remove autonomous xhigh escalation and the former maintainer exception](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/86) (`1.0.0`, P0).
+3. **Complete the measured bounded-correction pilot** — [#109: incremental corrective commits with a final whole-PR gate](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/109) (`1.0.0`, P0, frozen until #167 and #86 land).
+4. **Block executable Git configuration at delivery** — [#141: reject exec-capable Git config in exact-candidate commands](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/141) (`1.0.0`).
+5. **Restore one canonical workflow entry** — [#127: remove duplicate global and repo-local `$sdlc` exposure](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/127) (`1.0.0`).
+6. **Eliminate nondeterministic Windows proof cleanup** — [#92: fix access-denied proof-stamp teardown](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/92) (`1.0.0`).
+7. **Keep Windows review evidence honest** — [#93: detect WindowsApps PowerShell before trusting review validation](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/93) (`1.0.0`).
+8. **Run the final real-Windows acceptance gate** — [#79: validate the 1.0 candidate in Codex Desktop and CLI](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/79) (`1.0.0`, human-required).
+9. **Publish and verify the major release** — [#88: publish `codex-sdlc-wizard` 1.0.0 to npm and GitHub](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/88) (`1.0.0`, human-required where credentials require it).
+10. **Audit host-managed memory before premium rollout** — [#129: compare host memory with checked-in repository truth](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/129) (`1.1.0`).
+11. **Implement the premium Codex host lane** — [#128: Fable High plans/reviews and Sol High builds with one reconciliation](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/128) (`1.1.0`).
 12. **Make Fable review output evidence-first** — [#123: tighten cross-model review output](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/123) (`1.1.0`).
 13. **Preserve known-good behavior during upgrades** — [#84: adopt a stability contract for model and harness changes](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/84) (`1.1.0`).
 14. **Classify self-targeting maintenance as SDLC work** — [#130: treat mutating setup, update, and repair commands honestly](https://github.com/BaseInfinity/codex-sdlc-wizard/issues/130) (`1.1.0`).

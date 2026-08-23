@@ -10,12 +10,21 @@ const path = require("node:path");
 const {
   REVIEW_STATES,
   aggregatePartialOutcome,
+  claudeToolFreeArgs,
   classifyAvailabilityProbe,
   classifyReviewFailure,
   rejectClaudeReviewerToolUse,
   runSupervisedProcess,
   runWithInfrastructureRetry,
+  validateClaudeReviewEvents,
+  validateClaudeToolFreePreflight,
 } = require("../.codex/hooks/dual-review.cjs");
+
+const REVIEW_EVENT_FIXTURES = path.join(__dirname, "fixtures", "review-events");
+
+function reviewEventFixture(name) {
+  return JSON.parse(fs.readFileSync(path.join(REVIEW_EVENT_FIXTURES, name), "utf8"));
+}
 
 async function testHealthySilenceProducesHeartbeat() {
   const heartbeats = [];
@@ -102,15 +111,11 @@ async function testUnstructuredChatterDoesNotFakeProgress() {
 }
 
 function realClaudeAdvisorEvent() {
-  return {
-    type: "assistant",
-    message: {
-      content: [
-        { type: "thinking", thinking: "" },
-        { type: "server_tool_use", name: "advisor", input: { task: "review" } },
-      ],
-    },
-  };
+  return reviewEventFixture("claude-advisor-tool-use.json");
+}
+
+function realClaudeBashEvent() {
+  return reviewEventFixture("claude-bash-tool-use.json");
 }
 
 function realClaudeStructuredOutputEvent() {
@@ -132,6 +137,10 @@ function testClaudeToolUseDetectorScansRealAssistantEnvelope() {
     rejectClaudeReviewerToolUse(realClaudeAdvisorEvent()),
     "forbidden reviewer tool use: advisor",
   );
+  assert.equal(
+    rejectClaudeReviewerToolUse(realClaudeBashEvent()),
+    "forbidden reviewer tool use: Bash",
+  );
 }
 
 function testClaudeToolUseDetectorScansArrayEnvelope() {
@@ -144,27 +153,130 @@ function testClaudeToolUseDetectorScansArrayEnvelope() {
   );
 }
 
-function testClaudeToolUseDetectorAllowsOnlyValidatedReviewOutputTransport() {
+function testClaudeToolUseDetectorRejectsEveryToolIncludingStructuredOutput() {
   assert.equal(
     rejectClaudeReviewerToolUse(realClaudeStructuredOutputEvent(), { allowStructuredOutput: true }),
-    "",
+    "forbidden reviewer tool use: StructuredOutput",
   );
   assert.equal(
     rejectClaudeReviewerToolUse(realClaudeStructuredOutputEvent()),
     "forbidden reviewer tool use: StructuredOutput",
   );
+}
+
+function testClaudeToolUseDetectorNormalizesNestedEventShapes() {
   assert.equal(
-    rejectClaudeReviewerToolUse([
-      realClaudeStructuredOutputEvent(),
-      realClaudeAdvisorEvent(),
-    ], { allowStructuredOutput: true }),
-    "forbidden reviewer tool use: advisor",
+    rejectClaudeReviewerToolUse({
+      wrapper: {
+        event: {
+          type: "Anthropic.ServerToolUse",
+          name: "BASH",
+        },
+      },
+    }),
+    "forbidden reviewer tool use: BASH",
   );
-  const malformed = realClaudeStructuredOutputEvent();
-  malformed.message.content[0].input = { verdict: "CERTIFIED" };
-  assert.equal(
-    rejectClaudeReviewerToolUse(malformed, { allowStructuredOutput: true }),
-    "forbidden reviewer tool use: StructuredOutput",
+}
+
+function testClaudeLaunchIsToolFreeByConstruction() {
+  const args = claudeToolFreeArgs({ model: "fable", effort: "high" });
+  const valueAfter = (flag) => args[args.indexOf(flag) + 1];
+
+  assert.equal(valueAfter("--setting-sources"), "");
+  assert.equal(valueAfter("--tools"), "");
+  assert.equal(valueAfter("--disallowedTools"), "*");
+  assert.equal(valueAfter("--max-turns"), "1");
+  assert.equal(valueAfter("--output-format"), "stream-json");
+  assert.equal(valueAfter("--mcp-config"), '{"mcpServers":{}}');
+  assert.ok(args.includes("--safe-mode"));
+  assert.ok(args.includes("--strict-mcp-config"));
+  assert.ok(args.includes("--disable-slash-commands"));
+  assert.ok(args.includes("--no-session-persistence"));
+  assert.ok(args.includes("--verbose"));
+  assert.equal(args.includes("--json-schema"), false);
+}
+
+function toolFreePreflightOutput(overrides = {}) {
+  const init = {
+    type: "system",
+    subtype: "init",
+    model: "claude-fable-5",
+    tools: [],
+    ...overrides.init,
+  };
+  const result = {
+    type: "result",
+    model: "claude-fable-5",
+    is_error: false,
+    result: '{"tool_free":true}',
+    ...overrides.result,
+  };
+  return `${JSON.stringify(init)}\n${JSON.stringify(result)}\n`;
+}
+
+function testClaudeToolFreePreflightRequiresEmptyInitAndExactResult() {
+  const reviewer = { label: "Fable High", actualModel: /^(?:fable|claude-fable(?:-|$))/i };
+  assert.deepEqual(validateClaudeToolFreePreflight(toolFreePreflightOutput(), reviewer), {
+    actualModel: "claude-fable-5",
+  });
+  assert.throws(
+    () => validateClaudeToolFreePreflight(toolFreePreflightOutput({ init: { tools: ["Bash"] } }), reviewer),
+    /advertised built-in tools/i,
+  );
+  assert.throws(
+    () => validateClaudeToolFreePreflight(toolFreePreflightOutput({ result: { result: '{"tool_free":true,"extra":1}' } }), reviewer),
+    /tool-free acknowledgement/i,
+  );
+  assert.throws(
+    () => validateClaudeToolFreePreflight(JSON.stringify({ type: "result", model: "claude-fable-5", result: '{"tool_free":true}' }), reviewer),
+    /initialization envelope/i,
+  );
+}
+
+function testClaudeReviewRequiresExactPlainJsonContract() {
+  const reviewer = { label: "Fable High", actualModel: /^(?:fable|claude-fable(?:-|$))/i };
+  const review = { findings: [], verdict: "CERTIFIED", confidence: 98 };
+  const output = (envelope) => JSON.stringify([
+    { type: "system", subtype: "init", model: "claude-fable-5", tools: [] },
+    { type: "result", model: "claude-fable-5", ...envelope },
+  ]);
+
+  assert.deepEqual(validateClaudeReviewEvents(output({ result: JSON.stringify(review) }), reviewer), {
+    actualModel: "claude-fable-5",
+    review,
+  });
+  assert.throws(
+    () => validateClaudeReviewEvents(output({ structured_output: review }), reviewer),
+    /plain-JSON review result/i,
+  );
+  assert.throws(
+    () => validateClaudeReviewEvents(JSON.stringify([
+      { type: "system", subtype: "init", model: "claude-fable-5", tools: ["Bash"] },
+      { type: "result", model: "claude-fable-5", result: JSON.stringify(review) },
+    ]), reviewer),
+    /advertised built-in tools/i,
+  );
+  assert.throws(
+    () => validateClaudeReviewEvents(JSON.stringify([
+      { type: "system", subtype: "init", model: "claude-fable-5", tools: [] },
+      { type: "system", subtype: "init", model: "claude-fable-5", tools: ["advisor"] },
+      { type: "result", model: "claude-fable-5", result: JSON.stringify(review) },
+    ]), reviewer),
+    /advertised built-in tools/i,
+  );
+  assert.throws(
+    () => validateClaudeReviewEvents(output({ result: JSON.stringify({ ...review, extra: true }) }), reviewer),
+    /unexpected field/i,
+  );
+  assert.throws(
+    () => validateClaudeReviewEvents(output({
+      result: JSON.stringify({
+        findings: [{ priority: "P2", title: "note", details: "detail", extra: true }],
+        verdict: "CERTIFIED",
+        confidence: 98,
+      }),
+    }), reviewer),
+    /unexpected finding field/i,
   );
 }
 
@@ -354,7 +466,11 @@ async function testOneInfrastructureRetryOnly() {
   await testUnstructuredChatterDoesNotFakeProgress();
   testClaudeToolUseDetectorScansRealAssistantEnvelope();
   testClaudeToolUseDetectorScansArrayEnvelope();
-  testClaudeToolUseDetectorAllowsOnlyValidatedReviewOutputTransport();
+  testClaudeToolUseDetectorRejectsEveryToolIncludingStructuredOutput();
+  testClaudeToolUseDetectorNormalizesNestedEventShapes();
+  testClaudeLaunchIsToolFreeByConstruction();
+  testClaudeToolFreePreflightRequiresEmptyInitAndExactResult();
+  testClaudeReviewRequiresExactPlainJsonContract();
   await testRejectedToolUseCannotBecomeCleanResult();
   await testRejectedFinalBufferCannotBecomeCleanResult();
   await testRejectedToolUseOutranksTimeout();
