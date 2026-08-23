@@ -188,7 +188,7 @@ function classifyReviewFailure(result) {
   if (/(?:authentication required|not authenticated|please (?:log|sign) in|run \/login|api key required|oauth.*required|interactive input|requires a tty)/i.test(output)) {
     return REVIEW_STATES.AUTH_OR_INPUT_BLOCKED;
   }
-  if (/(?:rate limit|quota|usage limit|http\s*429|provider|transport|network|connection|socket|websocket|econn|timed?\s*out|service unavailable|http\s*5\d\d)/i.test(output)) {
+  if (/(?:rate limit|quota|usage limit|out of (?:usage )?credits|http\s*429|provider|transport|network|connection|socket|websocket|econn|timed?\s*out|service unavailable|http\s*5\d\d)/i.test(output)) {
     return REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE;
   }
   return REVIEW_STATES.INVALID_VERDICT;
@@ -529,7 +529,9 @@ function codexLaunch() {
 function assertSubscriptionLane() {
   for (const name of SENSITIVE_AUTH_ENV) {
     if (String(process.env[name] || "") !== "") {
-      throw new Error(`${name} is set; refusing a review that could use metered or alternate-provider auth.`);
+      const error = new Error(`${name} is set; refusing a review that could use metered or alternate-provider auth.`);
+      error.reviewClassification = "auth";
+      throw error;
     }
   }
   const launch = claudeLaunch();
@@ -538,16 +540,35 @@ function assertSubscriptionLane() {
     env: process.env,
     windowsVerbatimArguments: prepared.windowsVerbatimArguments,
   });
-  if (result.error) throw new Error(`Cannot run Claude auth check: ${result.error.message}`);
-  if (result.status !== 0) throw new Error(result.stderr.trim() || "Claude auth check failed.");
+  if (result.error) {
+    const error = new Error(`Cannot run Claude auth check: ${result.error.message}`);
+    error.reviewClassification = "invocation";
+    throw error;
+  }
+  if (result.status !== 0) {
+    const error = new Error(result.stderr.trim() || "Claude auth check failed.");
+    const terminalState = classifyReviewFailure(result);
+    error.reviewClassification = terminalState === REVIEW_STATES.AUTH_OR_INPUT_BLOCKED
+      ? "auth"
+      : terminalState === REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE
+        ? "invocation"
+        : "invalid_execution";
+    error.runtime = { terminal_state: terminalState, attempts: [] };
+    throw error;
+  }
   let auth;
   try {
     auth = JSON.parse(result.stdout);
   } catch {
-    throw new Error("Claude auth status did not return JSON.");
+    const error = new Error("Claude auth status did not return JSON.");
+    error.reviewClassification = "invalid_execution";
+    error.runtime = { terminal_state: REVIEW_STATES.INVALID_VERDICT, attempts: [] };
+    throw error;
   }
   if (auth.authMethod !== "claude.ai" || auth.apiProvider !== "firstParty" || !auth.subscriptionType) {
-    throw new Error("Cross-model review requires claude.ai firstParty subscription authentication.");
+    const error = new Error("Cross-model review requires claude.ai firstParty subscription authentication.");
+    error.reviewClassification = "auth";
+    throw error;
   }
   return auth;
 }
@@ -562,7 +583,10 @@ function environmentWithout(names) {
 }
 
 function sanitizedEnvironment() {
-  return environmentWithout(SENSITIVE_AUTH_ENV);
+  return {
+    ...environmentWithout([...SENSITIVE_AUTH_ENV, "CLAUDE_CODE_DISABLE_ADVISOR_TOOL"]),
+    CLAUDE_CODE_DISABLE_ADVISOR_TOOL: "1",
+  };
 }
 
 function deliveryEnvironment() {
@@ -929,12 +953,20 @@ function writeJsonAtomically(target, value) {
 
 function requireFrozenIndex(root) {
   const unstaged = run("git", ["-C", root, "diff", "--quiet", "--ignore-submodules", "--"]);
-  if (unstaged.status !== 0) throw new Error("Candidate has unstaged tracked changes; stage or revert them before review.");
+  if (unstaged.status !== 0) {
+    const error = new Error("Candidate has unstaged tracked changes; stage or revert them before review.");
+    error.reviewClassification = "invalid_execution";
+    throw error;
+  }
   const untracked = git(root, ["ls-files", "--others", "--exclude-standard"])
     .split(/\r?\n/)
     .filter(Boolean)
     .filter((entry) => entry !== ".reviews" && !entry.startsWith(".reviews/"));
-  if (untracked.length > 0) throw new Error(`Candidate has untracked source paths: ${untracked.join(", ")}`);
+  if (untracked.length > 0) {
+    const error = new Error(`Candidate has untracked source paths: ${untracked.join(", ")}`);
+    error.reviewClassification = "invalid_execution";
+    throw error;
+  }
 }
 
 function currentBinding(root, baseCommit) {
@@ -951,7 +983,9 @@ function assertCandidateUnchanged(root, expected) {
   requireFrozenIndex(root);
   const current = currentBinding(root, expected.baseCommit);
   if (JSON.stringify(current) !== JSON.stringify(expected)) {
-    throw new Error("Candidate changed during dual review; receipt was not written.");
+    const error = new Error("Candidate changed during dual review.");
+    error.reviewClassification = "invalid_execution";
+    throw error;
   }
 }
 
@@ -1048,6 +1082,14 @@ function reviewFailure(label, outcome) {
   const error = new Error(`${label} review ${state}.${logHint}`);
   error.runtime = reviewRuntime(outcome);
   error.availabilityReason = outcome.availabilityReason || "";
+  if (outcome.rejected_event || outcome.parseError) error.reviewClassification = "invalid_execution";
+  else if (state === REVIEW_STATES.AUTH_OR_INPUT_BLOCKED) error.reviewClassification = "auth";
+  else if (state === REVIEW_STATES.TIMED_OUT) error.reviewClassification = "timeout";
+  else if (error.availabilityReason === "quota_exhausted"
+    || (state === REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE
+      && reviewerAvailabilityReason(`${outcome.stderr || ""}\n${outcome.stdout || ""}`) === "quota_exhausted")) {
+    error.reviewClassification = "quota";
+  } else error.reviewClassification = "invocation";
   return error;
 }
 
@@ -1143,14 +1185,27 @@ function actualClaudeModel(parsed, envelope) {
   return candidates.find((candidate) => typeof candidate === "string" && candidate !== "") || "";
 }
 
-function rejectClaudeReviewerToolUse(event) {
+function validatedStructuredReviewOutput(block) {
+  if (block?.type !== "tool_use" || block?.name !== "StructuredOutput") return false;
+  try {
+    validateReview(block.input, "StructuredOutput");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function rejectClaudeReviewerToolUse(event, options = {}) {
   const events = Array.isArray(event) ? event : [event];
   const blocks = events.flatMap((entry) => [
     entry,
     entry?.content_block,
     ...(Array.isArray(entry?.message?.content) ? entry.message.content : []),
   ]).filter((block) => block && typeof block === "object");
-  const toolBlock = blocks.find((block) => /(?:^|_)tool_use$/.test(String(block.type || "")));
+  const toolBlock = blocks.find((block) => (
+    /(?:^|_)tool_use$/.test(String(block.type || ""))
+      && !(options.allowStructuredOutput === true && validatedStructuredReviewOutput(block))
+  ));
   if (!toolBlock) return "";
   return `forbidden reviewer tool use: ${toolBlock.name || "unknown"}`;
 }
@@ -1174,7 +1229,7 @@ async function runClaudeReviewer(prompt, temporaryDirectory, signal, reviewer, r
       heartbeatInterval: configuredDuration("CODEX_SDLC_REVIEW_HEARTBEAT_MS", 30 * 1000),
       killGrace: configuredDuration("CODEX_SDLC_REVIEW_KILL_GRACE_MS", 2000),
       structuredEventsRequired: true,
-      rejectEvent: rejectClaudeReviewerToolUse,
+      rejectEvent: (event) => rejectClaudeReviewerToolUse(event, { allowStructuredOutput: true }),
       signal,
       label: `${reviewer.label} ${phase}`,
       logPath: path.join(logDirectory, `cross-model-${phase}-attempt-${attempt}.log`),
@@ -1264,29 +1319,72 @@ async function confirmClaudeReviewerUnavailable(temporaryDirectory, signal, revi
     logPath: path.join(logDirectory, "cross-model-availability-probe.log"),
     windowsVerbatimArguments: prepared.windowsVerbatimArguments,
   });
-  if (result.rejected_event || result.error || result.timedOut || result.cancelled) return false;
-  return claudeAvailabilityReason(result) === suspectedReason;
+  const runtime = reviewRuntime({ ...result, attempts: [result] });
+  return { ...classifyAvailabilityProbe(result, suspectedReason), runtime };
+}
+
+function classifyAvailabilityProbe(result, suspectedReason) {
+  const terminalState = result?.terminal_state || classifyReviewFailure(result);
+  if (result?.rejected_event) {
+    return { confirmed: false, classification: "invalid_execution" };
+  }
+  if (terminalState === REVIEW_STATES.AUTH_OR_INPUT_BLOCKED) {
+    return { confirmed: false, classification: "auth" };
+  }
+  if (terminalState === REVIEW_STATES.TIMED_OUT) {
+    return { confirmed: false, classification: "timeout" };
+  }
+  if (terminalState === REVIEW_STATES.CANCELLED || terminalState === REVIEW_STATES.INTERNAL_RUNNER_FAILURE) {
+    return { confirmed: false, classification: "invocation" };
+  }
+  const actualReason = claudeAvailabilityReason(result);
+  if (actualReason !== "") {
+    return {
+      confirmed: actualReason === suspectedReason,
+      classification: actualReason === "quota_exhausted" ? "quota" : "invocation",
+    };
+  }
+  if (terminalState === REVIEW_STATES.INVALID_VERDICT) {
+    return { confirmed: false, classification: "invalid_execution" };
+  }
+  if (terminalState === REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE) {
+    return { confirmed: false, classification: "invocation" };
+  }
+  if (terminalState === REVIEW_STATES.CLEAN) {
+    return { confirmed: false, classification: "invocation" };
+  }
+  return { confirmed: false, classification: "invalid_execution" };
 }
 
 async function runCrossModel(prompt, temporaryDirectory, signal, selectedReviewer, logDirectory, phase) {
   const selected = CROSS_MODEL_REVIEWERS[selectedReviewer];
   if (selected.key === "opus-4.8-xhigh") {
-    return runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "configured", null, logDirectory, phase);
+    try {
+      return await runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "configured", null, logDirectory, phase);
+    } catch (error) {
+      error.crossIdentity = crossIdentityForAttempt(selected, "configured", null);
+      throw error;
+    }
   }
   try {
     return await runClaudeReviewer(prompt(selected), temporaryDirectory, signal, selected, "preferred", null, logDirectory, phase);
   } catch (error) {
+    error.crossIdentity = crossIdentityForAttempt(selected, "preferred", null);
     if (!error.availabilityReason) throw error;
-    const unavailable = await confirmClaudeReviewerUnavailable(
+    const availability = await confirmClaudeReviewerUnavailable(
       temporaryDirectory,
       signal,
       selected,
       error.availabilityReason,
       logDirectory,
     );
-    if (!unavailable) {
+    if (!availability.confirmed) {
       const failure = new Error(`${selected.label} review failed and availability fallback was not independently confirmed: ${error.message}`);
-      failure.runtime = error.runtime;
+      failure.runtime = error.runtime
+        ? { ...error.runtime, availability_probe: availability.runtime }
+        : availability.runtime;
+      failure.reviewClassification = availability.classification;
+      failure.crossIdentity = crossIdentityForAttempt(selected, "preferred", null);
       throw failure;
     }
     const fallback = CROSS_MODEL_REVIEWERS["opus-4.8-xhigh"];
@@ -1294,7 +1392,15 @@ async function runCrossModel(prompt, temporaryDirectory, signal, selectedReviewe
       return await runClaudeReviewer(prompt(fallback), temporaryDirectory, signal, fallback, "fallback", error.availabilityReason, logDirectory, phase);
     } catch (fallbackError) {
       const failure = new Error(`${selected.label} was unavailable (${error.availabilityReason}); ${fallback.label} fallback failed: ${fallbackError.message}`);
-      failure.runtime = fallbackError.runtime || error.runtime;
+      const primaryRuntime = fallbackError.runtime || error.runtime || availability.runtime;
+      failure.runtime = {
+        ...primaryRuntime,
+        preferred_review: error.runtime || null,
+        availability_probe: availability.runtime,
+      };
+      failure.reviewClassification = fallbackError.reviewClassification
+        || (error.availabilityReason === "quota_exhausted" ? "quota" : "invocation");
+      failure.crossIdentity = crossIdentityForAttempt(fallback, "fallback", error.availabilityReason);
       throw failure;
     }
   }
@@ -1302,14 +1408,16 @@ async function runCrossModel(prompt, temporaryDirectory, signal, selectedReviewe
 
 async function runReviewPair(solReview, fableReview) {
   const controller = new AbortController();
-  const tasks = [solReview(controller.signal), fableReview(controller.signal)];
-  try {
-    return await Promise.all(tasks);
-  } catch (error) {
-    controller.abort();
-    await Promise.allSettled(tasks);
+  let abortRequested = false;
+  const tasks = [solReview(controller.signal), fableReview(controller.signal)].map((task) => task.catch((error) => {
+    if (!abortRequested) {
+      abortRequested = true;
+      controller.abort();
+    }
     throw error;
-  }
+  }));
+  const [sol, crossModel] = await Promise.allSettled(tasks);
+  return { sol, cross_model: crossModel };
 }
 
 function jointFindings(finalReviews) {
@@ -1318,6 +1426,186 @@ function jointFindings(finalReviews) {
     for (const finding of review.findings) findings.push({ reviewer, ...finding });
   }
   return findings;
+}
+
+function completedReviewerOutcome(result) {
+  return {
+    completed: true,
+    classification: "reviewer_verdict",
+    infrastructure_failure: false,
+    transient: false,
+    retry: { recommended: false, guidance: null },
+    verdict: result.review.verdict,
+    runtime: result.runtime,
+  };
+}
+
+function retryContract(classification, transient) {
+  if (!transient) return { recommended: false, guidance: null };
+  if (classification === "quota") {
+    return { recommended: true, guidance: "Retry after reviewer quota becomes available." };
+  }
+  if (classification === "timeout") {
+    return { recommended: true, guidance: "Retry the unchanged candidate after the reviewer timeout condition clears." };
+  }
+  return { recommended: true, guidance: "Retry the unchanged candidate after reviewer infrastructure recovers." };
+}
+
+function reviewerFailureClassification(error) {
+  if (error?.reviewClassification) return error.reviewClassification;
+  const state = error?.runtime?.terminal_state || "";
+  if (state === REVIEW_STATES.AUTH_OR_INPUT_BLOCKED) return "auth";
+  if (state === REVIEW_STATES.TIMED_OUT) return "timeout";
+  if (state === REVIEW_STATES.INVALID_VERDICT) return "invalid_execution";
+  return "invocation";
+}
+
+function failedReviewerOutcome(error) {
+  const classification = reviewerFailureClassification(error);
+  const terminalState = error?.runtime?.terminal_state || "";
+  const transient = classification === "quota"
+    || classification === "timeout"
+    || (classification === "invocation" && terminalState === REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE);
+  return {
+    completed: false,
+    classification,
+    infrastructure_failure: terminalState !== REVIEW_STATES.CANCELLED && classification !== "invalid_execution",
+    transient,
+    retry: retryContract(classification, transient),
+    verdict: null,
+    runtime: error?.runtime || null,
+  };
+}
+
+function hasBlockingFindings(reviews) {
+  return Object.values(reviews).some((review) => (
+    review?.findings?.some((finding) => finding.priority === "P0" || finding.priority === "P1")
+  ));
+}
+
+function suppressRetryForBlockingEvidence(outcome, reviews) {
+  if (!hasBlockingFindings(reviews) || outcome?.retry?.recommended !== true) return outcome;
+  return { ...outcome, retry: { recommended: false, guidance: null } };
+}
+
+function suppressReviewerRetriesForBlockingEvidence(outcomes, reviews) {
+  return Object.fromEntries(Object.entries(outcomes).map(([reviewer, outcome]) => [
+    reviewer,
+    suppressRetryForBlockingEvidence(outcome, reviews),
+  ]));
+}
+
+function aggregatePartialOutcome(primaryOutcome, reviewerOutcomes, reviews) {
+  const outcome = suppressRetryForBlockingEvidence(primaryOutcome, reviews);
+  if (outcome?.retry?.recommended !== true) return outcome;
+  const causalFailures = Object.values(reviewerOutcomes).filter((reviewerOutcome) => (
+    reviewerOutcome?.completed === false
+      && reviewerOutcome?.runtime?.terminal_state !== REVIEW_STATES.CANCELLED
+  ));
+  if (causalFailures.every((reviewerOutcome) => reviewerOutcome.transient === true)) return outcome;
+  return { ...outcome, retry: { recommended: false, guidance: null } };
+}
+
+function receiptOutcome(reviewerOutcome) {
+  return {
+    classification: reviewerOutcome.classification,
+    infrastructure_failure: reviewerOutcome.infrastructure_failure,
+    transient: reviewerOutcome.transient,
+    retry: reviewerOutcome.retry,
+  };
+}
+
+function verdictOutcome() {
+  return {
+    classification: "reviewer_verdict",
+    infrastructure_failure: false,
+    transient: false,
+    retry: { recommended: false, guidance: null },
+  };
+}
+
+function reviewerPolicy(selectedReviewer) {
+  return `sol-high+${selectedReviewer}/availability-fallback-opus-4.8-xhigh/independent-cross-feed-on-split/v2`;
+}
+
+function crossIdentityForAttempt(reviewer, route, fallbackReason) {
+  return {
+    provider: "anthropic",
+    model: reviewer.model,
+    effort: reviewer.effort,
+    route,
+    fallback_reason: fallbackReason,
+  };
+}
+
+function requestedCrossIdentity(selectedReviewer) {
+  return crossIdentityForAttempt(CROSS_MODEL_REVIEWERS[selectedReviewer], "requested", null);
+}
+
+function authReceipt(auth) {
+  if (!auth) return null;
+  return {
+    cross_model_auth_method: auth.authMethod,
+    cross_model_api_provider: auth.apiProvider,
+    cross_model_subscription_type: auth.subscriptionType,
+  };
+}
+
+function partialReviewReceipt(options) {
+  const primaryOutcome = options.primaryOutcome;
+  const evidenceReviews = { ...(options.initial || {}), ...(options.final || {}) };
+  return {
+    schema_version: 4,
+    status: "partial",
+    certifying: false,
+    created_at: new Date().toISOString(),
+    base_commit: options.binding.baseCommit,
+    head_before_commit: options.binding.headCommit,
+    candidate_tree: options.binding.candidateTree,
+    patch_sha256: options.binding.patchSha256,
+    proof_workspace_fingerprint: options.proof.workspace_fingerprint,
+    proof_created_at: options.proof.created_at,
+    reviewer_policy: reviewerPolicy(options.selectedReviewer),
+    requested_cross_model_reviewer: options.selectedReviewer,
+    reviewers: {
+      sol: { provider: "openai", model: "gpt-5.6-sol", effort: "high", route: "configured", fallback_reason: null },
+      cross_model: options.crossIdentity || requestedCrossIdentity(options.selectedReviewer),
+    },
+    auth: authReceipt(options.auth),
+    initial: options.initial || {},
+    final: options.final || {},
+    reconciliation: options.reconciliation,
+    runtime: options.runtime || null,
+    reviewer_outcomes: options.reviewerOutcomes || {},
+    outcome: receiptOutcome(primaryOutcome),
+    joint_verdict: "NOT CERTIFIED",
+    joint_findings: jointFindings(evidenceReviews),
+  };
+}
+
+function pairState(pair) {
+  const entries = Object.entries(pair);
+  const completed = Object.fromEntries(entries
+    .filter(([, result]) => result.status === "fulfilled")
+    .map(([reviewer, result]) => [reviewer, result.value.review]));
+  const reviewerOutcomes = Object.fromEntries(entries.map(([reviewer, result]) => [
+    reviewer,
+    result.status === "fulfilled"
+      ? completedReviewerOutcome(result.value)
+      : failedReviewerOutcome(result.reason),
+  ]));
+  return {
+    completed,
+    reviewerOutcomes,
+    failures: entries.filter(([, result]) => result.status === "rejected"),
+  };
+}
+
+function primaryPairFailure(state) {
+  const causalFailure = state.failures.find(([, result]) => (
+    result.reason?.runtime?.terminal_state !== REVIEW_STATES.CANCELLED
+  ));
+  return (causalFailure || state.failures[0])?.[1].reason;
 }
 
 async function main() {
@@ -1344,16 +1632,28 @@ async function main() {
   let binding = null;
   let logDirectory = "";
   let runtime = null;
+  let auth = null;
+  let proof = null;
+  let selectedReviewer = "";
+  let retainedInitial = {};
+  let retainedFinal = {};
+  let retainedReviewerOutcomes = {};
+  let retainedCrossIdentity = null;
+  let retainedReconciliation = null;
   const runStartedAt = new Date().toISOString();
   try {
-    const auth = assertSubscriptionLane();
-    const selectedReviewer = crossModelReviewerPolicy(root);
+    selectedReviewer = crossModelReviewerPolicy(root);
     requireFrozenIndex(root);
     const baseCommit = git(root, ["rev-parse", "--verify", `${parsed.base}^{commit}`]);
     binding = currentBinding(root, baseCommit);
-    const proof = proofStatus(root);
+    proof = proofStatus(root);
     const patchBuffer = gitBuffer(root, ["diff", "--cached", "--binary", baseCommit]);
-    if (patchBuffer.length === 0) throw new Error("The staged candidate patch is empty.");
+    if (patchBuffer.length === 0) {
+      const error = new Error("The staged candidate patch is empty.");
+      error.reviewClassification = "invalid_execution";
+      throw error;
+    }
+    auth = assertSubscriptionLane();
 
     temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "codex-sdlc-dual-review-"));
     logDirectory = reviewLogDirectory(root, binding);
@@ -1371,7 +1671,7 @@ async function main() {
     fs.writeFileSync(schemaPath, JSON.stringify(REVIEW_SCHEMA));
     const solInitialPath = path.join(temporaryDirectory, "sol-initial.json");
     const initialStarted = Date.now();
-    const [solInitialResult, crossInitialResult] = await runReviewPair(
+    const initialPair = await runReviewPair(
       (signal) => runSol(independentPrompt("Sol High", binding, proof), root, schemaPath, solInitialPath, signal, logDirectory, "initial"),
       (signal) => runCrossModel(
         (reviewer) => independentPrompt(reviewer.label, binding, proof, patchBuffer),
@@ -1382,7 +1682,74 @@ async function main() {
         "initial",
       ),
     );
+    const initialState = pairState(initialPair);
+    retainedInitial = initialState.completed;
+    retainedReviewerOutcomes = initialState.reviewerOutcomes;
+    retainedCrossIdentity = initialPair.cross_model.status === "fulfilled"
+      ? initialPair.cross_model.value.identity
+      : initialPair.cross_model.reason?.crossIdentity || requestedCrossIdentity(selectedReviewer);
+    runtime = {
+      initial: Object.fromEntries(Object.entries(initialState.reviewerOutcomes)
+        .map(([reviewer, outcome]) => [reviewer, outcome.runtime])),
+      reconciliation: null,
+    };
+    retainedReconciliation = {
+      rounds: 0,
+      skipped_reason: "failure_after_initial_review",
+      cross_feed: "none",
+      initial_review_ms: Date.now() - initialStarted,
+      reconciliation_ms: 0,
+    };
     assertCandidateUnchanged(root, binding);
+    if (initialState.failures.length > 0) {
+      const primaryFailure = primaryPairFailure(initialState);
+      const reviewerOutcomes = suppressReviewerRetriesForBlockingEvidence(initialState.reviewerOutcomes, retainedInitial);
+      const primaryOutcome = aggregatePartialOutcome(
+        failedReviewerOutcome(primaryFailure),
+        reviewerOutcomes,
+        retainedInitial,
+      );
+      const receipt = partialReviewReceipt({
+        binding,
+        proof,
+        selectedReviewer,
+        auth,
+        crossIdentity: retainedCrossIdentity,
+        initial: retainedInitial,
+        final: {},
+        reconciliation: {
+          rounds: 0,
+          skipped_reason: "incomplete_initial_review",
+          cross_feed: "none",
+          initial_review_ms: Date.now() - initialStarted,
+          reconciliation_ms: 0,
+        },
+        runtime,
+        reviewerOutcomes,
+        primaryOutcome,
+      });
+      writeJsonAtomically(receiptPath, receipt);
+      writeJsonAtomically(runPath, {
+        schema_version: 1,
+        status: "partial",
+        started_at: runStartedAt,
+        finished_at: new Date().toISOString(),
+        base_commit: binding.baseCommit,
+        head_before_commit: binding.headCommit,
+        candidate_tree: binding.candidateTree,
+        patch_sha256: binding.patchSha256,
+        terminal_state: primaryFailure?.runtime?.terminal_state || REVIEW_STATES.INTERNAL_RUNNER_FAILURE,
+        outcome: receipt.outcome,
+        reviewer_outcomes: reviewerOutcomes,
+        runtime,
+        log_directory: logDirectory,
+        receipt_path: receiptPath,
+      });
+      process.stderr.write(`${primaryFailure.message}\n`);
+      return 2;
+    }
+    const solInitialResult = initialPair.sol.value;
+    const crossInitialResult = initialPair.cross_model.value;
     const solInitial = solInitialResult.review;
     const crossInitial = crossInitialResult.review;
     const crossIdentity = crossInitialResult.identity;
@@ -1392,19 +1759,12 @@ async function main() {
     let rounds = 0;
     let skippedReason = "initial_agreement";
     let reconciliationMs = 0;
-    runtime = {
-      initial: {
-        sol: solInitialResult.runtime,
-        cross_model: crossInitialResult.runtime,
-      },
-      reconciliation: null,
-    };
     if (solInitial.verdict !== crossInitial.verdict) {
       rounds = 1;
       skippedReason = "";
       const reconciliationStarted = Date.now();
       const solFinalPath = path.join(temporaryDirectory, "sol-final.json");
-      const [solFinalResult, crossFinalResult] = await runReviewPair(
+      const reconciliationPair = await runReviewPair(
         (signal) => runSol(reconciliationPrompt("Sol High", { name: "cross_model", review: crossInitial }, solInitial, binding, proof), root, schemaPath, solFinalPath, signal, logDirectory, "reconciliation"),
         (signal) => runClaudeReviewer(
           reconciliationPrompt(crossReviewer.label, { name: "sol", review: solInitial }, crossInitial, binding, proof, patchBuffer),
@@ -1417,21 +1777,93 @@ async function main() {
           "reconciliation",
         ),
       );
+      const reconciliationState = pairState(reconciliationPair);
       reconciliationMs = Date.now() - reconciliationStarted;
-      assertCandidateUnchanged(root, binding);
-      finalReviews = { sol: solFinalResult.review, cross_model: crossFinalResult.review };
-      runtime.reconciliation = {
-        sol: solFinalResult.runtime,
-        cross_model: crossFinalResult.runtime,
+      retainedFinal = reconciliationState.completed;
+      retainedReviewerOutcomes = reconciliationState.reviewerOutcomes;
+      runtime.reconciliation = Object.fromEntries(Object.entries(reconciliationState.reviewerOutcomes)
+        .map(([reviewer, outcome]) => [reviewer, outcome.runtime]));
+      retainedReconciliation = {
+        rounds: 1,
+        skipped_reason: "failure_after_reconciliation",
+        cross_feed: "verbatim_structured_json",
+        initial_review_ms: reconciliationStarted - initialStarted,
+        reconciliation_ms: reconciliationMs,
       };
+      assertCandidateUnchanged(root, binding);
+      if (reconciliationState.failures.length > 0) {
+        const primaryFailure = primaryPairFailure(reconciliationState);
+        const evidenceReviews = { ...retainedInitial, ...retainedFinal };
+        const reviewerOutcomes = suppressReviewerRetriesForBlockingEvidence(
+          reconciliationState.reviewerOutcomes,
+          evidenceReviews,
+        );
+        const primaryOutcome = aggregatePartialOutcome(
+          failedReviewerOutcome(primaryFailure),
+          reviewerOutcomes,
+          evidenceReviews,
+        );
+        const receipt = partialReviewReceipt({
+          binding,
+          proof,
+          selectedReviewer,
+          auth,
+          crossIdentity,
+          initial: retainedInitial,
+          final: retainedFinal,
+          reconciliation: {
+            rounds: 1,
+            skipped_reason: "incomplete_reconciliation",
+            cross_feed: "verbatim_structured_json",
+            initial_review_ms: reconciliationStarted - initialStarted,
+            reconciliation_ms: reconciliationMs,
+          },
+          runtime,
+          reviewerOutcomes,
+          primaryOutcome,
+        });
+        writeJsonAtomically(receiptPath, receipt);
+        writeJsonAtomically(runPath, {
+          schema_version: 1,
+          status: "partial",
+          started_at: runStartedAt,
+          finished_at: new Date().toISOString(),
+          base_commit: binding.baseCommit,
+          head_before_commit: binding.headCommit,
+          candidate_tree: binding.candidateTree,
+          patch_sha256: binding.patchSha256,
+          terminal_state: primaryFailure?.runtime?.terminal_state || REVIEW_STATES.INTERNAL_RUNNER_FAILURE,
+          outcome: receipt.outcome,
+          reviewer_outcomes: reviewerOutcomes,
+          runtime,
+          log_directory: logDirectory,
+          receipt_path: receiptPath,
+        });
+        process.stderr.write(`${primaryFailure.message}\n`);
+        return 2;
+      }
+      const solFinalResult = reconciliationPair.sol.value;
+      const crossFinalResult = reconciliationPair.cross_model.value;
+      finalReviews = { sol: solFinalResult.review, cross_model: crossFinalResult.review };
     }
 
     const jointVerdict = finalReviews.sol.verdict === "CERTIFIED" && finalReviews.cross_model.verdict === "CERTIFIED"
       ? "CERTIFIED"
       : "NOT CERTIFIED";
+    const finalReviewerOutcomes = {
+      sol: completedReviewerOutcome({
+        review: finalReviews.sol,
+        runtime: runtime.reconciliation?.sol || runtime.initial.sol,
+      }),
+      cross_model: completedReviewerOutcome({
+        review: finalReviews.cross_model,
+        runtime: runtime.reconciliation?.cross_model || runtime.initial.cross_model,
+      }),
+    };
     const receipt = {
-      schema_version: 3,
+      schema_version: 4,
       status: jointVerdict === "CERTIFIED" ? "certified" : "not_certified",
+      certifying: jointVerdict === "CERTIFIED",
       created_at: new Date().toISOString(),
       base_commit: binding.baseCommit,
       head_before_commit: binding.headCommit,
@@ -1439,17 +1871,13 @@ async function main() {
       patch_sha256: binding.patchSha256,
       proof_workspace_fingerprint: proof.workspace_fingerprint,
       proof_created_at: proof.created_at,
-      reviewer_policy: `sol-high+${selectedReviewer}/availability-fallback-opus-4.8-xhigh/independent-cross-feed-on-split/v2`,
+      reviewer_policy: reviewerPolicy(selectedReviewer),
       requested_cross_model_reviewer: selectedReviewer,
       reviewers: {
         sol: { provider: "openai", model: "gpt-5.6-sol", effort: "high", route: "configured", fallback_reason: null },
         cross_model: crossIdentity,
       },
-      auth: {
-        cross_model_auth_method: auth.authMethod,
-        cross_model_api_provider: auth.apiProvider,
-        cross_model_subscription_type: auth.subscriptionType,
-      },
+      auth: authReceipt(auth),
       initial: { sol: solInitial, cross_model: crossInitial },
       final: finalReviews,
       reconciliation: {
@@ -1460,6 +1888,8 @@ async function main() {
         reconciliation_ms: reconciliationMs,
       },
       runtime,
+      reviewer_outcomes: finalReviewerOutcomes,
+      outcome: verdictOutcome(),
       joint_verdict: jointVerdict,
       joint_findings: jointFindings(finalReviews),
     };
@@ -1475,6 +1905,8 @@ async function main() {
       candidate_tree: binding.candidateTree,
       patch_sha256: binding.patchSha256,
       terminal_state: jointVerdict === "CERTIFIED" ? REVIEW_STATES.CLEAN : REVIEW_STATES.FINDINGS,
+      outcome: receipt.outcome,
+      reviewer_outcomes: finalReviewerOutcomes,
       runtime,
       log_directory: logDirectory,
       receipt_path: receiptPath,
@@ -1482,10 +1914,44 @@ async function main() {
     process.stdout.write(`Dual review ${receipt.status}: ${receiptPath}\n`);
     return jointVerdict === "CERTIFIED" ? 0 : 3;
   } catch (error) {
-    const terminalState = error?.runtime?.terminal_state || REVIEW_STATES.INTERNAL_RUNNER_FAILURE;
+    const retainedEvidence = { ...retainedInitial, ...retainedFinal };
+    const reviewerOutcomes = suppressReviewerRetriesForBlockingEvidence(
+      retainedReviewerOutcomes,
+      retainedEvidence,
+    );
+    const primaryOutcome = aggregatePartialOutcome(
+      failedReviewerOutcome(error),
+      reviewerOutcomes,
+      retainedEvidence,
+    );
+    const terminalState = error?.runtime?.terminal_state
+      || (primaryOutcome.classification === "auth" ? REVIEW_STATES.AUTH_OR_INPUT_BLOCKED : REVIEW_STATES.INTERNAL_RUNNER_FAILURE);
+    let receipt = null;
+    if (binding && proof && selectedReviewer !== "") {
+      receipt = partialReviewReceipt({
+        binding,
+        proof,
+        selectedReviewer,
+        auth,
+        crossIdentity: retainedCrossIdentity,
+        initial: retainedInitial,
+        final: retainedFinal,
+        reconciliation: retainedReconciliation || {
+          rounds: 0,
+          skipped_reason: "review_not_started",
+          cross_feed: "none",
+          initial_review_ms: 0,
+          reconciliation_ms: 0,
+        },
+        runtime: error?.runtime || runtime,
+        reviewerOutcomes,
+        primaryOutcome,
+      });
+      writeJsonAtomically(receiptPath, receipt);
+    }
     writeJsonAtomically(runPath, {
       schema_version: 1,
-      status: "failed",
+      status: receipt ? "partial" : "failed",
       started_at: runStartedAt,
       finished_at: new Date().toISOString(),
       base_commit: binding?.baseCommit || null,
@@ -1493,8 +1959,11 @@ async function main() {
       candidate_tree: binding?.candidateTree || null,
       patch_sha256: binding?.patchSha256 || null,
       terminal_state: terminalState,
+      outcome: receipt?.outcome || receiptOutcome(primaryOutcome),
+      reviewer_outcomes: reviewerOutcomes,
       runtime: error?.runtime || runtime,
       log_directory: logDirectory || null,
+      receipt_path: receipt ? receiptPath : null,
       error: `Review ended in ${terminalState}; see the private review log for details.`,
     });
     process.stderr.write(`${error.message}\n`);
@@ -1506,7 +1975,9 @@ async function main() {
 
 module.exports = {
   REVIEW_STATES,
+  aggregatePartialOutcome,
   buildWindowsCommandLine,
+  classifyAvailabilityProbe,
   classifyReviewFailure,
   rejectClaudeReviewerToolUse,
   runSupervisedProcess,

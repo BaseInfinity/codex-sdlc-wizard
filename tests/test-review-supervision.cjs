@@ -9,6 +9,8 @@ const path = require("node:path");
 
 const {
   REVIEW_STATES,
+  aggregatePartialOutcome,
+  classifyAvailabilityProbe,
   classifyReviewFailure,
   rejectClaudeReviewerToolUse,
   runSupervisedProcess,
@@ -111,6 +113,20 @@ function realClaudeAdvisorEvent() {
   };
 }
 
+function realClaudeStructuredOutputEvent() {
+  return {
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "StructuredOutput",
+        input: { findings: [], verdict: "CERTIFIED", confidence: 92 },
+        caller: { type: "direct" },
+      }],
+    },
+  };
+}
+
 function testClaudeToolUseDetectorScansRealAssistantEnvelope() {
   assert.equal(
     rejectClaudeReviewerToolUse(realClaudeAdvisorEvent()),
@@ -125,6 +141,30 @@ function testClaudeToolUseDetectorScansArrayEnvelope() {
       { type: "result", structured_output: { findings: [], verdict: "CERTIFIED", confidence: 99 } },
     ]),
     "forbidden reviewer tool use: advisor",
+  );
+}
+
+function testClaudeToolUseDetectorAllowsOnlyValidatedReviewOutputTransport() {
+  assert.equal(
+    rejectClaudeReviewerToolUse(realClaudeStructuredOutputEvent(), { allowStructuredOutput: true }),
+    "",
+  );
+  assert.equal(
+    rejectClaudeReviewerToolUse(realClaudeStructuredOutputEvent()),
+    "forbidden reviewer tool use: StructuredOutput",
+  );
+  assert.equal(
+    rejectClaudeReviewerToolUse([
+      realClaudeStructuredOutputEvent(),
+      realClaudeAdvisorEvent(),
+    ], { allowStructuredOutput: true }),
+    "forbidden reviewer tool use: advisor",
+  );
+  const malformed = realClaudeStructuredOutputEvent();
+  malformed.message.content[0].input = { verdict: "CERTIFIED" };
+  assert.equal(
+    rejectClaudeReviewerToolUse(malformed, { allowStructuredOutput: true }),
+    "forbidden reviewer tool use: StructuredOutput",
   );
 }
 
@@ -205,6 +245,85 @@ function testAuthAndInvalidVerdictClassification() {
   }), REVIEW_STATES.INVALID_VERDICT);
 }
 
+function testAvailabilityProbeUsesActualTerminalState() {
+  assert.deepEqual(classifyAvailabilityProbe({
+    status: 1,
+    stdout: "Authentication required. Run /login.",
+    stderr: "",
+    terminal_state: REVIEW_STATES.AUTH_OR_INPUT_BLOCKED,
+  }, "quota_exhausted"), {
+    confirmed: false,
+    classification: "auth",
+  });
+  assert.deepEqual(classifyAvailabilityProbe({
+    status: 1,
+    stdout: "",
+    stderr: "Network connection failed.",
+    terminal_state: REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE,
+  }, "quota_exhausted"), {
+    confirmed: false,
+    classification: "invocation",
+  });
+  assert.deepEqual(classifyAvailabilityProbe({
+    status: null,
+    stdout: "quota exhausted",
+    stderr: "",
+    cancelled: true,
+    terminal_state: REVIEW_STATES.CANCELLED,
+  }, "quota_exhausted"), {
+    confirmed: false,
+    classification: "invocation",
+  });
+  assert.deepEqual(classifyAvailabilityProbe({
+    status: 0,
+    stdout: "available",
+    stderr: "",
+    terminal_state: REVIEW_STATES.CLEAN,
+  }, "quota_exhausted"), {
+    confirmed: false,
+    classification: "invocation",
+  });
+}
+
+function testAggregateRetryRequiresEveryCausalFailureToBeTransient() {
+  const transientQuota = {
+    completed: false,
+    classification: "quota",
+    infrastructure_failure: true,
+    transient: true,
+    retry: { recommended: true, guidance: "Retry after reviewer quota becomes available." },
+    verdict: null,
+    runtime: { terminal_state: REVIEW_STATES.PROVIDER_OR_TRANSPORT_FAILURE },
+  };
+  const invalidExecution = {
+    completed: false,
+    classification: "invalid_execution",
+    infrastructure_failure: false,
+    transient: false,
+    retry: { recommended: false, guidance: null },
+    verdict: null,
+    runtime: { terminal_state: REVIEW_STATES.INVALID_VERDICT },
+  };
+  const cancelledPeer = {
+    completed: false,
+    classification: "invocation",
+    infrastructure_failure: false,
+    transient: false,
+    retry: { recommended: false, guidance: null },
+    verdict: null,
+    runtime: { terminal_state: REVIEW_STATES.CANCELLED },
+  };
+
+  assert.deepEqual(
+    aggregatePartialOutcome(transientQuota, { sol: transientQuota, cross_model: invalidExecution }, {}),
+    { ...transientQuota, retry: { recommended: false, guidance: null } },
+  );
+  assert.deepEqual(
+    aggregatePartialOutcome(transientQuota, { sol: transientQuota, cross_model: cancelledPeer }, {}),
+    transientQuota,
+  );
+}
+
 async function testOneInfrastructureRetryOnly() {
   let calls = 0;
   const recovered = await runWithInfrastructureRetry(async () => {
@@ -235,10 +354,13 @@ async function testOneInfrastructureRetryOnly() {
   await testUnstructuredChatterDoesNotFakeProgress();
   testClaudeToolUseDetectorScansRealAssistantEnvelope();
   testClaudeToolUseDetectorScansArrayEnvelope();
+  testClaudeToolUseDetectorAllowsOnlyValidatedReviewOutputTransport();
   await testRejectedToolUseCannotBecomeCleanResult();
   await testRejectedFinalBufferCannotBecomeCleanResult();
   await testRejectedToolUseOutranksTimeout();
   testAuthAndInvalidVerdictClassification();
+  testAggregateRetryRequiresEveryCausalFailureToBeTransient();
+  testAvailabilityProbeUsesActualTerminalState();
   await testOneInfrastructureRetryOnly();
   process.stdout.write("review supervision tests passed\n");
 })().catch((error) => {
