@@ -13,6 +13,8 @@ const {
   claudeToolFreeArgs,
   classifyAvailabilityProbe,
   classifyReviewFailure,
+  independentPrompt,
+  reconciliationPrompt,
   rejectClaudeReviewerToolUse,
   runSupervisedProcess,
   runWithInfrastructureRetry,
@@ -233,6 +235,28 @@ function testClaudeToolFreePreflightRequiresEmptyInitAndExactResult() {
   );
 }
 
+function testReviewPromptsNameTheExactVerdictContract() {
+  const binding = {
+    baseCommit: "base-commit",
+    headCommit: "head-commit",
+    candidateTree: "candidate-tree",
+    patchSha256: "sha256:patch",
+  };
+  const proof = { commands: ["proof command"], status: "passed" };
+  const review = { findings: [], verdict: "CERTIFIED", confidence: 98 };
+  const prompts = [
+    independentPrompt("Fable High", binding, proof, Buffer.from("candidate patch")),
+    reconciliationPrompt("Fable High", { name: "sol", review }, review, binding, proof, Buffer.from("candidate patch")),
+  ].map(String);
+
+  for (const prompt of prompts) {
+    assert.match(prompt, /Set verdict to exactly "CERTIFIED" or "NOT CERTIFIED"/);
+    assert.match(prompt, /Do not use aliases/);
+    assert.match(prompt, /"CERTIFIED" only when there are no P0\/P1 findings/);
+    assert.match(prompt, /"NOT CERTIFIED" whenever any P0\/P1 finding exists/);
+  }
+}
+
 function testClaudeReviewRequiresExactPlainJsonContract() {
   const reviewer = { label: "Fable High", actualModel: /^(?:fable|claude-fable(?:-|$))/i };
   const review = { findings: [], verdict: "CERTIFIED", confidence: 98 };
@@ -267,6 +291,11 @@ function testClaudeReviewRequiresExactPlainJsonContract() {
   assert.throws(
     () => validateClaudeReviewEvents(output({ result: JSON.stringify({ ...review, extra: true }) }), reviewer),
     /unexpected field/i,
+  );
+  // Alias rejection is the pre-existing fail-closed validator boundary; prompt guidance must not replace it.
+  assert.throws(
+    () => validateClaudeReviewEvents(output({ result: JSON.stringify({ ...review, verdict: "pass" }) }), reviewer),
+    /invalid structured review/i,
   );
   assert.throws(
     () => validateClaudeReviewEvents(output({
@@ -470,6 +499,7 @@ async function testOneInfrastructureRetryOnly() {
   testClaudeToolUseDetectorNormalizesNestedEventShapes();
   testClaudeLaunchIsToolFreeByConstruction();
   testClaudeToolFreePreflightRequiresEmptyInitAndExactResult();
+  testReviewPromptsNameTheExactVerdictContract();
   testClaudeReviewRequiresExactPlainJsonContract();
   await testRejectedToolUseCannotBecomeCleanResult();
   await testRejectedFinalBufferCannotBecomeCleanResult();
