@@ -13,6 +13,7 @@ UPSTREAM_SYNC_WORKFLOW="$REPO_DIR/.github/workflows/upstream-sync.yml"
 UPSTREAM_VERSION_FILE="$REPO_DIR/UPSTREAM_VERSION"
 PACKAGE_JSON="$REPO_DIR/package.json"
 PROOF_RUNNER="$REPO_DIR/scripts/run-proof-suite.cjs"
+ADAPTER_TEST="$REPO_DIR/tests/test-adapter.sh"
 JSON_HELPERS="$REPO_DIR/lib/json-node.sh"
 source "$JSON_HELPERS"
 require_node
@@ -346,6 +347,14 @@ test_parallel_proof_runner_exists_and_lists_full_suite() {
     fi
 }
 
+test_canonical_adapter_cannot_inherit_a_focus_selector() {
+    if grep -Fq 'ADAPTER_TEST_ONLY' "$ADAPTER_TEST"; then
+        fail "Canonical adapter test entrypoint still honors an inherited focus selector"
+    else
+        pass "Canonical adapter test entrypoint cannot inherit a focus selector"
+    fi
+}
+
 test_readme_points_to_release_checklist() {
     if grep -Eq 'RELEASE\.md|release checklist' "$README"; then
         pass "README points maintainers to the release checklist"
@@ -390,6 +399,7 @@ test_release_checklist_enforces_sync_and_proof
 test_release_checklist_points_to_parallel_proof_runner
 test_proof_docs_do_not_pre_run_broad_checks
 test_parallel_proof_runner_exists_and_lists_full_suite
+test_canonical_adapter_cannot_inherit_a_focus_selector
 test_readme_points_to_release_checklist
 test_roadmap_tests_are_version_agnostic
 

@@ -8,7 +8,7 @@ REPO_DIR="$SCRIPT_DIR/.."
 ROADMAP="$REPO_DIR/ROADMAP.md"
 PACKAGE_JSON="$REPO_DIR/package.json"
 REPOSITORY_URL_REGEX='https://github[.]com/BaseInfinity/codex-sdlc-wizard'
-OPEN_ISSUES="58 65 66 72 77 79 82 84 86 88 92 93 95 96 97 99 100 101 104 105 106 107 108 109 112 113 114 122 123 124 125 126 127 128 129 130 131 132 134 135 136 138 139 140 141 142 144 147 151 153 154 160 162 163 164 171 172"
+OPEN_ISSUES="58 65 66 72 77 79 82 84 86 88 92 93 95 96 97 99 100 101 104 105 106 107 108 109 112 113 114 122 123 124 125 126 127 128 129 130 131 132 134 135 136 138 139 140 141 142 144 147 151 153 154 160 162 163 164 168 169 171 174 175"
 PUBLISHED_VERSION="0.7.37"
 PASSED=0
 FAILED=0
@@ -58,8 +58,8 @@ test_issue_line_is_scoped_to_priority_queue() {
     local actual
     local expected
 
-    actual=$(issue_line 172)
-    expected=$(priority_lines | grep -nE "$REPOSITORY_URL_REGEX/issues/172([^0-9]|$)" | cut -d: -f1 | head -n1 || true)
+    actual=$(issue_line 175)
+    expected=$(priority_lines | grep -nE "$REPOSITORY_URL_REGEX/issues/175([^0-9]|$)" | cut -d: -f1 | head -n1 || true)
 
     if [ -n "$actual" ] && [ "$actual" = "$expected" ]; then
         pass "Issue ordering is measured inside the priority queue"
@@ -117,29 +117,31 @@ test_roadmap_states_release_boundary() {
 }
 
 test_roadmap_has_current_resume_checkpoint() {
-    local issue_172
+    local issue_175
+    local issue_174
     local issue_86
     local issue_109
 
-    issue_172=$(issue_line 172)
+    issue_175=$(issue_line 175)
+    issue_174=$(issue_line 174)
     issue_86=$(issue_line 86)
     issue_109=$(issue_line 109)
 
     if grep -Eq '^## Cold-session checkpoint' "$ROADMAP" &&
-       grep -Eqi '#172.*(active|resume|first)|(active|resume|first).*#172' "$ROADMAP" &&
-       [ -n "$issue_172" ] && [ -n "$issue_86" ] && [ -n "$issue_109" ] &&
-       [ "$issue_172" -lt "$issue_86" ] && [ "$issue_86" -lt "$issue_109" ]; then
-        pass "Roadmap gives the current #172, #86, #109 release checkpoint"
+       grep -Eqi '#175.*(active|resume|first)|(active|resume|first).*#175' "$ROADMAP" &&
+       [ -n "$issue_175" ] && [ -n "$issue_174" ] && [ -n "$issue_86" ] && [ -n "$issue_109" ] &&
+       [ "$issue_175" -lt "$issue_174" ] && [ "$issue_174" -lt "$issue_86" ] && [ "$issue_86" -lt "$issue_109" ]; then
+        pass "Roadmap gives the current #175, #174, #86, #109 release checkpoint"
     else
-        fail "Roadmap does not give the current #172, #86, #109 release checkpoint"
+        fail "Roadmap does not give the current #175, #174, #86, #109 release checkpoint"
     fi
 }
 
 test_roadmap_states_milestone_snapshot() {
-    if grep -Eqi 'milestone.*nine open.*fourteen completed|nine open.*fourteen completed.*milestone' "$ROADMAP"; then
+    if grep -Eqi 'milestone.*ten open.*fifteen completed|ten open.*fifteen completed.*milestone' "$ROADMAP"; then
         pass "Roadmap states the live 1.0 milestone snapshot"
     else
-        fail "Roadmap does not state the live nine-open, fourteen-completed 1.0 snapshot"
+        fail "Roadmap does not state the live ten-open, fifteen-completed 1.0 snapshot"
     fi
 }
 
@@ -206,7 +208,7 @@ test_roadmap_priority_section_contains_only_numbered_items() {
 test_roadmap_excludes_resolved_issues() {
     local issue_number
     local stale=0
-    local closed_issues="64 67 71 73 81 91 98 110 111 115 116 137 143 148 157 158 167"
+    local closed_issues="64 67 71 73 81 91 98 110 111 115 116 137 143 148 157 158 167 172"
 
     for issue_number in $closed_issues; do
         if roadmap_has_issue "$issue_number"; then
@@ -250,7 +252,7 @@ test_roadmap_head_order_matches_priority() {
     local previous=0
     local current
     local issue_number
-    local ordered_issues="172 86 109 141 127 92 93 79 88 129 128 123 84 130 153 154 82 95 106 100 151 136 135 126 112 138 132 124 131 147 162 164 171 114 72 77 66 140 108 139 99 65 113 160 105 104 101 107 144 142 134 125 122 97 58 96 163"
+    local ordered_issues="175 174 86 109 141 127 92 93 79 88 129 128 123 84 130 153 154 82 95 106 100 151 136 135 126 112 138 132 124 131 147 162 164 171 168 114 72 77 66 140 108 139 99 65 113 160 105 104 101 107 144 142 134 125 122 97 58 96 163 169"
 
     for issue_number in $ordered_issues; do
         current=$(issue_line "$issue_number")
