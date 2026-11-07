@@ -12,6 +12,7 @@ const checks = [
   { name: "packaging", command: "bash tests/test-packaging.sh" },
   { name: "npm", command: "bash tests/test-npm.sh" },
   { name: "skill", command: "bash tests/test-skill.sh" },
+  { name: "conduct-native", command: "bash tests/test-conduct-native.sh" },
   { name: "release", command: "bash tests/test-release.sh" },
   { name: "roadmap", command: "bash tests/test-roadmap.sh" },
   { name: "benchmark", command: "bash tests/test-benchmark.sh" },

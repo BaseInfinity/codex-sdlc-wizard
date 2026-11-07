@@ -42,7 +42,8 @@ If a writer crashes, the error names its `.write-lock` directory and `owner.json
 | Claude teammate from Claude | Native Claude agent messaging | Exact iTerm2 session ID |
 | One-shot Claude from Codex | `claude -p` | Exact iTerm2 session ID |
 | Codex Desktop | Native thread/session adapter | Registered iTerm2 session when applicable |
-| Claude Desktop | Installed Claude plugin/MCP adapter | None until registered; do not claim reachability |
+| Claude Desktop Code tab | Registered native Claude messaging, directly or through a CLI courier | None until registered; do not claim reachability |
+| Ordinary Claude Desktop chat / Cowork | No verified native inbound route in this install | Unavailable until a supported adapter is verified |
 
 `it2api` is the universal local fallback for visible iTerm2 panes, not the primary transport. Send to an exact session ID and submit the text as a separate carriage-return action. Use `it2api get-buffer` only for the session involved in the current authorized handoff.
 
@@ -53,6 +54,9 @@ The receiver owns model, reasoning effort, permissions, and escalation policy. D
 For an inactive Codex session, use `codex queue --resume` when a local daemon or selected remote server can resume it. Queue success confirms acceptance only: a failed resume is a warning, so verify the target actually runs and produces its correlated result before reporting completion. Otherwise report it as queued and awaiting a reachable receiver.
 
 ## Discovery
+
+For native local Codex discovery/read/queue from a terminal, see [references/codex-native.md](references/codex-native.md). This optional adapter supports sessions exposed by the selected daemon, regardless of the controller's UI. Verify an actual desktop target before calling it desktop-compatible.
+For Claude's Desktop Code tab and inbound-message constraints, see [references/claude-desktop.md](references/claude-desktop.md).
 
 - Use the native session-listing capability exposed on the current surface.
 - `claude agents --json` lists interactive and background Claude sessions with session UUID, unique name, cwd, PID, and status. A Claude CLI courier can use native `ListAgents` / `SendMessage` to deliver the saved envelope to an existing session inbox while it is busy. Give the courier the verified target mapping and restrict it to reading that envelope and sending that one message; it must not perform the task itself. Cross-check native refs/names against the registry and reject ambiguous targets. Inbox acceptance is `sent`; only a receiver response proves completion.

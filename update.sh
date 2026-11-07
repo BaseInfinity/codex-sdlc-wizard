@@ -28,7 +28,8 @@ CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
 CORE_SKILLS=("conduct" "feedback" "setup-wizard" "update-wizard")
-CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "references/protocol.md" "agents/openai.yaml")
+CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "scripts/codex-native.py" "references/protocol.md" "references/codex-native.md" "references/claude-desktop.md" "agents/openai.yaml")
+PRE_NATIVE_CONDUCT_SKILL_HASH="sha256:1fdc5685ac73ce181ab7df85a30b2e4c732a8c6e38a2843986dd9860b6309041"
 COLLIDING_GLOBAL_SKILLS=("sdlc:repo-scoped .agents/skills/sdlc")
 LEGACY_SKILLS=("codex-sdlc:sdlc")
 LEGACY_MODEL_POLICY_SDLC_SKILL_HASH="sha256:c2c280c2b0edf97538c674bf131eec06f0b6a3b50f4d56924c929f6bd0e509df"
@@ -231,6 +232,16 @@ conduct_support_missing() {
     return 1
 }
 
+conduct_template_is_pre_native() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_NATIVE_CONDUCT_SKILL_HASH" ]
+}
+
+conduct_template_is_stock() {
+    diff -q "$SCRIPT_DIR/skill-sources/conduct/SKILL.template.md" "$SKILLS_ROOT/conduct/SKILL.md" >/dev/null 2>&1 ||
+        conduct_template_is_pre_native
+}
+
 repair_skill() {
     local skill_name="$1"
     local source_path="$SCRIPT_DIR/skill-sources/$skill_name"
@@ -243,7 +254,7 @@ repair_skill() {
     fi
 
     if [ "$skill_name" = "conduct" ] && [ "$FORCE_ALL" = "false" ] &&
-       [ -f "$target_path/SKILL.md" ] && diff -q "$source_template" "$target_path/SKILL.md" >/dev/null 2>&1; then
+       [ -f "$target_path/SKILL.md" ] && conduct_template_is_stock; then
         local support_file
         for support_file in "${CONDUCT_SUPPORT_FILES[@]}"; do
             if [ ! -e "$target_path/$support_file" ]; then
@@ -251,6 +262,11 @@ repair_skill() {
                 cp "$source_path/$support_file" "$target_path/$support_file"
             fi
         done
+        if conduct_template_is_pre_native; then
+            mkdir -p "$SKILLS_BACKUP_ROOT"
+            cp "$target_path/SKILL.md" "$SKILLS_BACKUP_ROOT/conduct-template.bak.$(date +%s)"
+            cp "$source_template" "$target_path/SKILL.md"
+        fi
         return 0
     fi
 
@@ -581,9 +597,9 @@ for skill_name in "${CORE_SKILLS[@]}"; do
         CHANGES_PENDING=true
         queue_skill_repair "$skill_name"
     elif [ "$skill_name" = "conduct" ] &&
-         diff -q "$SCRIPT_DIR/skill-sources/conduct/SKILL.template.md" "$SKILLS_ROOT/conduct/SKILL.md" >/dev/null 2>&1 &&
-         conduct_support_missing; then
-        skill_status="missing support files"
+         conduct_template_is_stock &&
+         { conduct_support_missing || conduct_template_is_pre_native; }; then
+        skill_status="missing support files or prior stock template"
         skill_action="repair"
         CHANGES_PENDING=true
         queue_skill_repair "$skill_name"
