@@ -340,6 +340,8 @@ test_installer_uses_canonical_sdlc_skill_name() {
     [ -f "$target_repo/.codex-home/skills/setup-wizard/SKILL.md" ] || valid=false
     [ -f "$target_repo/.codex-home/skills/update-wizard/SKILL.md" ] || valid=false
     [ -f "$target_repo/.codex-home/skills/feedback/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.codex-home/skills/conduct/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.codex-home/skills/conduct/scripts/conduct.cjs" ] || valid=false
     [ -f "$target_repo/.agents/skills/sdlc/SKILL.md" ] || valid=false
     [ ! -d "$target_repo/.codex-home/skills/codex-sdlc" ] || valid=false
     find "$target_repo/.codex-home/backups/skills" -maxdepth 1 -name 'codex-sdlc.bak.*' 2>/dev/null | grep -q . || valid=false

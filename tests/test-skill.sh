@@ -11,6 +11,9 @@ OPENAI_YAML="$REPO_DIR/skills/codex-sdlc-wizard/agents/openai.yaml"
 REPO_SDLC_SKILL="$REPO_DIR/.agents/skills/sdlc/SKILL.md"
 REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
 GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
+CONDUCT_SKILL_SOURCE="$GLOBAL_SKILL_SOURCES/conduct/SKILL.template.md"
+CONDUCT_OPENAI_YAML="$GLOBAL_SKILL_SOURCES/conduct/agents/openai.yaml"
+CONDUCT_SCRIPT="$GLOBAL_SKILL_SOURCES/conduct/scripts/conduct.cjs"
 REPO_AGENTS="$REPO_DIR/AGENTS.md"
 PASSED=0
 FAILED=0
@@ -295,12 +298,12 @@ test_plugin_skill_bundle_avoids_duplicate_helper_discovery() {
         avoids_nested_skill_files=false
     fi
 
-    for skill_name in feedback sdlc setup-wizard update-wizard; do
+    for skill_name in conduct feedback sdlc setup-wizard update-wizard; do
         [ -f "$GLOBAL_SKILL_SOURCES/$skill_name/SKILL.template.md" ] || has_installable_sources=false
     done
 
     grep -Fq '$sourceSkillsRoot = Join-Path $SourceRoot "skill-sources"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
-    grep -Fq '$globalHelperSkills = @("feedback", "setup-wizard", "update-wizard")' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq '$globalHelperSkills = @("conduct", "feedback", "setup-wizard", "update-wizard")' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
     grep -Fq '$installedTemplatePath = Join-Path $installedSkillPath "SKILL.template.md"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
     grep -Fq 'Move-Item -LiteralPath $installedTemplatePath -Destination $installedSkillFile' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
     grep -Fq 'Install-RepoSkill -SourceRoot $scriptDir -Name "sdlc"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
@@ -318,6 +321,103 @@ test_plugin_skill_bundle_avoids_duplicate_helper_discovery() {
         pass "Plugin bundle templates avoid recursive discovery and materialize on shell and PowerShell paths"
     else
         fail "Root bundle templates are discoverable, missing, or not materialized by the PowerShell installer"
+    fi
+}
+
+test_conduct_skill_documents_shared_protocol_and_reachability_boundary() {
+    local has_source=true
+    local has_metadata=true
+    local has_eight_fields=true
+    local has_native_first=true
+    local has_registered_boundary=true
+    local has_desktop_boundary=true
+    local has_loop_guard=true
+    local has_no_raw_trigger=true
+
+    [ -f "$CONDUCT_SKILL_SOURCE" ] || has_source=false
+    [ -f "$CONDUCT_OPENAI_YAML" ] || has_metadata=false
+    grep -Fq '{v, id, from, to, type, prompt, cwd, ref}' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_eight_fields=false
+    grep -Eqi 'native-first|native first' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_native_first=false
+    grep -Eqi 'registered.*reachable|reachable.*registered' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_registered_boundary=false
+    grep -Eqi 'Claude Desktop.*adapter|adapter.*Claude Desktop' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_desktop_boundary=false
+    grep -Eqi 'one request.*one response|response.*must.*reference' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_loop_guard=false
+    grep -Eqi 'no raw.*trigger|never.*raw.*trigger' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_no_raw_trigger=false
+
+    if [ "$has_source" = "true" ] &&
+       [ "$has_metadata" = "true" ] &&
+       [ "$has_eight_fields" = "true" ] &&
+       [ "$has_native_first" = "true" ] &&
+       [ "$has_registered_boundary" = "true" ] &&
+       [ "$has_desktop_boundary" = "true" ] &&
+       [ "$has_loop_guard" = "true" ] &&
+       [ "$has_no_raw_trigger" = "true" ]; then
+        pass "conduct skill documents the shared protocol, reachability boundary, and loop guard"
+    else
+        fail "conduct skill is missing the protocol, reachability boundary, or safety contract"
+    fi
+}
+
+test_conduct_helper_writes_exact_envelopes_and_blocks_response_loops() {
+    local ws request_path response_path ledger_path
+    local valid=true
+    ws=$(mktemp -d)
+    request_path="$ws/.brain/runs/run-001/outbox/req-001.json"
+    response_path="$ws/.brain/runs/run-001/inbox/res-001.json"
+    ledger_path="$ws/.brain/runs/run-001/turns.jsonl"
+
+    [ -f "$CONDUCT_SCRIPT" ] || valid=false
+
+    if [ "$valid" = "true" ]; then
+        node "$CONDUCT_SCRIPT" emit \
+            --root "$ws" --run run-001 --box outbox --id req-001 \
+            --from codex:primary --to claude:reviewer --type review \
+            --prompt "Review the protocol" --cwd "$ws" >/dev/null || valid=false
+
+        node "$CONDUCT_SCRIPT" emit \
+            --root "$ws" --run run-001 --box inbox --id res-001 \
+            --from claude:reviewer --to codex:primary --type result \
+            --prompt "Protocol is sound" --cwd "$ws" --ref req-001 >/dev/null || valid=false
+    fi
+
+    [ -f "$request_path" ] || valid=false
+    [ -f "$response_path" ] || valid=false
+    [ -f "$ledger_path" ] || valid=false
+
+    if [ "$valid" = "true" ]; then
+        REQUEST_PATH="$request_path" RESPONSE_PATH="$response_path" LEDGER_PATH="$ledger_path" node <<'NODE' || valid=false
+const fs = require("fs");
+const expectedFields = ["v", "id", "from", "to", "type", "prompt", "cwd", "ref"];
+const request = JSON.parse(fs.readFileSync(process.env.REQUEST_PATH, "utf8"));
+const response = JSON.parse(fs.readFileSync(process.env.RESPONSE_PATH, "utf8"));
+const turns = fs.readFileSync(process.env.LEDGER_PATH, "utf8").trim().split("\n").map(JSON.parse);
+if (JSON.stringify(Object.keys(request)) !== JSON.stringify(expectedFields)) process.exit(1);
+if (JSON.stringify(Object.keys(response)) !== JSON.stringify(expectedFields)) process.exit(1);
+if (request.v !== 1 || request.ref !== null) process.exit(1);
+if (response.ref !== request.id || response.type !== "result") process.exit(1);
+if (turns.length !== 2 || turns.some((turn) => !turn.ts || !turn.envelope || !turn.status)) process.exit(1);
+NODE
+    fi
+
+    if [ "$valid" = "true" ] && node "$CONDUCT_SCRIPT" emit \
+        --root "$ws" --run run-001 --box outbox --id loop-001 \
+        --from codex:primary --to claude:reviewer --type result \
+        --prompt "Do not recurse" --cwd "$ws" --ref res-001 >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    if [ "$valid" = "true" ] && node "$CONDUCT_SCRIPT" emit \
+        --root "$ws" --run ../escape --box outbox --id escape-001 \
+        --from codex:primary --to claude:reviewer --type question \
+        --prompt "Do not escape" --cwd "$ws" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "conduct helper writes exact envelopes and blocks recursive/path-escape dispatch"
+    else
+        fail "conduct helper did not enforce the envelope, ledger, or loop-safety contract"
     fi
 }
 
@@ -425,6 +525,88 @@ test_plugin_skill_bundle_avoids_duplicate_helper_discovery
 test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
+test_conduct_skill_documents_shared_protocol_and_reachability_boundary
+test_conduct_helper_writes_exact_envelopes_and_blocks_response_loops
+
+test_conduct_rejects_symlink_state() {
+    local ws valid=true
+    ws=$(mktemp -d)
+    mkdir -p "$ws/.brain/runs/symlink-test"
+    touch "$ws/external.jsonl"
+    ln -s "$ws/external.jsonl" "$ws/.brain/runs/symlink-test/turns.jsonl"
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run symlink-test \
+        --from codex:a --to claude:b --type question --prompt test >/dev/null 2>&1; then
+        valid=false
+    fi
+    [ ! -s "$ws/external.jsonl" ] || valid=false
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then
+        pass "conduct rejects symlink state without writing outside its ledger"
+    else
+        fail "conduct follows symlink state"
+    fi
+}
+test_conduct_rejects_symlink_state
+
+test_conduct_cli_validation() {
+    local ws valid=true
+    ws=$(mktemp -d)
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run bad-box --box inbox --from a --to b --type task --prompt test >/dev/null 2>&1; then valid=false; fi
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run typo --from a --to b --type task --prompt test --roo "$ws" >/dev/null 2>&1; then valid=false; fi
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run false-answer --from a --to b --type task --prompt test --status answered >/dev/null 2>&1; then valid=false; fi
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run bad-status --from a --to b --type task --prompt test --status invented >/dev/null 2>&1; then valid=false; fi
+    node "$CONDUCT_SCRIPT" emit --root "$ws" --run diff --id diff-request --from a --to b --type review --prompt '--- a/file' >/dev/null 2>&1 || valid=false
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run diff --box outbox --from b --to a --type result --ref diff-request --prompt test >/dev/null 2>&1; then valid=false; fi
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then pass "conduct validates boxes/options and accepts raw diff prompts"; else fail "conduct CLI validation is incomplete"; fi
+}
+test_conduct_cli_validation
+
+test_conduct_rolls_back_failed_ledger_append() {
+    if CONDUCT_SCRIPT="$CONDUCT_SCRIPT" node <<'NODE'
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "conduct-append-"));
+const append = fs.appendFileSync;
+fs.appendFileSync = () => { throw new Error("injected append failure"); };
+process.argv = [process.execPath, process.env.CONDUCT_SCRIPT, "emit", "--root", root, "--run", "failure", "--id", "req", "--from", "a", "--to", "b", "--type", "question", "--prompt", "test"];
+require(process.env.CONDUCT_SCRIPT);
+fs.appendFileSync = append;
+const stranded = fs.existsSync(path.join(root, ".brain/runs/failure/outbox/req.json"));
+fs.rmSync(root, { recursive: true });
+process.exitCode = stranded ? 1 : 0;
+NODE
+    then pass "conduct rolls back envelope when ledger append fails"; else fail "conduct strands envelope on append failure"; fi
+}
+test_conduct_rolls_back_failed_ledger_append
+
+test_conduct_status_events_and_lock_owner() {
+    local ws valid=true
+    ws=$(mktemp -d)
+    node "$CONDUCT_SCRIPT" emit --root "$ws" --run state --id req --from a --to b --type task --prompt test >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status sent --transport codex_queue >/dev/null 2>&1 || valid=false
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id missing --status sent >/dev/null 2>&1 && valid=false
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status invented >/dev/null 2>&1 && valid=false
+    if [ "$valid" = true ]; then
+        LEDGER="$ws/.brain/runs/state/turns.jsonl" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const turns = fs.readFileSync(process.env.LEDGER, "utf8").trim().split("\n").map(JSON.parse);
+if (turns.length !== 2 || turns[1].status !== "sent" || turns[1].transport !== "codex_queue") process.exit(1);
+if (JSON.stringify(turns[0].envelope) !== JSON.stringify(turns[1].envelope)) process.exit(1);
+NODE
+    fi
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status answered >/dev/null 2>&1 && valid=false
+    node "$CONDUCT_SCRIPT" emit --root "$ws" --run state --box inbox --id response --from b --to a --type result --ref req --prompt done >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status answered >/dev/null || valid=false
+    mkdir "$ws/.brain/runs/state/.write-lock"
+    local error
+    error=$(node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status delivered 2>&1) && valid=false
+    [[ "$error" == *"$ws/.brain/runs/state/.write-lock"* ]] || valid=false
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then pass "conduct records delivery events and identifies locked run"; else fail "conduct status or lock diagnostics failed"; fi
+}
+test_conduct_status_events_and_lock_owner
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

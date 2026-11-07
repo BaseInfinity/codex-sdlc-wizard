@@ -145,7 +145,7 @@ function Install-Skills {
     $skillsRoot = Join-Path $codexHome "skills"
     $skillsBackupRoot = Join-Path $codexHome "backups\skills"
     $sourceSkillsRoot = Join-Path $SourceRoot "skill-sources"
-    $globalHelperSkills = @("feedback", "setup-wizard", "update-wizard")
+    $globalHelperSkills = @("conduct", "feedback", "setup-wizard", "update-wizard")
     New-Item -ItemType Directory -Path $skillsRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $skillsBackupRoot -Force | Out-Null
 
@@ -455,4 +455,4 @@ Write-Host "Escalation policy: Max is single-task reasoning; Ultra is subagent-b
 Write-Host "Wrote repo-local .codex/config.toml model keys for this profile; mixed is experimental wizard policy, not a native Codex mode."
 Write-Host "Codex loads project config only after the repo is trusted, and trusted project config overrides your user-level ~/.codex/config.toml."
 Write-Host "Codex does not have a native /sdlc command. Use `$sdlc plus START-SDLC.md and SDLC-LOOP.md as the honest equivalent."
-Write-Host "After restart, use `$sdlc as the public workflow. Setup/update/feedback helpers are installed for Codex support, not as extra repo-scoped lifecycle entrypoints."
+Write-Host "After restart, use `$sdlc for delivery and `$conduct for registered cross-session coordination. Setup/update/feedback remain support helpers, not extra repo-scoped lifecycle entrypoints."

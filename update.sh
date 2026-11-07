@@ -27,7 +27,8 @@ FORCE_ALL=false
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
-CORE_SKILLS=("feedback" "setup-wizard" "update-wizard")
+CORE_SKILLS=("conduct" "feedback" "setup-wizard" "update-wizard")
+CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "references/protocol.md" "agents/openai.yaml")
 COLLIDING_GLOBAL_SKILLS=("sdlc:repo-scoped .agents/skills/sdlc")
 LEGACY_SKILLS=("codex-sdlc:sdlc")
 LEGACY_MODEL_POLICY_SDLC_SKILL_HASH="sha256:c2c280c2b0edf97538c674bf131eec06f0b6a3b50f4d56924c929f6bd0e509df"
@@ -222,6 +223,14 @@ is_model_policy_static_surface() {
     esac
 }
 
+conduct_support_missing() {
+    local support_file
+    for support_file in "${CONDUCT_SUPPORT_FILES[@]}"; do
+        [ -e "$SKILLS_ROOT/conduct/$support_file" ] || return 0
+    done
+    return 1
+}
+
 repair_skill() {
     local skill_name="$1"
     local source_path="$SCRIPT_DIR/skill-sources/$skill_name"
@@ -231,6 +240,18 @@ repair_skill() {
     if [ ! -d "$source_path" ] || [ ! -f "$source_template" ]; then
         echo "Error: expected wizard skill source is missing: skill-sources/$skill_name" >&2
         exit 1
+    fi
+
+    if [ "$skill_name" = "conduct" ] && [ "$FORCE_ALL" = "false" ] &&
+       [ -f "$target_path/SKILL.md" ] && diff -q "$source_template" "$target_path/SKILL.md" >/dev/null 2>&1; then
+        local support_file
+        for support_file in "${CONDUCT_SUPPORT_FILES[@]}"; do
+            if [ ! -e "$target_path/$support_file" ]; then
+                mkdir -p "$(dirname "$target_path/$support_file")"
+                cp "$source_path/$support_file" "$target_path/$support_file"
+            fi
+        done
+        return 0
     fi
 
     mkdir -p "$SKILLS_ROOT"
@@ -557,6 +578,13 @@ for skill_name in "${CORE_SKILLS[@]}"; do
     if [ ! -f "$SKILLS_ROOT/$skill_name/SKILL.md" ]; then
         skill_status="missing"
         skill_action="install"
+        CHANGES_PENDING=true
+        queue_skill_repair "$skill_name"
+    elif [ "$skill_name" = "conduct" ] &&
+         diff -q "$SCRIPT_DIR/skill-sources/conduct/SKILL.template.md" "$SKILLS_ROOT/conduct/SKILL.md" >/dev/null 2>&1 &&
+         conduct_support_missing; then
+        skill_status="missing support files"
+        skill_action="repair"
         CHANGES_PENDING=true
         queue_skill_repair "$skill_name"
     elif [ "$FORCE_ALL" = "true" ]; then

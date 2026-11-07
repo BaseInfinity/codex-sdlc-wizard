@@ -1,0 +1,5 @@
+version: 1
+interface:
+  display_name: Conduct
+  short_description: "Coordinate Claude and Codex sessions"
+  default_prompt: Use $conduct to list reachable agent sessions, dispatch one bounded request through the best available transport, and record the request and response in the shared .brain ledger.

@@ -123,6 +123,8 @@ test_npm_pack_includes_runtime_files() {
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "assets/composer-icon.svg") ? "yes" : ""')" = "yes" ] || has_plugin_brand_assets=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "assets/logo.svg") ? "yes" : ""')" = "yes" ] || has_plugin_brand_assets=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skill-sources/sdlc/SKILL.template.md") ? "yes" : ""')" = "yes" ] || has_canonical_sdlc_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skill-sources/conduct/SKILL.template.md") ? "yes" : ""')" = "yes" ] || has_canonical_sdlc_skill=false
+        [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skill-sources/conduct/scripts/conduct.cjs") ? "yes" : ""')" = "yes" ] || has_canonical_sdlc_skill=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => (file.path.startsWith("skill-sources/") && file.path.endsWith("/SKILL.md")) || file.path.startsWith("skill-sources/codex-sdlc/")) ? "yes" : ""')" = "yes" ] && has_legacy_sdlc_skill=true
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === "skills/codex-sdlc-wizard/agents/openai.yaml") ? "yes" : ""')" = "yes" ] || has_openai_yaml=false
         [ "$(printf '%s' "$json" | json_get_stdin 'Array.isArray(data) && data[0] && Array.isArray(data[0].files) && data[0].files.some((file) => file.path === ".agents/skills/sdlc/SKILL.md") ? "yes" : ""')" = "yes" ] || has_repo_sdlc_skill=false
@@ -290,6 +292,8 @@ test_default_cli_updates_initialized_repo_without_explicit_subcommand() {
     [ -f "$target_repo/.codex-home-second/skills/setup-wizard/SKILL.md" ] || valid=false
     [ -f "$target_repo/.codex-home-second/skills/update-wizard/SKILL.md" ] || valid=false
     [ -f "$target_repo/.codex-home-second/skills/feedback/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.codex-home-second/skills/conduct/SKILL.md" ] || valid=false
+    [ -f "$target_repo/.codex-home-second/skills/conduct/scripts/conduct.cjs" ] || valid=false
 
     rm -rf "$pack_dir" "$target_repo" "$npm_cache"
 
