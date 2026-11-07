@@ -14,6 +14,7 @@ GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
 CONDUCT_SKILL_SOURCE="$GLOBAL_SKILL_SOURCES/conduct/SKILL.template.md"
 CONDUCT_OPENAI_YAML="$GLOBAL_SKILL_SOURCES/conduct/agents/openai.yaml"
 CONDUCT_SCRIPT="$GLOBAL_SKILL_SOURCES/conduct/scripts/conduct.cjs"
+CONDUCT_PROTOCOL="$GLOBAL_SKILL_SOURCES/conduct/references/protocol.md"
 REPO_AGENTS="$REPO_DIR/AGENTS.md"
 PASSED=0
 FAILED=0
@@ -607,6 +608,42 @@ NODE
     if [ "$valid" = true ]; then pass "conduct records delivery events and identifies locked run"; else fail "conduct status or lock diagnostics failed"; fi
 }
 test_conduct_status_events_and_lock_owner
+
+test_conduct_reciprocal_recovery_contract() {
+    local valid=true
+    # These are independent authorization/concurrency invariants of peer recovery.
+    grep -Eqi 'any (registered and reachable|reachable) peer.*recover' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'one recovery owner|single recovery owner' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'preserve.*(draft|unsubmitted)' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'confirm.*(old|previous).*(exit|terminated)' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'direct user instruction.*(restart|permission)' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'peer.*claim.*(not|never).*authorization' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi '(reciprocal|mutual).*recovery' "$CONDUCT_PROTOCOL" || valid=false
+    grep -Eqi 'unresolved user choices' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'draft.*unsubmitted.*unless.*user' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'earliest unanswered recovery request' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi "recovering agent.s own user turn" "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'no correlated result' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'supersedes.*current owning request' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'first emit.*ledger order' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'ambiguous provenance.*peer content' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'contenders mark.*failed' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'only.*adapter.*keep.*unsubmitted' "$CONDUCT_SKILL_SOURCE" || valid=false
+    local contract_file
+    for contract_file in "$CONDUCT_SKILL_SOURCE" "$CONDUCT_PROTOCOL"; do
+        grep -Eqi 'emit.*then reread the ledger' "$contract_file" || valid=false
+        grep -Eqi '(cite|citing).*verified evidence.*(owner stopped|handed off)' "$contract_file" || valid=false
+        grep -Eqi 'no correlated result' "$contract_file" || valid=false
+        grep -Eqi 'supersedes.*current owning request' "$contract_file" || valid=false
+        grep -Eqi 'ambiguous provenance.*peer content' "$contract_file" || valid=false
+    done
+    if [ "$valid" = true ]; then
+        pass "conduct recovery preserves user authority, drafts, and one live writer"
+    else
+        fail "conduct lacks the reciprocal recovery contract"
+    fi
+}
+test_conduct_reciprocal_recovery_contract
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="
