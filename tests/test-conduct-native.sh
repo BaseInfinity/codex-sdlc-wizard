@@ -6,4 +6,5 @@ if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; assert sys.
     echo "SKIP: optional native Codex adapter tests require Python 3.11+"
     exit 0
 fi
+PYTHONDONTWRITEBYTECODE=1 python3 "$SCRIPT_DIR/test-codex-thread.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$SCRIPT_DIR/test-conduct-native.py"

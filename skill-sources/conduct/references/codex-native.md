@@ -12,6 +12,43 @@ Codex CLI with an argument array and never executes prompt text as shell source.
 These are optional adapter prerequisites; ordinary conduct ledger operations
 still use Node and do not need Python.
 
+## Start a new stored thread
+
+To start a new Codex thread under an absolute working directory, save the first
+prompt in a file. Keep the script, working directory, and prompt file as
+separate arguments; programmatic callers use an argument array, and shell users
+quote each path.
+
+On Unix, use `python3`:
+
+```bash
+python3 "<skill-root>/scripts/codex-thread.py" "/absolute/cwd" "/absolute/prompt.txt"
+```
+
+On Windows, use `py -3`:
+
+```powershell
+py -3 "<skill-root>\scripts\codex-thread.py" "C:\absolute\cwd" "C:\absolute\prompt.txt"
+```
+
+If the Python launcher is unavailable, use a verified Python 3 `python.exe` or
+`python` executable with the same separate, quoted arguments; do not assume an
+unverified `python` command is Python 3. These instructions provide portable
+invocation guidance, not live Windows proof or coverage.
+
+The helper starts a private `codex app-server --listen stdio://`, creates the
+thread with sandbox `read-only` and approval policy `never`, sends one turn,
+then prints `THREAD <id>` and the exact final agent answer. Exit 0 means the
+turn completed; invalid arguments or any failed, interrupted, incomplete, or
+RPC-failed turn are nonzero. The thread is stored where Codex Desktop can list
+it, but this terminal route does not grant direct GUI access or permission to
+change another receiver's runtime mode. It uses only Python's standard library
+and was observed with Codex CLI 0.167.0.
+
+This helper owns only the private app-server process it starts and reaps that
+process when the bounded turn ends. It does not start, stop, or reconfigure the
+shared daemon used by `codex-native.py` below.
+
 ```bash
 # Discover local sessions; use returned UUIDs, preserve pagination cursors.
 python3 <skill-root>/scripts/codex-native.py list --limit 20

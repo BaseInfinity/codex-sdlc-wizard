@@ -624,6 +624,7 @@ test_update_repairs_missing_native_skills() {
     run_setup_local "$ws"
     rm -rf "$ws/.codex-home/skills/feedback"
     rm -f "$ws/.codex-home/skills/conduct/scripts/conduct.cjs"
+    rm -f "$ws/.codex-home/skills/conduct/scripts/codex-thread.py"
     rm -f "$ws/.codex-home/skills/conduct/agents/openai.yaml"
 
     local output valid=true
@@ -632,14 +633,17 @@ test_update_repairs_missing_native_skills() {
     [ -f "$ws/.codex-home/skills/feedback/SKILL.md" ] || valid=false
     [ -f "$ws/.codex-home/skills/conduct/SKILL.md" ] || valid=false
     [ -f "$ws/.codex-home/skills/conduct/scripts/conduct.cjs" ] || valid=false
+    [ -f "$ws/.codex-home/skills/conduct/scripts/codex-thread.py" ] || valid=false
     [ -f "$ws/.codex-home/skills/conduct/agents/openai.yaml" ] || valid=false
     echo "$output" | grep -q 'skills/feedback' 2>/dev/null || valid=false
     echo "$output" | grep -q 'skills/conduct' 2>/dev/null || valid=false
     echo "$output" | grep -qi 'install\|repair' 2>/dev/null || valid=false
 
     echo '# USER CUSTOM CONDUCT PROTOCOL' >> "$ws/.codex-home/skills/conduct/references/protocol.md"
+    rm -f "$ws/.codex-home/skills/conduct/scripts/codex-thread.py"
     rm -f "$ws/.codex-home/skills/conduct/agents/openai.yaml"
     output=$(run_update "$ws")
+    [ -f "$ws/.codex-home/skills/conduct/scripts/codex-thread.py" ] || valid=false
     [ -f "$ws/.codex-home/skills/conduct/agents/openai.yaml" ] || valid=false
     grep -Fq 'USER CUSTOM CONDUCT PROTOCOL' "$ws/.codex-home/skills/conduct/references/protocol.md" || valid=false
     rm -rf "$ws"

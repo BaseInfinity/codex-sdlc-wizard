@@ -28,8 +28,11 @@ CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
 CORE_SKILLS=("conduct" "feedback" "setup-wizard" "update-wizard")
-CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "scripts/codex-native.py" "references/protocol.md" "references/codex-native.md" "references/claude-desktop.md" "agents/openai.yaml")
+CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "scripts/codex-native.py" "scripts/codex-thread.py" "references/protocol.md" "references/codex-native.md" "references/claude-desktop.md" "agents/openai.yaml")
 PRE_NATIVE_CONDUCT_SKILL_HASH="sha256:1fdc5685ac73ce181ab7df85a30b2e4c732a8c6e38a2843986dd9860b6309041"
+PRE_THREAD_CONDUCT_SKILL_HASH="sha256:ab2068e4d8cacdcdac72cad5c75c1e915e8eb93f244bcba91fd8e0b45ace3e86"
+PRE_THREAD_CODEX_NATIVE_REFERENCE_HASH="sha256:de0ae0dc16214a3506db0500168e68c6c19f80208fda8c3c1a9ef651e061a93a"
+PRE_THREAD_CLAUDE_DESKTOP_REFERENCE_HASH="sha256:0144ec3e1818f439dc9eeb65004c763ff26537f89ec4a84c59aba8fe75925617"
 COLLIDING_GLOBAL_SKILLS=("sdlc:repo-scoped .agents/skills/sdlc")
 LEGACY_SKILLS=("codex-sdlc:sdlc")
 LEGACY_MODEL_POLICY_SDLC_SKILL_HASH="sha256:c2c280c2b0edf97538c674bf131eec06f0b6a3b50f4d56924c929f6bd0e509df"
@@ -232,14 +235,49 @@ conduct_support_missing() {
     return 1
 }
 
+conduct_support_file_is_pre_thread() {
+    local support_file="$1"
+    local expected_hash
+
+    case "$support_file" in
+        references/codex-native.md) expected_hash="$PRE_THREAD_CODEX_NATIVE_REFERENCE_HASH" ;;
+        references/claude-desktop.md) expected_hash="$PRE_THREAD_CLAUDE_DESKTOP_REFERENCE_HASH" ;;
+        *) return 1 ;;
+    esac
+
+    [ -f "$SKILLS_ROOT/conduct/$support_file" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/$support_file")" = "$expected_hash" ]
+}
+
+conduct_support_needs_stock_refresh() {
+    local support_file
+    for support_file in "${CONDUCT_SUPPORT_FILES[@]}"; do
+        conduct_support_file_is_pre_thread "$support_file" && return 0
+    done
+    return 1
+}
+
+conduct_support_needs_repair() {
+    conduct_support_missing || conduct_support_needs_stock_refresh
+}
+
 conduct_template_is_pre_native() {
     [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
         [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_NATIVE_CONDUCT_SKILL_HASH" ]
 }
 
+conduct_template_is_pre_thread() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_THREAD_CONDUCT_SKILL_HASH" ]
+}
+
+conduct_template_needs_stock_refresh() {
+    conduct_template_is_pre_native || conduct_template_is_pre_thread
+}
+
 conduct_template_is_stock() {
     diff -q "$SCRIPT_DIR/skill-sources/conduct/SKILL.template.md" "$SKILLS_ROOT/conduct/SKILL.md" >/dev/null 2>&1 ||
-        conduct_template_is_pre_native
+        conduct_template_needs_stock_refresh
 }
 
 repair_skill() {
@@ -260,9 +298,11 @@ repair_skill() {
             if [ ! -e "$target_path/$support_file" ]; then
                 mkdir -p "$(dirname "$target_path/$support_file")"
                 cp "$source_path/$support_file" "$target_path/$support_file"
+            elif conduct_support_file_is_pre_thread "$support_file"; then
+                cp "$source_path/$support_file" "$target_path/$support_file"
             fi
         done
-        if conduct_template_is_pre_native; then
+        if conduct_template_needs_stock_refresh; then
             mkdir -p "$SKILLS_BACKUP_ROOT"
             cp "$target_path/SKILL.md" "$SKILLS_BACKUP_ROOT/conduct-template.bak.$(date +%s)"
             cp "$source_template" "$target_path/SKILL.md"
@@ -598,8 +638,8 @@ for skill_name in "${CORE_SKILLS[@]}"; do
         queue_skill_repair "$skill_name"
     elif [ "$skill_name" = "conduct" ] &&
          conduct_template_is_stock &&
-         { conduct_support_missing || conduct_template_is_pre_native; }; then
-        skill_status="missing support files or prior stock template"
+         { conduct_support_needs_repair || conduct_template_needs_stock_refresh; }; then
+        skill_status="missing or prior stock support files or prior stock template"
         skill_action="repair"
         CHANGES_PENDING=true
         queue_skill_repair "$skill_name"

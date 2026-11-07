@@ -356,6 +356,29 @@ test_installer_uses_canonical_sdlc_skill_name() {
     fi
 }
 
+test_installer_packages_codex_thread_helper() {
+    local adapter_clone
+    local target_repo
+    adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
+    target_repo=$(mktemp -d "$MKTEMP_DIR/sdlc-target-repo.XXXXXX")
+
+    cp -R "$REPO_DIR/." "$adapter_clone/"
+    (
+        cd "$target_repo"
+        CODEX_HOME="$target_repo/.codex-home" bash "$adapter_clone/install.sh" >/dev/null 2>&1
+    )
+
+    local installed=true
+    [ -f "$target_repo/.codex-home/skills/conduct/scripts/codex-thread.py" ] || installed=false
+    rm -rf "$adapter_clone" "$target_repo"
+
+    if [ "$installed" = "true" ]; then
+        pass "Installer packages the Conduct codex-thread helper"
+    else
+        fail "Installer did not package the Conduct codex-thread helper"
+    fi
+}
+
 test_installer_recommends_current_codex_restart_resume() {
     local adapter_clone
     local target_repo
@@ -1207,6 +1230,7 @@ test_consumer_bug_report_template_exists() {
 test_installer_smoke_test_clean_project
 test_installer_scaffolds_only_default_repo_scope_sdlc_skill
 test_installer_uses_canonical_sdlc_skill_name
+test_installer_packages_codex_thread_helper
 test_installer_writes_default_model_profile
 test_installer_renders_explicit_mixed_baseline
 test_installer_rejects_unsupported_codex_before_mutation

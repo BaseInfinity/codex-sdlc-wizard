@@ -15,6 +15,8 @@ CONDUCT_SKILL_SOURCE="$GLOBAL_SKILL_SOURCES/conduct/SKILL.template.md"
 CONDUCT_OPENAI_YAML="$GLOBAL_SKILL_SOURCES/conduct/agents/openai.yaml"
 CONDUCT_SCRIPT="$GLOBAL_SKILL_SOURCES/conduct/scripts/conduct.cjs"
 CONDUCT_PROTOCOL="$GLOBAL_SKILL_SOURCES/conduct/references/protocol.md"
+CONDUCT_CODEX_NATIVE_REFERENCE="$GLOBAL_SKILL_SOURCES/conduct/references/codex-native.md"
+CONDUCT_CLAUDE_DESKTOP_REFERENCE="$GLOBAL_SKILL_SOURCES/conduct/references/claude-desktop.md"
 REPO_AGENTS="$REPO_DIR/AGENTS.md"
 PASSED=0
 FAILED=0
@@ -644,6 +646,103 @@ test_conduct_reciprocal_recovery_contract() {
     fi
 }
 test_conduct_reciprocal_recovery_contract
+
+test_conduct_codex_delegates_claude_desktop_startup_through_registered_conductor() {
+    local ws request_prompt result_prompt valid=true
+    ws=$(mktemp -d)
+    request_prompt='User-authorized bounded host delegation: start one Claude Desktop Code session for this folder. Use --no-trust; if Trust is required, do not approve it and return NEEDS_TRUST with actual receiver evidence.'
+    result_prompt='NEEDS_TRUST: receiver invoked claude-desktop.sh --no-trust; no Trust control was pressed.'
+
+    node "$CONDUCT_SCRIPT" emit \
+        --root "$ws" --run desktop-startup --box outbox --id start-request \
+        --from codex:controller --to claude:registered-conductor --type task \
+        --prompt "$request_prompt" --cwd "$ws" >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" mark \
+        --root "$ws" --run desktop-startup --id start-request \
+        --status sent --transport claude_native >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" emit \
+        --root "$ws" --run desktop-startup --box inbox --id start-result \
+        --from claude:registered-conductor --to codex:controller --type result \
+        --prompt "$result_prompt" --cwd "$ws" --ref start-request >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" mark \
+        --root "$ws" --run desktop-startup --id start-request \
+        --status answered --transport claude_native >/dev/null || valid=false
+
+    if [ "$valid" = true ]; then
+        ROOT="$ws" REQUEST_PROMPT="$request_prompt" RESULT_PROMPT="$result_prompt" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.env.ROOT;
+const run = path.join(root, ".brain", "runs", "desktop-startup");
+const request = JSON.parse(fs.readFileSync(path.join(run, "outbox", "start-request.json"), "utf8"));
+const result = JSON.parse(fs.readFileSync(path.join(run, "inbox", "start-result.json"), "utf8"));
+const turns = fs.readFileSync(path.join(run, "turns.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+if (request.from !== "codex:controller" || request.to !== "claude:registered-conductor") process.exit(1);
+if (request.type !== "task" || request.prompt !== process.env.REQUEST_PROMPT || request.ref !== null) process.exit(1);
+if (result.from !== request.to || result.to !== request.from || result.type !== "result") process.exit(1);
+if (result.ref !== request.id || result.prompt !== process.env.RESULT_PROMPT) process.exit(1);
+if (turns.length !== 4) process.exit(1);
+if (new Set(turns.map((turn) => turn.envelope.id)).size !== 2) process.exit(1);
+if (turns[turns.length - 1].status !== "answered") process.exit(1);
+NODE
+    fi
+
+    grep -Eqi 'Codex conductor.*registered Claude conductor|registered Claude conductor.*Codex conductor' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'user-authorized.*delegat|delegat.*user-authorized' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Fq -- '--no-trust' "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Fq 'NEEDS_TRUST' "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'runtime.*denial|denied action' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'receiver.*owns?.*permission|permission.*owned by.*receiver' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'not.*direct.*(GUI|Desktop).*access|does not grant.*direct.*access' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'canonical inbox|\.brain/runs/.*/inbox' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'relay.*return message.*expire|return message.*expire' \
+        "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'actual receiver evidence' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then
+        pass "conduct records one bounded Codex-to-Claude Desktop startup delegation and exact result"
+    else
+        fail "conduct lacks the bounded registered-Claude Desktop startup route or its denial guardrails"
+    fi
+}
+test_conduct_codex_delegates_claude_desktop_startup_through_registered_conductor
+
+test_conduct_new_thread_docs_use_platform_python_launchers() {
+    local valid=true
+    grep -Eqi 'platform(-appropriate)? Python( 3)? launcher|Python 3.*platform(-appropriate)? launcher' \
+        "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq '[references/codex-native.md](references/codex-native.md)' \
+        "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq '`python3 scripts/codex-thread.py CWD PROMPT_FILE`' \
+        "$CONDUCT_SKILL_SOURCE" && valid=false
+    grep -Eqi 'On Unix.*`python3`|`python3`.*on Unix' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'On Windows.*`py -3`|`py -3`.*on Windows' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'verified Python 3.*`python(\.exe)?`|`python(\.exe)?`.*verified Python 3' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'argument array|separate argument' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'quote each path|quoted path' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'no live Windows.*(proof|coverage)|not.*live Windows.*(proof|coverage)' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+
+    if [ "$valid" = true ]; then
+        pass "conduct documents platform-appropriate Python launchers for new Codex threads"
+    else
+        fail "conduct new-thread docs require a python3 alias or overclaim Windows coverage"
+    fi
+}
+test_conduct_new_thread_docs_use_platform_python_launchers
 
 echo ""
 echo "=== Results: $PASSED passed, $FAILED failed ==="

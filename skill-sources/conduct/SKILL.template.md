@@ -37,6 +37,7 @@ If a writer crashes, the error names its `.write-lock` directory and `owner.json
 | Target | Preferred route | Fallback |
 |---|---|---|
 | Existing Codex session | Native Codex session tool when available; otherwise `codex queue --thread <uuid-or-exact-name> --message <text>` | Exact iTerm2 session ID |
+| New Codex thread | Python 3 via the platform-appropriate launcher in [references/codex-native.md](references/codex-native.md) | `codex exec` when a stored Desktop-visible thread is not needed |
 | One-shot Codex | `codex exec` | Exact iTerm2 session ID |
 | Existing Claude session from Codex | Claude CLI courier with native `ListAgents` / `SendMessage`, when exposed | Exact iTerm2 session ID |
 | Claude teammate from Claude | Native Claude agent messaging | Exact iTerm2 session ID |
@@ -44,6 +45,10 @@ If a writer crashes, the error names its `.write-lock` directory and `owner.json
 | Codex Desktop | Native thread/session adapter | Registered iTerm2 session when applicable |
 | Claude Desktop Code tab | Registered native Claude messaging, directly or through a CLI courier | None until registered; do not claim reachability |
 | Ordinary Claude Desktop chat / Cowork | No verified native inbound route in this install | Unavailable until a supported adapter is verified |
+
+`scripts/codex-thread.py` starts a new stored Codex thread through a private stdio app-server. It uses a read-only sandbox with approval policy `never`, prints `THREAD <id>` and the exact final answer, and returns success only for a completed turn. See [references/codex-native.md](references/codex-native.md). This is a new-thread route, not authority to change the policy of an existing receiver.
+
+For a user-authorized Claude Desktop Code startup, a Codex conductor first discovers a registered Claude conductor, records one bounded task in the canonical outbox, and delegates the host action to that receiver. The Claude conductor uses its own verified Desktop driver; this Codex package does not vendor or invoke that GUI driver and delegation does not grant Codex direct GUI or Desktop access. Require `--no-trust` unless the user has already granted Trust; if Trust is needed, the receiver returns `NEEDS_TRUST` with actual receiver evidence in one correlated result in the canonical inbox. Runtime denials, dialogs, permissions, and modes remain receiver-owned: never approve, bypass, or change them through delegation. Stop after the result; do not create a response loop or permanent watcher. See [references/claude-desktop.md](references/claude-desktop.md).
 
 `it2api` is the universal local fallback for visible iTerm2 panes, not the primary transport. Send to an exact session ID and submit the text as a separate carriage-return action. Use `it2api get-buffer` only for the session involved in the current authorized handoff.
 
