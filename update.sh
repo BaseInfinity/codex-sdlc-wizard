@@ -27,7 +27,18 @@ FORCE_ALL=false
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
-CORE_SKILLS=("feedback" "setup-wizard" "update-wizard")
+CORE_SKILLS=("conduct" "feedback" "setup-wizard" "update-wizard")
+CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "scripts/codex-native.py" "scripts/codex-thread.py" "references/protocol.md" "references/codex-native.md" "references/claude-desktop.md" "agents/openai.yaml")
+PRE_NATIVE_CONDUCT_SKILL_HASH="sha256:1fdc5685ac73ce181ab7df85a30b2e4c732a8c6e38a2843986dd9860b6309041"
+PRE_RECOVERY_CONDUCT_SKILL_HASH="sha256:79606cea31de0694d10e3fb4584f638644d1c3cb8684bb79adead61c6cf1a1d0"
+PRE_THREAD_CONDUCT_SKILL_HASH="sha256:ab2068e4d8cacdcdac72cad5c75c1e915e8eb93f244bcba91fd8e0b45ace3e86"
+PRE_THREAD_CODEX_NATIVE_REFERENCE_HASH="sha256:de0ae0dc16214a3506db0500168e68c6c19f80208fda8c3c1a9ef651e061a93a"
+PRE_THREAD_CLAUDE_DESKTOP_REFERENCE_HASH="sha256:0144ec3e1818f439dc9eeb65004c763ff26537f89ec4a84c59aba8fe75925617"
+C30_CONDUCT_SKILL_HASH="sha256:0ecd37f0e2f90ef43893999444f5afa68bcf1539178d8adb3092b7c623a11b34"
+C30_CODEX_NATIVE_REFERENCE_HASH="sha256:4e6742e6f3f1bc0fd0bf38a7ab63982f148a5d0e274c722b5f0b23cf091b6db8"
+C30_CODEX_THREAD_HASH="sha256:41790af2f70eb9312113a54174afa2f861426f4bc43b87d7babaf3fd97ecf2e2"
+C30_CONDUCT_WRITER_HASH="sha256:53ed69e212151d6eddc850e1bc651d1b1b534e4513b1ae3eda95eb9d2cf5d9a6"
+C30_CODEX_NATIVE_HASH="sha256:f07314fba9e4a0cf2c552f469d01edaf1fedefeba60d930fcb1849e3e561f260"
 COLLIDING_GLOBAL_SKILLS=("sdlc:repo-scoped .agents/skills/sdlc")
 LEGACY_SKILLS=("codex-sdlc:sdlc")
 LEGACY_MODEL_POLICY_SDLC_SKILL_HASH="sha256:c2c280c2b0edf97538c674bf131eec06f0b6a3b50f4d56924c929f6bd0e509df"
@@ -296,6 +307,206 @@ is_model_policy_static_surface() {
     esac
 }
 
+conduct_support_missing() {
+    local support_file
+    for support_file in "${CONDUCT_SUPPORT_FILES[@]}"; do
+        [ -e "$SKILLS_ROOT/conduct/$support_file" ] || return 0
+    done
+    return 1
+}
+
+conduct_support_file_is_stock_predecessor() {
+    local support_file="$1"
+    local actual_hash
+
+    [ -f "$SKILLS_ROOT/conduct/$support_file" ] || return 1
+    case "$support_file" in
+        scripts/codex-native.py|scripts/codex-thread.py)
+            actual_hash="$(CONDUCT_PREDECESSOR_PATH="$SKILLS_ROOT/conduct/$support_file" node <<'NODE'
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+
+const content = fs.readFileSync(process.env.CONDUCT_PREDECESSOR_PATH, "utf8")
+  .replace(/\r\n/g, "\n");
+const digest = crypto.createHash("sha256").update(content, "utf8").digest("hex");
+process.stdout.write(`sha256:${digest}\n`);
+NODE
+)"
+            ;;
+        *)
+            actual_hash="$(file_sha256 "$SKILLS_ROOT/conduct/$support_file")"
+            ;;
+    esac
+    case "$support_file" in
+        scripts/conduct.cjs)
+            [ "$actual_hash" = "$C30_CONDUCT_WRITER_HASH" ]
+            ;;
+        scripts/codex-native.py)
+            [ "$actual_hash" = "$C30_CODEX_NATIVE_HASH" ]
+            ;;
+        references/codex-native.md)
+            [ "$actual_hash" = "$PRE_THREAD_CODEX_NATIVE_REFERENCE_HASH" ] ||
+                [ "$actual_hash" = "$C30_CODEX_NATIVE_REFERENCE_HASH" ]
+            ;;
+        references/claude-desktop.md)
+            [ "$actual_hash" = "$PRE_THREAD_CLAUDE_DESKTOP_REFERENCE_HASH" ]
+            ;;
+        scripts/codex-thread.py)
+            [ "$actual_hash" = "$C30_CODEX_THREAD_HASH" ]
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+conduct_support_needs_stock_refresh() {
+    local support_file
+    for support_file in "${CONDUCT_SUPPORT_FILES[@]}"; do
+        conduct_support_file_is_stock_predecessor "$support_file" && return 0
+    done
+    return 1
+}
+
+conduct_support_needs_repair() {
+    conduct_support_missing || conduct_support_needs_stock_refresh
+}
+
+conduct_template_is_pre_native() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_NATIVE_CONDUCT_SKILL_HASH" ]
+}
+
+conduct_template_is_pre_recovery() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_RECOVERY_CONDUCT_SKILL_HASH" ]
+}
+
+conduct_template_is_pre_thread() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_THREAD_CONDUCT_SKILL_HASH" ]
+}
+
+conduct_template_is_c30_stock() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$C30_CONDUCT_SKILL_HASH" ]
+}
+
+conduct_template_needs_stock_refresh() {
+    conduct_template_is_pre_native || conduct_template_is_pre_recovery || conduct_template_is_pre_thread ||
+        conduct_template_is_c30_stock
+}
+
+conduct_template_is_stock() {
+    diff -q "$SCRIPT_DIR/skill-sources/conduct/SKILL.template.md" "$SKILLS_ROOT/conduct/SKILL.md" >/dev/null 2>&1 ||
+        conduct_template_needs_stock_refresh
+}
+
+conduct_preflight_destination() {
+    local relative_path="$1"
+    local expected_type="$2"
+    local current_path="$CODEX_HOME_DIR"
+    local component index
+    local -a components
+
+    if [ -L "$current_path" ] || { [ -e "$current_path" ] && [ ! -d "$current_path" ]; }; then
+        echo "Unsafe Conduct repair destination: $current_path must be a physical directory; no Conduct files were changed." >&2
+        return 1
+    fi
+
+    IFS='/' read -r -a components <<< "$relative_path"
+    for ((index = 0; index < ${#components[@]}; index++)); do
+        component="${components[$index]}"
+        [ -n "$component" ] || continue
+        current_path="$current_path/$component"
+        if [ -L "$current_path" ]; then
+            echo "Unsafe Conduct repair destination: $current_path is a symbolic link; no Conduct files were changed." >&2
+            return 1
+        fi
+        if [ -e "$current_path" ]; then
+            if [ "$index" -eq $((${#components[@]} - 1)) ] && [ "$expected_type" = "file" ]; then
+                if [ ! -f "$current_path" ]; then
+                    echo "Unsafe Conduct repair destination: $current_path is not a regular file; no Conduct files were changed." >&2
+                    return 1
+                fi
+            elif [ ! -d "$current_path" ]; then
+                echo "Unsafe Conduct repair destination: $current_path is not a directory; no Conduct files were changed." >&2
+                return 1
+            fi
+        fi
+    done
+}
+
+conduct_repair_preflight() {
+    local support_file
+
+    conduct_preflight_destination "skills" "directory"
+    conduct_preflight_destination "skills/conduct" "directory"
+    conduct_preflight_destination "skills/conduct/SKILL.md" "file"
+    for support_file in "${CONDUCT_SUPPORT_FILES[@]}"; do
+        conduct_preflight_destination "skills/conduct/$support_file" "file"
+    done
+    conduct_preflight_destination "backups" "directory"
+    conduct_preflight_destination "backups/skills" "directory"
+}
+
+conduct_backup_exclusive() {
+    local source_path="$1"
+    local backup_stem="$2"
+    local backup_kind="$3"
+
+    CONDUCT_BACKUP_SOURCE="$source_path" \
+    CONDUCT_BACKUP_STEM="$backup_stem" \
+    CONDUCT_BACKUP_KIND="$backup_kind" node <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const source = process.env.CONDUCT_BACKUP_SOURCE;
+const stem = process.env.CONDUCT_BACKUP_STEM;
+const kind = process.env.CONDUCT_BACKUP_KIND;
+if (!source || !stem || !new Set(["file", "directory"]).has(kind)) {
+  throw new Error("invalid Conduct backup allocation request");
+}
+
+for (let suffix = 0; suffix < 1000; suffix += 1) {
+  const candidate = suffix === 0 ? stem : `${stem}.${suffix}`;
+  if (kind === "file") {
+    let descriptor;
+    try {
+      descriptor = fs.openSync(candidate, "wx", 0o600);
+    } catch (error) {
+      if (error && error.code === "EEXIST") continue;
+      throw error;
+    }
+    try {
+      fs.writeFileSync(descriptor, fs.readFileSync(source));
+    } finally {
+      fs.closeSync(descriptor);
+    }
+  } else {
+    try {
+      fs.mkdirSync(candidate);
+    } catch (error) {
+      if (error && error.code === "EEXIST") continue;
+      throw error;
+    }
+    for (const entry of fs.readdirSync(source)) {
+      fs.cpSync(path.join(source, entry), path.join(candidate, entry), {
+        recursive: true,
+        dereference: false,
+        errorOnExist: true,
+        force: false,
+        preserveTimestamps: true,
+        verbatimSymlinks: true,
+      });
+    }
+  }
+  process.stdout.write(`${candidate}\n`);
+  process.exit(0);
+}
+
+throw new Error(`cannot allocate a unique Conduct backup below ${stem}`);
+NODE
+}
+
 repair_skill() {
     local skill_name="$1"
     local source_path="$SCRIPT_DIR/skill-sources/$skill_name"
@@ -307,10 +518,43 @@ repair_skill() {
         exit 1
     fi
 
+    if [ "$skill_name" = "conduct" ]; then
+        conduct_repair_preflight
+    fi
+
+    if [ "$skill_name" = "conduct" ] && [ "$FORCE_ALL" = "false" ] &&
+       [ -f "$target_path/SKILL.md" ] && conduct_template_is_stock; then
+        local support_file
+        for support_file in "${CONDUCT_SUPPORT_FILES[@]}"; do
+            if [ ! -e "$target_path/$support_file" ]; then
+                mkdir -p "$(dirname "$target_path/$support_file")"
+                cp "$source_path/$support_file" "$target_path/$support_file"
+            elif conduct_support_file_is_stock_predecessor "$support_file"; then
+                cp "$source_path/$support_file" "$target_path/$support_file"
+            fi
+        done
+        if conduct_template_needs_stock_refresh; then
+            mkdir -p "$SKILLS_BACKUP_ROOT"
+            conduct_backup_exclusive \
+                "$target_path/SKILL.md" \
+                "$SKILLS_BACKUP_ROOT/conduct-template.bak.$(date +%s)" \
+                "file" >/dev/null
+            cp "$source_template" "$target_path/SKILL.md"
+        fi
+        return 0
+    fi
+
     mkdir -p "$SKILLS_ROOT"
     if [ -d "$target_path" ]; then
         mkdir -p "$SKILLS_BACKUP_ROOT"
-        cp -R "$target_path" "$SKILLS_BACKUP_ROOT/$skill_name.bak.$(date +%s)"
+        if [ "$skill_name" = "conduct" ]; then
+            conduct_backup_exclusive \
+                "$target_path" \
+                "$SKILLS_BACKUP_ROOT/conduct.bak.$(date +%s)" \
+                "directory" >/dev/null
+        else
+            cp -R "$target_path" "$SKILLS_BACKUP_ROOT/$skill_name.bak.$(date +%s)"
+        fi
         rm -rf "$target_path"
     fi
 
@@ -762,6 +1006,13 @@ for skill_name in "${CORE_SKILLS[@]}"; do
     if [ ! -f "$SKILLS_ROOT/$skill_name/SKILL.md" ]; then
         skill_status="missing"
         skill_action="install"
+        CHANGES_PENDING=true
+        queue_skill_repair "$skill_name"
+    elif [ "$skill_name" = "conduct" ] &&
+         conduct_template_is_stock &&
+         { conduct_support_needs_repair || conduct_template_needs_stock_refresh; }; then
+        skill_status="missing or prior stock support files or prior stock template"
+        skill_action="repair"
         CHANGES_PENDING=true
         queue_skill_repair "$skill_name"
     elif [ "$FORCE_ALL" = "true" ]; then

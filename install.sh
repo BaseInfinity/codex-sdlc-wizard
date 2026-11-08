@@ -128,7 +128,7 @@ done
 CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
-GLOBAL_HELPER_SKILLS=("feedback" "setup-wizard" "update-wizard")
+GLOBAL_HELPER_SKILLS=("conduct" "feedback" "setup-wizard" "update-wizard")
 INSTALL_TOUCHED_FILES=()
 
 mark_install_touched() {

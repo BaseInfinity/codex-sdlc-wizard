@@ -16,6 +16,12 @@ AGENTS_BASELINE="$REPO_DIR/templates/AGENTS.baseline.md"
 AGENTS_TEMPLATE="$REPO_DIR/templates/AGENTS.md.tmpl"
 REPO_ADLC_SKILL="$REPO_DIR/.agents/skills/adlc/SKILL.md"
 GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
+CONDUCT_SKILL_SOURCE="$GLOBAL_SKILL_SOURCES/conduct/SKILL.template.md"
+CONDUCT_OPENAI_YAML="$GLOBAL_SKILL_SOURCES/conduct/agents/openai.yaml"
+CONDUCT_SCRIPT="$GLOBAL_SKILL_SOURCES/conduct/scripts/conduct.cjs"
+CONDUCT_PROTOCOL="$GLOBAL_SKILL_SOURCES/conduct/references/protocol.md"
+CONDUCT_CODEX_NATIVE_REFERENCE="$GLOBAL_SKILL_SOURCES/conduct/references/codex-native.md"
+CONDUCT_CLAUDE_DESKTOP_REFERENCE="$GLOBAL_SKILL_SOURCES/conduct/references/claude-desktop.md"
 REPO_AGENTS="$REPO_DIR/AGENTS.md"
 REPO_CODEX_CONFIG="$REPO_DIR/.codex/config.toml"
 PASSED=0
@@ -341,12 +347,12 @@ test_plugin_skill_bundle_avoids_duplicate_helper_discovery() {
         avoids_nested_skill_files=false
     fi
 
-    for skill_name in feedback sdlc setup-wizard update-wizard; do
+    for skill_name in conduct feedback sdlc setup-wizard update-wizard; do
         [ -f "$GLOBAL_SKILL_SOURCES/$skill_name/SKILL.template.md" ] || has_installable_sources=false
     done
 
     grep -Fq '$sourceSkillsRoot = Join-Path $SourceRoot "skill-sources"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
-    grep -Fq '$globalHelperSkills = @("feedback", "setup-wizard", "update-wizard")' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
+    grep -Fq '$globalHelperSkills = @("conduct", "feedback", "setup-wizard", "update-wizard")' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
     grep -Fq '$installedTemplatePath = Join-Path $installedSkillPath "SKILL.template.md"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
     grep -Fq 'Move-Item -LiteralPath $installedTemplatePath -Destination $installedSkillFile' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
     grep -Fq 'Install-RepoSkill -SourceRoot $scriptDir -Name "sdlc"' "$REPO_DIR/install.ps1" || powershell_materializes_sources=false
@@ -611,6 +617,410 @@ test_sdlc_exposes_linked_worktree_git_target_to_hooks() {
     fi
 }
 
+test_conduct_skill_documents_shared_protocol_and_reachability_boundary() {
+    local has_source=true
+    local has_metadata=true
+    local has_eight_fields=true
+    local has_native_first=true
+    local has_registered_boundary=true
+    local has_desktop_boundary=true
+    local has_loop_guard=true
+    local has_no_raw_trigger=true
+
+    [ -f "$CONDUCT_SKILL_SOURCE" ] || has_source=false
+    [ -f "$CONDUCT_OPENAI_YAML" ] || has_metadata=false
+    grep -Fq '{v, id, from, to, type, prompt, cwd, ref}' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_eight_fields=false
+    grep -Eqi 'native-first|native first' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_native_first=false
+    grep -Eqi 'registered.*reachable|reachable.*registered' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_registered_boundary=false
+    grep -Eqi 'Claude Desktop.*adapter|adapter.*Claude Desktop' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_desktop_boundary=false
+    grep -Eqi 'one request.*one response|response.*must.*reference' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_loop_guard=false
+    grep -Eqi 'no raw.*trigger|never.*raw.*trigger' "$CONDUCT_SKILL_SOURCE" 2>/dev/null || has_no_raw_trigger=false
+
+    if [ "$has_source" = "true" ] &&
+       [ "$has_metadata" = "true" ] &&
+       [ "$has_eight_fields" = "true" ] &&
+       [ "$has_native_first" = "true" ] &&
+       [ "$has_registered_boundary" = "true" ] &&
+       [ "$has_desktop_boundary" = "true" ] &&
+       [ "$has_loop_guard" = "true" ] &&
+       [ "$has_no_raw_trigger" = "true" ]; then
+        pass "conduct skill documents the shared protocol, reachability boundary, and loop guard"
+    else
+        fail "conduct skill is missing the protocol, reachability boundary, or safety contract"
+    fi
+}
+
+test_conduct_helper_writes_exact_envelopes_and_blocks_response_loops() {
+    local ws request_path response_path ledger_path
+    local valid=true
+    ws=$(mktemp -d)
+    request_path="$ws/.brain/runs/run-001/outbox/req-001.json"
+    response_path="$ws/.brain/runs/run-001/inbox/res-001.json"
+    ledger_path="$ws/.brain/runs/run-001/turns.jsonl"
+
+    [ -f "$CONDUCT_SCRIPT" ] || valid=false
+
+    if [ "$valid" = "true" ]; then
+        node "$CONDUCT_SCRIPT" emit \
+            --root "$ws" --run run-001 --box outbox --id req-001 \
+            --from codex:primary --to claude:reviewer --type review \
+            --prompt "Review the protocol" --cwd "$ws" >/dev/null || valid=false
+
+        node "$CONDUCT_SCRIPT" emit \
+            --root "$ws" --run run-001 --box inbox --id res-001 \
+            --from claude:reviewer --to codex:primary --type result \
+            --prompt "Protocol is sound" --cwd "$ws" --ref req-001 >/dev/null || valid=false
+    fi
+
+    [ -f "$request_path" ] || valid=false
+    [ -f "$response_path" ] || valid=false
+    [ -f "$ledger_path" ] || valid=false
+
+    if [ "$valid" = "true" ]; then
+        REQUEST_PATH="$request_path" RESPONSE_PATH="$response_path" LEDGER_PATH="$ledger_path" node <<'NODE' || valid=false
+const fs = require("fs");
+const expectedFields = ["v", "id", "from", "to", "type", "prompt", "cwd", "ref"];
+const request = JSON.parse(fs.readFileSync(process.env.REQUEST_PATH, "utf8"));
+const response = JSON.parse(fs.readFileSync(process.env.RESPONSE_PATH, "utf8"));
+const turns = fs.readFileSync(process.env.LEDGER_PATH, "utf8").trim().split("\n").map(JSON.parse);
+if (JSON.stringify(Object.keys(request)) !== JSON.stringify(expectedFields)) process.exit(1);
+if (JSON.stringify(Object.keys(response)) !== JSON.stringify(expectedFields)) process.exit(1);
+if (request.v !== 1 || request.ref !== null) process.exit(1);
+if (response.ref !== request.id || response.type !== "result") process.exit(1);
+if (turns.length !== 2 || turns.some((turn) => !turn.ts || !turn.envelope || !turn.status)) process.exit(1);
+NODE
+    fi
+
+    if [ "$valid" = "true" ] && node "$CONDUCT_SCRIPT" emit \
+        --root "$ws" --run run-001 --box outbox --id loop-001 \
+        --from codex:primary --to claude:reviewer --type result \
+        --prompt "Do not recurse" --cwd "$ws" --ref res-001 >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    if [ "$valid" = "true" ] && node "$CONDUCT_SCRIPT" emit \
+        --root "$ws" --run ../escape --box outbox --id escape-001 \
+        --from codex:primary --to claude:reviewer --type question \
+        --prompt "Do not escape" --cwd "$ws" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    rm -rf "$ws"
+
+    if [ "$valid" = "true" ]; then
+        pass "conduct helper writes exact envelopes and blocks recursive/path-escape dispatch"
+    else
+        fail "conduct helper did not enforce the envelope, ledger, or loop-safety contract"
+    fi
+}
+
+test_conduct_rejects_symlink_state() {
+    local ws valid=true
+    ws=$(mktemp -d)
+    mkdir -p "$ws/.brain/runs/symlink-test"
+    touch "$ws/external.jsonl"
+    ln -s "$ws/external.jsonl" "$ws/.brain/runs/symlink-test/turns.jsonl"
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run symlink-test \
+        --from codex:a --to claude:b --type question --prompt test >/dev/null 2>&1; then
+        valid=false
+    fi
+    [ ! -s "$ws/external.jsonl" ] || valid=false
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then
+        pass "conduct rejects symlink state without writing outside its ledger"
+    else
+        fail "conduct follows symlink state"
+    fi
+}
+
+test_conduct_cli_validation() {
+    local ws valid=true
+    ws=$(mktemp -d)
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run bad-box --box inbox --from a --to b --type task --prompt test >/dev/null 2>&1; then valid=false; fi
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run typo --from a --to b --type task --prompt test --roo "$ws" >/dev/null 2>&1; then valid=false; fi
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run false-answer --from a --to b --type task --prompt test --status answered >/dev/null 2>&1; then valid=false; fi
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run bad-status --from a --to b --type task --prompt test --status invented >/dev/null 2>&1; then valid=false; fi
+    node "$CONDUCT_SCRIPT" emit --root "$ws" --run diff --id diff-request --from a --to b --type review --prompt '--- a/file' >/dev/null 2>&1 || valid=false
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run diff --box outbox --from b --to a --type result --ref diff-request --prompt test >/dev/null 2>&1; then valid=false; fi
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then pass "conduct validates boxes/options and accepts raw diff prompts"; else fail "conduct CLI validation is incomplete"; fi
+}
+
+test_conduct_rolls_back_failed_ledger_append() {
+    if CONDUCT_SCRIPT="$CONDUCT_SCRIPT" node <<'NODE'
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "conduct-append-"));
+const append = fs.appendFileSync;
+fs.appendFileSync = () => { throw new Error("injected append failure"); };
+process.argv = [process.execPath, process.env.CONDUCT_SCRIPT, "emit", "--root", root, "--run", "failure", "--id", "req", "--from", "a", "--to", "b", "--type", "question", "--prompt", "test"];
+require(process.env.CONDUCT_SCRIPT);
+fs.appendFileSync = append;
+const stranded = fs.existsSync(path.join(root, ".brain/runs/failure/outbox/req.json"));
+fs.rmSync(root, { recursive: true });
+process.exitCode = stranded ? 1 : 0;
+NODE
+    then pass "conduct rolls back envelope when ledger append fails"; else fail "conduct strands envelope on append failure"; fi
+}
+
+test_conduct_reconciles_matching_orphan_after_verified_lock_removal() {
+    local ws valid=true
+    ws=$(mktemp -d)
+
+    ROOT="$ws" node <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.env.ROOT;
+const run = path.join(root, ".brain/runs/orphan");
+const envelope = { v: 1, id: "req-orphan", from: "codex:a", to: "claude:b", type: "task", prompt: "recover me", cwd: path.resolve(root), ref: null };
+fs.mkdirSync(path.join(run, "outbox"), { recursive: true });
+fs.writeFileSync(path.join(run, "outbox/req-orphan.json"), `${JSON.stringify(envelope, null, 2)}\n`, { flag: "wx" });
+fs.mkdirSync(path.join(run, ".write-lock"));
+fs.writeFileSync(path.join(run, ".write-lock/owner.json"), JSON.stringify({ pid: 999999, started: "verified-stale-fixture" }));
+NODE
+
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run orphan --id req-orphan \
+        --from codex:a --to claude:b --type task --prompt 'recover me' --cwd "$ws" >/dev/null 2>&1; then
+        valid=false
+    fi
+    [ -d "$ws/.brain/runs/orphan/.write-lock" ] || valid=false
+    [ ! -e "$ws/.brain/runs/orphan/turns.jsonl" ] || valid=false
+
+    rm "$ws/.brain/runs/orphan/.write-lock/owner.json"
+    rmdir "$ws/.brain/runs/orphan/.write-lock"
+    node "$CONDUCT_SCRIPT" emit --root "$ws" --run orphan --id req-orphan \
+        --from codex:a --to claude:b --type task --prompt 'recover me' --cwd "$ws" >/dev/null 2>&1 || valid=false
+
+    ROOT="$ws" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.env.ROOT;
+const message = JSON.parse(fs.readFileSync(path.join(root, ".brain/runs/orphan/outbox/req-orphan.json"), "utf8"));
+const turns = fs.readFileSync(path.join(root, ".brain/runs/orphan/turns.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+const fields = ["v", "id", "from", "to", "type", "prompt", "cwd", "ref"];
+if (JSON.stringify(Object.keys(message)) !== JSON.stringify(fields)) process.exit(1);
+if (turns.length !== 1 || JSON.stringify(turns[0].envelope) !== JSON.stringify(message)) process.exit(1);
+NODE
+
+    ROOT="$ws" node <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.env.ROOT;
+const run = path.join(root, ".brain/runs/mismatch");
+const envelope = { v: 1, id: "req-mismatch", from: "codex:a", to: "claude:b", type: "task", prompt: "different orphan", cwd: path.resolve(root), ref: null };
+fs.mkdirSync(path.join(run, "outbox"), { recursive: true });
+fs.writeFileSync(path.join(run, "outbox/req-mismatch.json"), `${JSON.stringify(envelope, null, 2)}\n`, { flag: "wx" });
+NODE
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run mismatch --id req-mismatch \
+        --from codex:a --to claude:b --type task --prompt expected --cwd "$ws" >/dev/null 2>&1; then
+        valid=false
+    fi
+    ROOT="$ws" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.env.ROOT;
+const run = path.join(root, ".brain/runs/mismatch");
+const message = JSON.parse(fs.readFileSync(path.join(run, "outbox/req-mismatch.json"), "utf8"));
+if (message.prompt !== "different orphan" || fs.existsSync(path.join(run, "turns.jsonl"))) process.exit(1);
+NODE
+
+    node "$CONDUCT_SCRIPT" emit --root "$ws" --run duplicate --id req-duplicate \
+        --from codex:a --to claude:b --type task --prompt once --cwd "$ws" >/dev/null 2>&1 || valid=false
+    if node "$CONDUCT_SCRIPT" emit --root "$ws" --run duplicate --id req-duplicate \
+        --from codex:a --to claude:b --type task --prompt once --cwd "$ws" >/dev/null 2>&1; then
+        valid=false
+    fi
+    LEDGER="$ws/.brain/runs/duplicate/turns.jsonl" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const turns = fs.readFileSync(process.env.LEDGER, "utf8").trim().split("\n").map(JSON.parse);
+if (turns.length !== 1 || turns[0].envelope.id !== "req-duplicate") process.exit(1);
+NODE
+
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then
+        pass "conduct reconciles only a matching orphan after verified stale-lock removal"
+    else
+        fail "conduct cannot safely reconcile a matching orphan envelope"
+    fi
+}
+
+test_conduct_status_events_and_lock_owner() {
+    local ws valid=true
+    ws=$(mktemp -d)
+    node "$CONDUCT_SCRIPT" emit --root "$ws" --run state --id req --from a --to b --type task --prompt test >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status sent --transport codex_queue >/dev/null 2>&1 || valid=false
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id missing --status sent >/dev/null 2>&1 && valid=false
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status invented >/dev/null 2>&1 && valid=false
+    if [ "$valid" = true ]; then
+        LEDGER="$ws/.brain/runs/state/turns.jsonl" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const turns = fs.readFileSync(process.env.LEDGER, "utf8").trim().split("\n").map(JSON.parse);
+if (turns.length !== 2 || turns[1].status !== "sent" || turns[1].transport !== "codex_queue") process.exit(1);
+if (JSON.stringify(turns[0].envelope) !== JSON.stringify(turns[1].envelope)) process.exit(1);
+NODE
+    fi
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status answered >/dev/null 2>&1 && valid=false
+    node "$CONDUCT_SCRIPT" emit --root "$ws" --run state --box inbox --id response --from b --to a --type result --ref req --prompt done >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status answered >/dev/null || valid=false
+    mkdir "$ws/.brain/runs/state/.write-lock"
+    local error
+    error=$(node "$CONDUCT_SCRIPT" mark --root "$ws" --run state --id req --status delivered 2>&1) && valid=false
+    [[ "$error" == *"$ws/.brain/runs/state/.write-lock"* ]] || valid=false
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then pass "conduct records delivery events and identifies locked run"; else fail "conduct status or lock diagnostics failed"; fi
+}
+
+test_conduct_reciprocal_recovery_contract() {
+    local valid=true
+    # These are independent authorization/concurrency invariants of peer recovery.
+    grep -Eqi 'any (registered and reachable|reachable) peer.*recover' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'one recovery owner|single recovery owner' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'preserve.*(draft|unsubmitted)' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'confirm.*(old|previous).*(exit|terminated)' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'direct user instruction.*(restart|permission)' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'peer.*claim.*(not|never).*authorization' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi '(reciprocal|mutual).*recovery' "$CONDUCT_PROTOCOL" || valid=false
+    grep -Eqi 'unresolved user choices' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'draft.*unsubmitted.*unless.*user' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'earliest unanswered recovery request' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi "recovering agent.s own user turn" "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'no correlated result' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'supersedes.*current owning request' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'first emit.*ledger order' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'ambiguous provenance.*peer content' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'contenders mark.*failed' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Eqi 'only.*adapter.*keep.*unsubmitted' "$CONDUCT_SKILL_SOURCE" || valid=false
+    local contract_file
+    for contract_file in "$CONDUCT_SKILL_SOURCE" "$CONDUCT_PROTOCOL"; do
+        grep -Eqi 'emit.*then reread the ledger' "$contract_file" || valid=false
+        grep -Eqi '(cite|citing).*verified evidence.*(owner stopped|handed off)' "$contract_file" || valid=false
+        grep -Eqi 'no correlated result' "$contract_file" || valid=false
+        grep -Eqi 'supersedes.*current owning request' "$contract_file" || valid=false
+        grep -Eqi 'ambiguous provenance.*peer content' "$contract_file" || valid=false
+    done
+    if [ "$valid" = true ]; then
+        pass "conduct recovery preserves user authority, drafts, and one live writer"
+    else
+        fail "conduct lacks the reciprocal recovery contract"
+    fi
+}
+
+test_conduct_codex_delegates_claude_desktop_startup_through_registered_conductor() {
+    local ws request_prompt result_prompt valid=true
+    ws=$(mktemp -d)
+    request_prompt='User-authorized bounded host delegation: start one Claude Desktop Code session for this folder. Use --no-trust; if Trust is required, do not approve it and return NEEDS_TRUST with actual receiver evidence.'
+    result_prompt='NEEDS_TRUST: receiver invoked claude-desktop.sh --no-trust; no Trust control was pressed.'
+
+    node "$CONDUCT_SCRIPT" emit \
+        --root "$ws" --run desktop-startup --box outbox --id start-request \
+        --from codex:controller --to claude:registered-conductor --type task \
+        --prompt "$request_prompt" --cwd "$ws" >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" mark \
+        --root "$ws" --run desktop-startup --id start-request \
+        --status sent --transport claude_native >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" emit \
+        --root "$ws" --run desktop-startup --box inbox --id start-result \
+        --from claude:registered-conductor --to codex:controller --type result \
+        --prompt "$result_prompt" --cwd "$ws" --ref start-request >/dev/null || valid=false
+    node "$CONDUCT_SCRIPT" mark \
+        --root "$ws" --run desktop-startup --id start-request \
+        --status answered --transport claude_native >/dev/null || valid=false
+
+    if [ "$valid" = true ]; then
+        ROOT="$ws" REQUEST_PROMPT="$request_prompt" RESULT_PROMPT="$result_prompt" node <<'NODE' || valid=false
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.env.ROOT;
+const run = path.join(root, ".brain", "runs", "desktop-startup");
+const request = JSON.parse(fs.readFileSync(path.join(run, "outbox", "start-request.json"), "utf8"));
+const result = JSON.parse(fs.readFileSync(path.join(run, "inbox", "start-result.json"), "utf8"));
+const turns = fs.readFileSync(path.join(run, "turns.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+if (request.from !== "codex:controller" || request.to !== "claude:registered-conductor") process.exit(1);
+if (request.type !== "task" || request.prompt !== process.env.REQUEST_PROMPT || request.ref !== null) process.exit(1);
+if (result.from !== request.to || result.to !== request.from || result.type !== "result") process.exit(1);
+if (result.ref !== request.id || result.prompt !== process.env.RESULT_PROMPT) process.exit(1);
+if (turns.length !== 4) process.exit(1);
+if (new Set(turns.map((turn) => turn.envelope.id)).size !== 2) process.exit(1);
+if (turns[turns.length - 1].status !== "answered") process.exit(1);
+NODE
+    fi
+
+    grep -Eqi 'Codex conductor.*registered Claude conductor|registered Claude conductor.*Codex conductor' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'user-authorized.*delegat|delegat.*user-authorized' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Fq -- '--no-trust' "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Fq 'NEEDS_TRUST' "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'runtime.*denial|denied action' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'receiver.*owns?.*permission|permission.*owned by.*receiver' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'not.*direct.*(GUI|Desktop).*access|does not grant.*direct.*access' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'canonical inbox|\.brain/runs/.*/inbox' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'relay.*return message.*expire|return message.*expire' \
+        "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+    grep -Eqi 'actual receiver evidence' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CLAUDE_DESKTOP_REFERENCE" || valid=false
+
+    rm -rf "$ws"
+    if [ "$valid" = true ]; then
+        pass "conduct records one bounded Codex-to-Claude Desktop startup delegation and exact result"
+    else
+        fail "conduct lacks the bounded registered-Claude Desktop startup route or its denial guardrails"
+    fi
+}
+
+test_conduct_new_thread_docs_use_platform_python_launchers() {
+    local valid=true
+    grep -Eqi 'platform(-appropriate)? Python( 3)? launcher|Python 3.*platform(-appropriate)? launcher' \
+        "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq '[references/codex-native.md](references/codex-native.md)' \
+        "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq '`python3 scripts/codex-thread.py CWD PROMPT_FILE`' \
+        "$CONDUCT_SKILL_SOURCE" && valid=false
+    grep -Eqi 'On Unix.*`python3`|`python3`.*on Unix' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'On Windows.*`py -3`|`py -3`.*on Windows' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'verified Python 3.*`python(\.exe)?`|`python(\.exe)?`.*verified Python 3' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'argument array|separate argument' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'quote each path|quoted path' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'no live Windows.*(proof|coverage)|not.*live Windows.*(proof|coverage)' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+
+    if [ "$valid" = true ]; then
+        pass "conduct documents platform-appropriate Python launchers for new Codex threads"
+    else
+        fail "conduct new-thread docs require a python3 alias or overclaim Windows coverage"
+    fi
+}
+
+test_conduct_new_target_workflow_records_before_dispatch() {
+    local valid=true
+    grep -Fq -- '--ledger-root' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq -- '--request-id' "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Fq -- '--create-only' "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CODEX_NATIVE_REFERENCE" && valid=false
+    grep -Eqi 'actual (thread )?UUID.*(emit|write).*canonical|(emit|write).*canonical.*actual (thread )?UUID' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'canonical.*(request|outbox).*(before|prior to).*turn/start|turn/start.*after.*canonical' \
+        "$CONDUCT_SKILL_SOURCE" "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'same.*(stdio|app-server).*connection|same.*connection' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+    grep -Eqi 'startup[- ]probe.*(convenience|not.*Conduct)|convenience.*startup[- ]probe' \
+        "$CONDUCT_CODEX_NATIVE_REFERENCE" || valid=false
+
+    if [ "$valid" = true ]; then
+        pass "conduct emits the actual target before the same-connection first turn"
+    else
+        fail "conduct new-target docs permit a first turn before canonical ledger emit"
+    fi
+}
 test_skill_manifest_exists
 test_plugin_skill_resolves_bundled_scripts_from_plugin_root
 test_plugin_skill_handles_legacy_standalone_install
@@ -627,6 +1037,17 @@ test_plugin_skill_bundle_avoids_duplicate_helper_discovery
 test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
+test_conduct_skill_documents_shared_protocol_and_reachability_boundary
+test_conduct_helper_writes_exact_envelopes_and_blocks_response_loops
+test_conduct_rejects_symlink_state
+test_conduct_cli_validation
+test_conduct_rolls_back_failed_ledger_append
+test_conduct_reconciles_matching_orphan_after_verified_lock_removal
+test_conduct_status_events_and_lock_owner
+test_conduct_reciprocal_recovery_contract
+test_conduct_codex_delegates_claude_desktop_startup_through_registered_conductor
+test_conduct_new_thread_docs_use_platform_python_launchers
+test_conduct_new_target_workflow_records_before_dispatch
 test_sdlc_workflow_is_bounded_and_repairable
 test_sdlc_scopes_red_to_writable_behavior
 test_sdlc_review_reuses_one_broad_proof

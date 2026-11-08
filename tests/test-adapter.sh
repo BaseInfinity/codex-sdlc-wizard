@@ -3557,12 +3557,15 @@ test_install_creates_skill() {
     tmpdir=$(mktemp -d)
     (cd "$tmpdir" && CODEX_HOME="$tmpdir/.codex-home" bash "$REPO_DIR/install.sh" >/dev/null 2>&1)
     local all_present=true
-    for skill in "setup-wizard" "update-wizard" "feedback"; do
+    for skill in "conduct" "setup-wizard" "update-wizard" "feedback"; do
         if [ ! -f "$tmpdir/.codex-home/skills/$skill/SKILL.md" ]; then
             all_present=false
             break
         fi
     done
+    if [ ! -f "$tmpdir/.codex-home/skills/conduct/scripts/conduct.cjs" ]; then
+        all_present=false
+    fi
     if [ -d "$tmpdir/.codex-home/skills/sdlc" ]; then
         all_present=false
     fi

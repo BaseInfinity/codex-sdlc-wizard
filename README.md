@@ -429,9 +429,11 @@ Repo-scoped skill coverage is still a work in progress:
 
 Canonical entrypoint: `$sdlc`. `/sdlc` is historical shorthand for the missing slash-command idea, not an invocation command. Adapter-specific SDLC aliases are legacy migration debris and should not appear as second user-facing workflows.
 
-Codex treats same-name skills from different scopes as distinct choices. To avoid duplicate `$sdlc` workflow rows, normal setup installs global helper skills only (`feedback`, `setup-wizard`, and `update-wizard`) and keeps `.agents/skills/sdlc` as the canonical repo-scoped workflow.
+Codex treats same-name skills from different scopes as distinct choices. To avoid duplicate `$sdlc` workflow rows, normal setup installs global helper skills only (`conduct`, `feedback`, `setup-wizard`, and `update-wizard`) and keeps `.agents/skills/sdlc` as the canonical repo-scoped workflow.
 
 The repository keeps helper definitions under `skill-sources/` as `SKILL.template.md` installer inputs, not directly discoverable plugin skills. Setup/update materialize the standard `SKILL.md` filename only in each intended direct global helper destination.
+
+`$conduct` is the cross-session coordination helper. One logical Conductor can address all registered and reachable Claude/Codex sessions, using native session transport first and exact iTerm2 session IDs as the local fallback. Every bounded request/response is recorded under `.brain/runs/<run_id>/`; Claude Desktop is reachable only after a Claude plugin/MCP adapter registers that session.
 
 These are Codex-native skill folders, so a fresh Codex session can discover them directly from repo scope. After install or setup, restart Codex so repo-scoped skills are loaded cleanly.
 
