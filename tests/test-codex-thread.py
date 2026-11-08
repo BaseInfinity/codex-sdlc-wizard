@@ -29,6 +29,8 @@ UNICODE_ANSWER = "café — déjà vu"
 CHINESE_ANSWER = "你好，世界"
 ONE_TRAILING_NEWLINE_ANSWER = "Answer with one trailing newline.\n"
 MULTIPLE_TRAILING_NEWLINES_ANSWER = "Answer with two trailing newlines.\n\n"
+LAST_USABLE_ANSWER = "  Résumé 🧪\n第二行\t  "
+NO_USABLE_ANSWER_DIAGNOSTIC = "TURN_NO_USABLE_AGENT_MESSAGE"
 
 codex_thread = None
 if SCRIPT.is_file():
@@ -587,6 +589,53 @@ class CodexThreadPipeTests(unittest.TestCase):
             )
 
         self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            f"THREAD thread-fixture-1\n{EXACT_ANSWER}\n",
+        )
+
+    def test_completed_turn_without_usable_agent_message_returns_diagnostic(self):
+        for scenario in (
+            "completed-empty-items",
+            "completed-blank-messages",
+            "completed-no-agent-message",
+        ):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                prompt = Path(directory) / "prompt.txt"
+                prompt.write_text("Complete without a usable final response.")
+                code, stdout, stderr, _ = self.run_main(
+                    scenario, Path(directory), prompt
+                )
+
+                self.assertEqual(code, 2, stdout + stderr)
+                self.assertEqual(
+                    stdout,
+                    f"THREAD thread-fixture-1\n{NO_USABLE_ANSWER_DIAGNOSTIC}\n",
+                )
+
+    def test_last_usable_agent_message_ignores_blank_trailing_messages_exactly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prompt = Path(directory) / "prompt.txt"
+            prompt.write_text("Return the last usable Unicode response exactly.")
+            code, stdout, stderr, _ = self.run_main(
+                "completed-usable-then-blanks", Path(directory), prompt
+            )
+
+        self.assertEqual(code, 0, stdout + stderr)
+        self.assertEqual(
+            stdout,
+            f"THREAD thread-fixture-1\n{LAST_USABLE_ANSWER}\n",
+        )
+
+    def test_turn_summary_precedes_correlated_item_notification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prompt = Path(directory) / "prompt.txt"
+            prompt.write_text("Prefer the completed-turn summary response.")
+            code, stdout, stderr, _ = self.run_main(
+                "completed-summary-precedence", Path(directory), prompt
+            )
+
+        self.assertEqual(code, 0, stdout + stderr)
         self.assertEqual(
             stdout,
             f"THREAD thread-fixture-1\n{EXACT_ANSWER}\n",

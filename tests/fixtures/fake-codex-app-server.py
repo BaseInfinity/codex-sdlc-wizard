@@ -18,6 +18,7 @@ UNICODE_ANSWER = "café — déjà vu"
 CHINESE_ANSWER = "你好，世界"
 ONE_TRAILING_NEWLINE_ANSWER = "Answer with one trailing newline.\n"
 MULTIPLE_TRAILING_NEWLINES_ANSWER = "Answer with two trailing newlines.\n\n"
+LAST_USABLE_ANSWER = "  Résumé 🧪\n第二行\t  "
 
 
 def emit(*messages):
@@ -246,6 +247,62 @@ def serve(scenario):
                         },
                     },
                 )
+                continue
+
+            completed_items = {
+                "completed-empty-items": [],
+                "completed-blank-messages": [
+                    {"type": "agentMessage", "text": ""},
+                    {"type": "agentMessage", "text": " \t\n"},
+                    {"type": "agentMessage", "text": None},
+                ],
+                "completed-no-agent-message": [
+                    {"type": "reasoning", "text": "internal-only fixture item"},
+                ],
+                "completed-usable-then-blanks": [
+                    {"type": "agentMessage", "text": "superseded response"},
+                    {"type": "agentMessage", "text": LAST_USABLE_ANSWER},
+                    {"type": "agentMessage", "text": "\n \t"},
+                    {"type": "agentMessage"},
+                    {"type": "agentMessage", "text": ["not", "a", "string"]},
+                ],
+                "completed-summary-precedence": [
+                    {"type": "agentMessage", "text": EXACT_ANSWER},
+                ],
+            }
+            if scenario in completed_items:
+                messages = []
+                if scenario == "completed-summary-precedence":
+                    messages.append(
+                        {
+                            "method": "item/completed",
+                            "params": {
+                                "threadId": THREAD_ID,
+                                "turnId": TURN_ID,
+                                "item": {
+                                    "type": "agentMessage",
+                                    "text": "CORRELATED NOTIFICATION MUST NOT WIN",
+                                },
+                            },
+                        }
+                    )
+                messages.extend(
+                    [
+                        rpc_result(message, {"turn": {"id": TURN_ID}}),
+                        {
+                            "method": "turn/completed",
+                            "params": {
+                                "threadId": THREAD_ID,
+                                "turn": {
+                                    "id": TURN_ID,
+                                    "status": "completed",
+                                    "items": completed_items[scenario],
+                                },
+                            },
+                        },
+                    ]
+                )
+                emit(*messages)
                 continue
 
             if scenario == "server-request-collision":

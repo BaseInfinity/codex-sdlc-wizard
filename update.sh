@@ -37,6 +37,7 @@ PRE_THREAD_CLAUDE_DESKTOP_REFERENCE_HASH="sha256:0144ec3e1818f439dc9eeb65004c763
 C30_CONDUCT_SKILL_HASH="sha256:0ecd37f0e2f90ef43893999444f5afa68bcf1539178d8adb3092b7c623a11b34"
 C30_CODEX_NATIVE_REFERENCE_HASH="sha256:4e6742e6f3f1bc0fd0bf38a7ab63982f148a5d0e274c722b5f0b23cf091b6db8"
 C30_CODEX_THREAD_HASH="sha256:41790af2f70eb9312113a54174afa2f861426f4bc43b87d7babaf3fd97ecf2e2"
+IMMEDIATE_CODEX_THREAD_HASH="sha256:5f7d210b26201b0ba9a65fd69a089d42160212f117be43f7900e16939c8d6458"
 C30_CONDUCT_WRITER_HASH="sha256:53ed69e212151d6eddc850e1bc651d1b1b534e4513b1ae3eda95eb9d2cf5d9a6"
 C30_CODEX_NATIVE_HASH="sha256:f07314fba9e4a0cf2c552f469d01edaf1fedefeba60d930fcb1849e3e561f260"
 COLLIDING_GLOBAL_SKILLS=("sdlc:repo-scoped .agents/skills/sdlc")
@@ -352,7 +353,8 @@ NODE
             [ "$actual_hash" = "$PRE_THREAD_CLAUDE_DESKTOP_REFERENCE_HASH" ]
             ;;
         scripts/codex-thread.py)
-            [ "$actual_hash" = "$C30_CODEX_THREAD_HASH" ]
+            [ "$actual_hash" = "$C30_CODEX_THREAD_HASH" ] ||
+                [ "$actual_hash" = "$IMMEDIATE_CODEX_THREAD_HASH" ]
             ;;
         *) return 1 ;;
     esac

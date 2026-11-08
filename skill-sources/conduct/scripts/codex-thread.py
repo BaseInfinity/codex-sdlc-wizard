@@ -10,16 +10,17 @@ starts the turn on the same app-server connection. Plain mode is a convenience
 startup probe and sends PROMPT_FILE directly without creating a Conduct record.
 
 Server requests (approvals, user input) are declined: no human answers them.
-Answer text comes from turn/completed items, or from item/completed
-notifications when the server leaves those items empty.
+Answer text is the last nonblank string agent message from turn/completed items,
+or from item/completed notifications when the server leaves those items empty.
 
 Usage: python3 codex-thread.py CWD PROMPT_FILE
        python3 codex-thread.py --ledger-root ROOT --run RUN --request-id ID
            --from ADDRESS --type TYPE CWD PROMPT_FILE
-Prints "THREAD <id>" then the final answer. Exit 0 when the turn completes,
-1 on bad arguments, 2 when the canonical writer or server fails, its pipes
-break, or the turn is not "completed"
-(failed, interrupted, or no turn/completed within 300 s).
+Prints "THREAD <id>" then response or diagnostic data; exit status determines
+success. Exit 0 only when a completed turn has a usable agent answer, 1 on bad
+arguments, and 2 when the canonical writer or server fails, its pipes break,
+the turn is not "completed" (failed, interrupted, or no turn/completed within
+300 s), or a completed turn has no nonblank string agent message.
 Observed on codex-cli 0.167.0.
 """
 import argparse
@@ -261,6 +262,17 @@ def emit_request(cwd, prompt, thread_id, ledger):
     )
 
 
+def last_usable_agent_text(items):
+    """Return the last nonblank string agent message without changing its text."""
+    for item in reversed(items):
+        if not isinstance(item, dict) or item.get("type") != "agentMessage":
+            continue
+        text = item.get("text")
+        if isinstance(text, str) and text.strip():
+            return text
+    return None
+
+
 def main(cwd, prompt_file, cmd=None, turn_timeout=300, ledger=None):
     with open(prompt_file, encoding="utf-8") as f:
         prompt = f.read().rstrip("\n")
@@ -312,8 +324,10 @@ def main(cwd, prompt_file, cmd=None, turn_timeout=300, ledger=None):
             m["params"].get("item", {}) for m in srv.seen
             if m.get("method") == "item/completed"
             and m["params"].get("threadId") == tid and m["params"].get("turnId") == uid]
-        texts = [i.get("text", "") for i in items if i.get("type") == "agentMessage"]
-        answer = texts[-1] if texts else ""
+        answer = last_usable_agent_text(items)
+        if answer is None:
+            print("TURN_NO_USABLE_AGENT_MESSAGE")
+            return 2
         sys.stdout.write(answer if answer.endswith("\n") else answer + "\n")
         return 0
     except OSError as e:

@@ -19,10 +19,33 @@ fallback_symlink_root_workspace=$(mktemp -d)
 selective_backup_leaf_workspace=$(mktemp -d)
 fallback_backup_leaf_workspace=$(mktemp -d)
 fresh_missing_skills_workspace=$(mktemp -d)
-trap 'rm -rf "$native_upgrade_workspace" "$native_stock_workspace" "$custom_template_workspace" "$c30_stock_workspace" "$c30_crlf_workspace" "$c30_custom_support_workspace" "$previous_stock_workspace" "$custom_reference_workspace" "$unsafe_file_workspace" "$unsafe_support_dir_workspace" "$unsafe_skill_root_workspace" "$unsafe_backup_workspace" "$invalid_entry_workspace" "$fallback_symlink_root_workspace" "$selective_backup_leaf_workspace" "$fallback_backup_leaf_workspace" "$fresh_missing_skills_workspace"' EXIT
+immediate_lf_workspace=$(mktemp -d)
+immediate_crlf_workspace=$(mktemp -d)
+immediate_custom_helper_workspace=$(mktemp -d)
+immediate_custom_template_workspace=$(mktemp -d)
+absent_history_workspace=$(mktemp -d)
+trap 'rm -rf "$native_upgrade_workspace" "$native_stock_workspace" "$custom_template_workspace" "$c30_stock_workspace" "$c30_crlf_workspace" "$c30_custom_support_workspace" "$previous_stock_workspace" "$custom_reference_workspace" "$unsafe_file_workspace" "$unsafe_support_dir_workspace" "$unsafe_skill_root_workspace" "$unsafe_backup_workspace" "$invalid_entry_workspace" "$fallback_symlink_root_workspace" "$selective_backup_leaf_workspace" "$fallback_backup_leaf_workspace" "$fresh_missing_skills_workspace" "$immediate_lf_workspace" "$immediate_crlf_workspace" "$immediate_custom_helper_workspace" "$immediate_custom_template_workspace" "$absent_history_workspace"' EXIT
 export CODEX_HOME="$native_upgrade_workspace/codex-home"
 export CODEX_SDLC_CODEX_BIN="$SCRIPT_DIR/fixtures/codex-version-stub.sh"
 export CODEX_SDLC_DISABLE_REASONING=1
+if [ "${CONDUCT_UPGRADE_FOCUS:-}" = "fixture-no-history" ]; then
+    conduct_test_real_git="$(command -v git)"
+    mkdir "$absent_history_workspace/bin"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        'case "$*" in' \
+        '  *"show 33e603a253fb9aee629b494cd953fdbe38920987:"*)' \
+        '    printf "%s\\n" "rejected historical show" >> "$CONDUCT_TEST_GIT_LOG"' \
+        '    exit 77' \
+        '    ;;' \
+        'esac' \
+        'exec "$CONDUCT_TEST_REAL_GIT" "$@"' \
+        > "$absent_history_workspace/bin/git"
+    chmod +x "$absent_history_workspace/bin/git"
+    export CONDUCT_TEST_REAL_GIT="$conduct_test_real_git"
+    export CONDUCT_TEST_GIT_LOG="$absent_history_workspace/git.log"
+    export PATH="$absent_history_workspace/bin:$PATH"
+fi
 FIXTURE_DIR="$SCRIPT_DIR/fixtures" node <<'NODE'
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -33,6 +56,7 @@ const expected = {
   "conduct-c30-codex-thread.py": "41790af2f70eb9312113a54174afa2f861426f4bc43b87d7babaf3fd97ecf2e2",
   "conduct-c30-conduct.cjs": "53ed69e212151d6eddc850e1bc651d1b1b534e4513b1ae3eda95eb9d2cf5d9a6",
   "conduct-c30-codex-native.py": "f07314fba9e4a0cf2c552f469d01edaf1fedefeba60d930fcb1849e3e561f260",
+  "conduct-33e-codex-thread.py": "5f7d210b26201b0ba9a65fd69a089d42160212f117be43f7900e16939c8d6458",
 };
 for (const [file, hash] of Object.entries(expected)) {
   const actual = crypto.createHash("sha256").update(fs.readFileSync(path.join(process.env.FIXTURE_DIR, file))).digest("hex");
@@ -170,6 +194,108 @@ run_c30_custom_writer_regression() {
     (cd "$workspace" && bash "$REPO_DIR/update.sh" >/dev/null)
     cmp "$workspace/conduct.before" "$CODEX_HOME/skills/conduct/scripts/conduct.cjs"
 }
+initialize_current_conduct_workspace() {
+    local workspace="$1"
+    local package_name="$2"
+    export CODEX_HOME="$workspace/codex-home"
+    printf '%s\n' "{\"name\":\"$package_name\",\"scripts\":{\"test\":\"node --test\"}}" > "$workspace/package.json"
+    mkdir "$workspace/src"
+    (cd "$workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)
+}
+snapshot_current_conduct_docs() {
+    local workspace="$1"
+    local document
+    for document in \
+        SKILL.md \
+        references/protocol.md \
+        references/codex-native.md \
+        references/claude-desktop.md; do
+        mkdir -p "$workspace/docs-before/$(dirname "$document")"
+        cp "$CODEX_HOME/skills/conduct/$document" "$workspace/docs-before/$document"
+    done
+}
+assert_current_conduct_docs_unchanged() {
+    local workspace="$1"
+    local document
+    for document in \
+        SKILL.md \
+        references/protocol.md \
+        references/codex-native.md \
+        references/claude-desktop.md; do
+        cmp "$workspace/docs-before/$document" "$CODEX_HOME/skills/conduct/$document"
+    done
+}
+run_immediate_stock_helper_regression() {
+    local workspace="$1"
+    local line_endings="$2"
+    local first_output="$workspace/first-update.out"
+    local second_output="$workspace/second-update.out"
+    initialize_current_conduct_workspace "$workspace" "conduct-immediate-${line_endings}-helper-upgrade"
+    if [ "$line_endings" = "crlf" ]; then
+        write_crlf_fixture \
+            "$SCRIPT_DIR/fixtures/conduct-33e-codex-thread.py" \
+            "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
+    else
+        cp \
+            "$SCRIPT_DIR/fixtures/conduct-33e-codex-thread.py" \
+            "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
+    fi
+    snapshot_current_conduct_docs "$workspace"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$first_output")
+    if ! grep -Fq 'Applied: skills/conduct' "$first_output"; then
+        echo "FAIL: ordinary update did not recognize the immediate $line_endings stock helper" >&2
+        return 1
+    fi
+    grep -Fq '5f7d210b26201b0ba9a65fd69a089d42160212f117be43f7900e16939c8d6458' "$REPO_DIR/update.sh"
+    cmp "$REPO_DIR/skill-sources/conduct/scripts/codex-thread.py" "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
+    assert_current_conduct_docs_unchanged "$workspace"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$second_output")
+    grep -Fq 'No changes applied.' "$second_output"
+    if grep -Fq 'Applied: skills/conduct' "$second_output"; then
+        echo "FAIL: second update repeated Conduct repair after the $line_endings helper refresh" >&2
+        return 1
+    fi
+    assert_current_conduct_docs_unchanged "$workspace"
+}
+run_immediate_custom_helper_regression() {
+    local workspace="$immediate_custom_helper_workspace"
+    initialize_current_conduct_workspace "$workspace" "conduct-immediate-custom-helper"
+    cp \
+        "$SCRIPT_DIR/fixtures/conduct-33e-codex-thread.py" \
+        "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
+    printf '\n%s\n' '# GENUINE 33E HELPER CUSTOMIZATION' >> "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
+    cp "$CODEX_HOME/skills/conduct/scripts/codex-thread.py" "$workspace/codex-thread.before"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >/dev/null)
+    cmp "$workspace/codex-thread.before" "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
+}
+run_immediate_custom_template_regression() {
+    local workspace="$immediate_custom_template_workspace"
+    initialize_current_conduct_workspace "$workspace" "conduct-immediate-custom-template"
+    cp \
+        "$SCRIPT_DIR/fixtures/conduct-33e-codex-thread.py" \
+        "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
+    printf '\n%s\n' '# GENUINE CURRENT TEMPLATE CUSTOMIZATION' >> "$CODEX_HOME/skills/conduct/SKILL.md"
+    cp "$CODEX_HOME/skills/conduct/SKILL.md" "$workspace/skill.before"
+    cp "$CODEX_HOME/skills/conduct/scripts/codex-thread.py" "$workspace/codex-thread.before"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >/dev/null)
+    cmp "$workspace/skill.before" "$CODEX_HOME/skills/conduct/SKILL.md"
+    cmp "$workspace/codex-thread.before" "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
+}
+run_immediate_helper_regressions() {
+    (run_immediate_stock_helper_regression "$immediate_lf_workspace" lf)
+    (run_immediate_stock_helper_regression "$immediate_crlf_workspace" crlf)
+    (run_immediate_custom_helper_regression)
+    (run_immediate_custom_template_regression)
+}
+run_fixture_without_history_regression() {
+    git --version >/dev/null
+    if git show 33e603a253fb9aee629b494cd953fdbe38920987:skill-sources/conduct/scripts/codex-thread.py \
+        >/dev/null 2>&1; then
+        echo 'FAIL: fixture-no-history git shim exposed the historical helper object' >&2
+        return 1
+    fi
+    grep -Fxq 'rejected historical show' "$CONDUCT_TEST_GIT_LOG"
+}
 case "${CONDUCT_UPGRADE_FOCUS:-}" in
     fallback-symlink-root) run_fallback_symlink_root_regression; exit ;;
     selective-backup-leaf) run_selective_backup_leaf_regression; exit ;;
@@ -177,9 +303,13 @@ case "${CONDUCT_UPGRADE_FOCUS:-}" in
     fresh-missing-codex-home) run_fresh_missing_codex_home_regression; exit ;;
     c30-crlf-writer) run_c30_crlf_writer_regression; exit ;;
     c30-custom-writer) run_c30_custom_writer_regression; exit ;;
+    immediate-helper) run_immediate_helper_regressions; exit ;;
+    fixture-no-history) run_fixture_without_history_regression; exit ;;
     '') ;;
     *) echo "Unknown CONDUCT_UPGRADE_FOCUS: $CONDUCT_UPGRADE_FOCUS" >&2; exit 1 ;;
 esac
+run_immediate_helper_regressions
+echo 'PASS: immediate stock helper refresh is selective, stable, and customization-safe'
 printf '%s\n' '{"name":"conduct-upgrade","scripts":{"test":"node --test"}}' > "$native_upgrade_workspace/package.json"
 mkdir "$native_upgrade_workspace/src"
 (cd "$native_upgrade_workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)
