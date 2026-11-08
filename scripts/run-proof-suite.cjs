@@ -8,6 +8,7 @@ const path = require("node:path");
 const repoRoot = path.resolve(__dirname, "..");
 const checks = [
   { name: "diff", command: "git diff --check" },
+  { name: "proof-runner", command: "node tests/test-proof-runner.cjs" },
   { name: "adapter", command: "bash tests/test-adapter.sh" },
   { name: "packaging", command: "bash tests/test-packaging.sh" },
   { name: "npm", command: "bash tests/test-npm.sh" },
@@ -168,7 +169,8 @@ function runCheck(check, index, logDir, activeChildren) {
       cwd: repoRoot,
       env: process.env,
       shell: true,
-      detached: process.platform !== "win32"
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"]
     });
 
     activeChildren.add(child);
