@@ -114,8 +114,8 @@ them.
 
 1. `node scripts/run-proof-suite.cjs` — green.
 2. If you touched setup, update, hooks, or skills: run the Windows Desktop
-   runbook against a real consumer repo, or say plainly in the PR that you did
-   not.
+   runbook against a real consumer repo, or say plainly in the commit message (or the PR,
+   when the repository requires one) that you did not.
 3. Self-review the diff. Do not claim a review passed that you did not run.
 
 Use RED only when a RED mutation is writable. EVAL agent-facing guidance through

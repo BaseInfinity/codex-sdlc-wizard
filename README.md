@@ -402,6 +402,14 @@ Reviewer supervision keeps liveness separate from correctness. A heartbeat says 
 Once the joint receipt is certified, deliver that exact candidate through the fixed-argv boundary rather than rebuilding the sequence with separate shell commands:
 
 ```bash
+node .codex/hooks/dual-review.cjs deliver direct --message <text> --branch <base>
+```
+
+That is the default: it commits the certified staged tree while honoring configured Git hooks, refuses to push unless the commit's tree is exactly the certified candidate, and pushes that exact commit straight to the base branch (usually `main`), with no pull request. A non-fast-forward base, failing hook, or protected branch refuses the push.
+
+Use `deliver github` only when the repository requires pull requests (for example, branch protection refused the direct push) or the owner asks for one:
+
+```bash
 node .codex/hooks/dual-review.cjs deliver github \
   --message "feat: describe the certified change" \
   --branch feature-branch \
@@ -410,7 +418,7 @@ node .codex/hooks/dual-review.cjs deliver github \
   --body "Closes #123"
 ```
 
-The command commits the certified staged tree while honoring configured Git hooks, pushes its immutable SHA, creates or reuses the explicitly targeted PR, verifies the authoritative head/base and at least one completed check, then atomically advances the unchanged base to that exact commit. An empty check rollup waits and fails closed by default; use `--allow-no-checks` only when the repository intentionally has no GitHub checks. A changed base, failing hook, failing check, or protected branch blocks integration. `deliver direct` is available only for an explicitly intended non-GitHub path; it verifies the exact remote ref but does not claim GitHub CI semantics. This is immediate exact-SHA integration after verification, not GitHub auto-merge.
+It pushes its immutable SHA, creates or reuses the explicitly targeted PR, verifies the authoritative head/base and at least one completed check, then atomically advances the unchanged base to that exact commit. An empty check rollup waits and fails closed by default; use `--allow-no-checks` only when the repository intentionally has no GitHub checks. This is immediate exact-SHA integration after verification, not GitHub auto-merge.
 
 ### Incremental checkpoints and the completion boundary
 

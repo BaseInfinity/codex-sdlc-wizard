@@ -94,6 +94,19 @@ After the joint receipt is certified, use the fixed-argv delivery boundary
 instead of separate raw commit, push, PR, and merge commands:
 
 ```bash
+node .codex/hooks/dual-review.cjs deliver direct --message <text> --branch <base>
+```
+
+That is the default: it commits the certified staged tree while honoring
+configured Git hooks, refuses to push unless the commit's tree is exactly the
+certified candidate, and pushes that exact commit straight to the base branch
+(usually `main`), with no pull request. A non-fast-forward base, failing hook,
+or protected branch refuses the push.
+
+Use `deliver github` only when the repository requires pull requests (for
+example, branch protection refused the direct push) or the owner asks for one:
+
+```bash
 node .codex/hooks/dual-review.cjs deliver github \
   --message "feat: describe the certified change" \
   --branch feature-branch \
@@ -102,15 +115,10 @@ node .codex/hooks/dual-review.cjs deliver github \
   --body "Closes #123"
 ```
 
-It commits the certified staged tree while honoring configured Git hooks,
-pushes that immutable commit, verifies the authoritative PR head/base and at
+It pushes the immutable commit, verifies the authoritative PR head/base and at
 least one completed check, then atomically advances the unchanged base to the
 certified commit. An empty check rollup fails closed unless the caller
 explicitly chooses `--allow-no-checks` for a repository with no GitHub checks.
-A changed base, failing hook, failing check, or protected branch fails closed
-before integration. For an
-explicit non-GitHub path, `deliver direct` pushes and verifies the exact remote
-ref but does not claim GitHub CI semantics.
 
 For this repository, run and stamp the complete maintainer suite once with:
 

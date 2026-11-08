@@ -106,10 +106,12 @@ function help() {
 function deliveryHelp() {
   return [
     "Usage:",
+    "  node .codex/hooks/dual-review.cjs deliver direct --message <text> --branch <base> [--remote <name>]",
     "  node .codex/hooks/dual-review.cjs deliver github --message <text> --branch <name> --base <name> --title <text> --body <text> [--allow-no-checks]",
-    "  node .codex/hooks/dual-review.cjs deliver direct --message <text> --branch <name> [--remote <name>]",
     "",
-    "Commits and publishes only the immutable candidate certified by the current dual-review receipt.",
+    "direct is the default: it pushes the certified commit straight to the base branch, with no pull request.",
+    "Use github only when the repository requires pull requests or the owner asks for one.",
+    "Publishes only a commit whose tree is the immutable candidate certified by the current dual-review receipt.",
   ].join("\n");
 }
 

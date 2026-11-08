@@ -553,6 +553,45 @@ test_sdlc_review_reuses_one_broad_proof() {
     fi
 }
 
+test_sdlc_defaults_to_direct_delivery_without_pr() {
+    local help
+    local valid=true
+
+    python3 - "$REPO_SDLC_SKILL" "$SHIPPED_SDLC_SKILL" "$SDLC_LOOP" "$AGENTS_BASELINE" "$AGENTS_TEMPLATE" \
+        "$REPO_DIR/README.md" "$REPO_DIR/PROVE-IT.md" <<'PYCHECK' || valid=false
+import re, sys
+direct = "dual-review.cjs deliver direct --message <text> --branch <base>"
+ok = True
+for path in sys.argv[1:]:
+    text = open(path, encoding="utf-8").read()
+    flat = re.sub(r"\s+", " ", text)
+    at = flat.find(direct)
+    gh = flat.find("deliver github")
+    if at < 0 or gh < 0 or at > gh:
+        ok = False
+    elif not re.search(r"is the default: ", flat[at:at + 200]):
+        ok = False
+    if "only when the repository requires pull requests" not in flat or "non-GitHub" in flat:
+        ok = False
+    for sentence in re.split(r"(?<=[.;])\s", flat):
+        if "deliver github" in sentence and re.search(r"\bdefault\b", sentence):
+            ok = False
+    if not ok:
+        print("direct-delivery default missing or regressed in " + path)
+        break
+sys.exit(0 if ok else 1)
+PYCHECK
+    help=$(node "$REPO_DIR/.codex/hooks/dual-review.cjs" deliver --help 2>&1)
+    printf '%s\n' "$help" | grep -m1 'deliver ' | grep -Fq 'deliver direct' || valid=false
+    printf '%s\n' "$help" | grep -Fq 'direct is the default' || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "SDLC delivers the certified commit straight to the base branch by default; PRs only when required"
+    else
+        fail "SDLC still makes a pull request the default delivery or limits direct delivery to non-GitHub paths"
+    fi
+}
+
 test_sdlc_documents_bounded_dual_review() {
     local file
     local valid=true
@@ -1052,6 +1091,7 @@ test_sdlc_workflow_is_bounded_and_repairable
 test_sdlc_scopes_red_to_writable_behavior
 test_sdlc_review_reuses_one_broad_proof
 test_sdlc_documents_bounded_dual_review
+test_sdlc_defaults_to_direct_delivery_without_pr
 test_sdlc_documents_incremental_completion_cadence
 test_sdlc_exposes_linked_worktree_git_target_to_hooks
 
