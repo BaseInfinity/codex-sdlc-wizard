@@ -689,6 +689,48 @@ test_conduct_skill_documents_shared_protocol_and_reachability_boundary() {
     fi
 }
 
+test_conduct_operating_model_block_is_unique_and_matches_peer() {
+    local output
+    if output=$(CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        CLAUDE_CONDUCT_SKILL_FILE="${CLAUDE_CONDUCT_SKILL_FILE:-}" node <<'NODE' 2>&1
+const fs = require("node:fs");
+
+const begin = "<!-- conduct-operating-model:begin -->";
+const end = "<!-- conduct-operating-model:end -->";
+
+function extractCanonicalBlock(file, label) {
+  // Git's canonical block identity is LF-only; normalize line endings before byte equality.
+  const text = fs.readFileSync(file, "utf8").replace(/\r\n|\r/g, "\n");
+  const beginCount = text.split(begin).length - 1;
+  const endCount = text.split(end).length - 1;
+  if (beginCount !== 1 || endCount !== 1) {
+    throw new Error(`${label} must contain exactly one begin marker and one end marker`);
+  }
+  const start = text.indexOf(begin);
+  const finish = text.indexOf(end, start + begin.length);
+  if (finish < start) throw new Error(`${label} has reversed operating-model markers`);
+  return text.slice(start, finish + end.length);
+}
+
+const localBlock = extractCanonicalBlock(process.env.CONDUCT_SKILL_SOURCE, "Codex Conduct skill");
+const peerFile = process.env.CLAUDE_CONDUCT_SKILL_FILE;
+if (peerFile) {
+  const peerBlock = extractCanonicalBlock(peerFile, "Claude Conduct skill");
+  if (localBlock !== peerBlock) throw new Error("Claude and Codex operating-model blocks differ");
+  process.stdout.write("peer operating-model block matches canonical LF identity\n");
+} else {
+  process.stdout.write("optional peer parity skipped; local marker uniqueness verified\n");
+}
+NODE
+    ); then
+        printf '%s\n' "$output"
+        pass "conduct operating model has one marked block and optional peer parity"
+    else
+        printf '%s\n' "$output" >&2
+        fail "conduct operating model markers or peer parity are invalid"
+    fi
+}
+
 test_conduct_helper_writes_exact_envelopes_and_blocks_response_loops() {
     local ws request_path response_path ledger_path
     local valid=true
@@ -1077,6 +1119,7 @@ test_repo_scoped_skills_are_codex_native
 test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
 test_conduct_skill_documents_shared_protocol_and_reachability_boundary
+test_conduct_operating_model_block_is_unique_and_matches_peer
 test_conduct_helper_writes_exact_envelopes_and_blocks_response_loops
 test_conduct_rejects_symlink_state
 test_conduct_cli_validation

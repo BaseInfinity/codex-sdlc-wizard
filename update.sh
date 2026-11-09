@@ -33,6 +33,7 @@ PRE_NATIVE_CONDUCT_SKILL_HASH="sha256:1fdc5685ac73ce181ab7df85a30b2e4c732a8c6e38
 PRE_RECOVERY_CONDUCT_SKILL_HASH="sha256:79606cea31de0694d10e3fb4584f638644d1c3cb8684bb79adead61c6cf1a1d0"
 PRE_THREAD_CONDUCT_SKILL_HASH="sha256:ab2068e4d8cacdcdac72cad5c75c1e915e8eb93f244bcba91fd8e0b45ace3e86"
 PRE_LIFECYCLE_CONDUCT_SKILL_HASH="sha256:a7b33778e7c0df2e3d4407cf9be2a7ebbe149ffe77e69b437c9d20b812463b17"
+PRE_OPERATING_MODEL_CONDUCT_SKILL_HASH="sha256:7232158133e02cc133fc535c030352255b553eaa69cdd322ba2c084b273ab22a"
 PRE_RECOVERY_CONDUCT_PROTOCOL_HASH="sha256:0f6f075b02e543944a057b28011e1cc2a39070da4bd281628fa4ddc9c0e01ee9"
 PRE_LIFECYCLE_CONDUCT_PROTOCOL_HASH="sha256:92f3611ab3704a2a3a382c682c42bc8a02672271125fcea80a329baa26860c22"
 PRE_THREAD_CODEX_NATIVE_REFERENCE_HASH="sha256:de0ae0dc16214a3506db0500168e68c6c19f80208fda8c3c1a9ef651e061a93a"
@@ -406,9 +407,15 @@ conduct_template_is_pre_lifecycle() {
         [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_LIFECYCLE_CONDUCT_SKILL_HASH" ]
 }
 
+conduct_template_is_pre_operating_model() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_OPERATING_MODEL_CONDUCT_SKILL_HASH" ]
+}
+
 conduct_template_needs_stock_refresh() {
     conduct_template_is_pre_native || conduct_template_is_pre_recovery || conduct_template_is_pre_thread ||
-        conduct_template_is_c30_stock || conduct_template_is_pre_lifecycle
+        conduct_template_is_c30_stock || conduct_template_is_pre_lifecycle ||
+        conduct_template_is_pre_operating_model
 }
 
 conduct_template_is_stock() {

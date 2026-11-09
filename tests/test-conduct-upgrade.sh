@@ -31,7 +31,8 @@ stock_c30_documents_workspace=$(mktemp -d)
 stock_33e_workspace=$(mktemp -d)
 stock_custom_support_workspace=$(mktemp -d)
 stock_custom_template_workspace=$(mktemp -d)
-trap 'rm -rf "$native_upgrade_workspace" "$native_stock_workspace" "$custom_template_workspace" "$c30_stock_workspace" "$c30_crlf_workspace" "$c30_custom_support_workspace" "$previous_stock_workspace" "$custom_reference_workspace" "$unsafe_file_workspace" "$unsafe_support_dir_workspace" "$unsafe_skill_root_workspace" "$unsafe_backup_workspace" "$invalid_entry_workspace" "$fallback_symlink_root_workspace" "$selective_backup_leaf_workspace" "$fallback_backup_leaf_workspace" "$fresh_missing_skills_workspace" "$immediate_lf_workspace" "$immediate_crlf_workspace" "$immediate_custom_helper_workspace" "$immediate_custom_template_workspace" "$absent_history_workspace" "$stock_965_workspace" "$stock_c8_workspace" "$stock_3ed_workspace" "$stock_c30_documents_workspace" "$stock_33e_workspace" "$stock_custom_support_workspace" "$stock_custom_template_workspace"' EXIT
+pre_operating_model_workspace=$(mktemp -d)
+trap 'rm -rf "$native_upgrade_workspace" "$native_stock_workspace" "$custom_template_workspace" "$c30_stock_workspace" "$c30_crlf_workspace" "$c30_custom_support_workspace" "$previous_stock_workspace" "$custom_reference_workspace" "$unsafe_file_workspace" "$unsafe_support_dir_workspace" "$unsafe_skill_root_workspace" "$unsafe_backup_workspace" "$invalid_entry_workspace" "$fallback_symlink_root_workspace" "$selective_backup_leaf_workspace" "$fallback_backup_leaf_workspace" "$fresh_missing_skills_workspace" "$immediate_lf_workspace" "$immediate_crlf_workspace" "$immediate_custom_helper_workspace" "$immediate_custom_template_workspace" "$absent_history_workspace" "$stock_965_workspace" "$stock_c8_workspace" "$stock_3ed_workspace" "$stock_c30_documents_workspace" "$stock_33e_workspace" "$stock_custom_support_workspace" "$stock_custom_template_workspace" "$pre_operating_model_workspace"' EXIT
 export CODEX_HOME="$native_upgrade_workspace/codex-home"
 export CODEX_SDLC_CODEX_BIN="$SCRIPT_DIR/fixtures/codex-version-stub.sh"
 export CODEX_SDLC_DISABLE_REASONING=1
@@ -69,6 +70,7 @@ const expected = {
   "conduct-c30-codex-native.py": "f07314fba9e4a0cf2c552f469d01edaf1fedefeba60d930fcb1849e3e561f260",
   "conduct-33e-codex-thread.py": "5f7d210b26201b0ba9a65fd69a089d42160212f117be43f7900e16939c8d6458",
   "conduct-33e-skill.md": "a7b33778e7c0df2e3d4407cf9be2a7ebbe149ffe77e69b437c9d20b812463b17",
+  "conduct-pre-operating-model.md": "7232158133e02cc133fc535c030352255b553eaa69cdd322ba2c084b273ab22a",
   "conduct-33e-codex-native.md": "d7ad565dab613e7513017a78d0111866a8bba4b1c855ee7f5ed04683212e5df9",
   "conduct-33e-protocol.md": "92f3611ab3704a2a3a382c682c42bc8a02672271125fcea80a329baa26860c22",
   "conduct-pre-recovery-protocol.md": "0f6f075b02e543944a057b28011e1cc2a39070da4bd281628fa4ddc9c0e01ee9",
@@ -86,6 +88,57 @@ const fs = require("node:fs");
 const source = fs.readFileSync(process.env.SOURCE_FILE, "utf8");
 fs.writeFileSync(process.env.TARGET_FILE, source.replace(/\r?\n/g, "\r\n"));
 NODE
+}
+run_pre_operating_model_regression() {
+    local line_endings workspace output backup backup_count
+    for line_endings in lf crlf; do
+        workspace="$pre_operating_model_workspace/$line_endings"
+        output="$workspace/update.out"
+        export CODEX_HOME="$workspace/codex-home"
+        mkdir -p "$workspace/src"
+        printf '%s\n' "{\"name\":\"conduct-pre-operating-model-$line_endings\",\"scripts\":{\"test\":\"node --test\"}}" > "$workspace/package.json"
+        (cd "$workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)
+        if [ "$line_endings" = "crlf" ]; then
+            write_crlf_fixture \
+                "$SCRIPT_DIR/fixtures/conduct-pre-operating-model.md" \
+                "$CODEX_HOME/skills/conduct/SKILL.md"
+        else
+            cp \
+                "$SCRIPT_DIR/fixtures/conduct-pre-operating-model.md" \
+                "$CODEX_HOME/skills/conduct/SKILL.md"
+        fi
+        cp "$CODEX_HOME/skills/conduct/SKILL.md" "$workspace/stock.before"
+        printf '\n%s\n' '# CUSTOM SUPPORT SENTINEL' >> "$CODEX_HOME/skills/conduct/references/protocol.md"
+
+        (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$output")
+        if ! grep -Fq 'Applied: skills/conduct' "$output"; then
+            echo "FAIL: ordinary update did not recognize genuine $line_endings pre-operating-model stock" >&2
+            return 1
+        fi
+        cmp "$REPO_DIR/skill-sources/conduct/SKILL.template.md" "$CODEX_HOME/skills/conduct/SKILL.md"
+        grep -Fq '# CUSTOM SUPPORT SENTINEL' "$CODEX_HOME/skills/conduct/references/protocol.md"
+        backup_count="$(find "$CODEX_HOME/backups/skills" -maxdepth 1 -type f -name 'conduct-template.bak.*' | wc -l | tr -d ' ')"
+        if [ "$backup_count" != "1" ]; then
+            echo "FAIL: expected one $line_endings pre-operating-model template backup, found $backup_count" >&2
+            return 1
+        fi
+        backup="$(find "$CODEX_HOME/backups/skills" -maxdepth 1 -type f -name 'conduct-template.bak.*' -print -quit)"
+        cmp "$workspace/stock.before" "$backup"
+    done
+
+    workspace="$pre_operating_model_workspace/custom"
+    output="$workspace/update.out"
+    export CODEX_HOME="$workspace/codex-home"
+    mkdir -p "$workspace/src"
+    printf '%s\n' '{"name":"conduct-pre-operating-model-custom","scripts":{"test":"node --test"}}' > "$workspace/package.json"
+    (cd "$workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)
+    cp "$SCRIPT_DIR/fixtures/conduct-pre-operating-model.md" "$CODEX_HOME/skills/conduct/SKILL.md"
+    printf 'X' >> "$CODEX_HOME/skills/conduct/SKILL.md"
+    cp "$CODEX_HOME/skills/conduct/SKILL.md" "$workspace/custom.before"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$output")
+    grep -Fq 'No changes applied.' "$output"
+    cmp "$workspace/custom.before" "$CODEX_HOME/skills/conduct/SKILL.md"
+    echo 'PASS: genuine pre-operating-model stock upgrades safely and one-byte customization remains untouched'
 }
 prepare_c30_workspace() {
     local workspace="$1"
@@ -411,6 +464,7 @@ run_fixture_without_history_regression() {
     grep -Fxq 'rejected historical show' "$CONDUCT_TEST_GIT_LOG"
 }
 case "${CONDUCT_UPGRADE_FOCUS:-}" in
+    pre-operating-model) run_pre_operating_model_regression; exit ;;
     fallback-symlink-root) run_fallback_symlink_root_regression; exit ;;
     selective-backup-leaf) run_selective_backup_leaf_regression; exit ;;
     fallback-backup-leaf) run_fallback_backup_leaf_regression; exit ;;
@@ -427,6 +481,8 @@ run_immediate_helper_regressions
 echo 'PASS: immediate stock helper refresh is selective, stable, and customization-safe'
 run_stock_document_regressions
 echo 'PASS: supported stock Conduct documents migrate selectively and remain stable'
+run_pre_operating_model_regression
+export CODEX_HOME="$native_upgrade_workspace/codex-home"
 printf '%s\n' '{"name":"conduct-upgrade","scripts":{"test":"node --test"}}' > "$native_upgrade_workspace/package.json"
 mkdir "$native_upgrade_workspace/src"
 (cd "$native_upgrade_workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)

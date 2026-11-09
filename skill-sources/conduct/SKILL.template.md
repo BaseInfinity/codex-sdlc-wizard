@@ -11,9 +11,31 @@ Read [references/protocol.md](references/protocol.md) before dispatching. It def
 
 ## Optional conductor/controller/worker pattern
 
-For larger multi-harness work, the following is **recommended, optional**; direct Conduct handoffs and single-session use remain valid. Use one conductor as the front door that routes work only. Give each harness or project one controller, which owns implementation and integration decisions while preserving one logical controller per Conduct run. That controller decides whether to start a new worker or queue work to a current worker. Put parallel coding workers in separate Git worktrees. Give every worker one bounded task and have it return exactly one correlated result through Conduct.
+For larger multi-harness work, this is a **recommended, optional** pattern; direct Conduct handoffs and single-session use remain valid. Claude SDLC is the canonical owner of the operating model below; Codex keeps the marked table byte-for-byte identical.
 
-These role names are coordination conveniences, not authority or permissions. They do not create transport reach, displace reciprocal peer recovery, or authorize a permanent watcher. Each target must still be registered and reachable, and the existing one-request/one-response and supervision-stop rules still apply.
+All rows remain within the current task authority, host permissions, and the existing dispatch and supervision limits below.
+
+<!-- conduct-operating-model:begin -->
+| # | Rule |
+|---|---|
+| 1 | The conductor only routes. There is one controller per project or harness, and it picks an existing worker or a new one for each item. |
+| 2 | Run independent work in parallel. Never queue it behind a long task. |
+| 3 | Material work goes to a named worker session/tab `<CONTROLLER>: <task>` in its own git worktree. Use the controller's window group and color only where supported without stealing focus. Subagents are for one-off lookups. |
+| 4 | Verify from a transcript or the ledger, never from a send succeeding. |
+| 5 | Never stall on the human. Resolve technical uncertainty within existing authorization: rewrite rejected command syntax without changing the action, consult Sol High, then Fable High only on an unresolved split, and dispatch after resolution. Respect action denials, managed policy and user pauses; record an unresolvable blocker as P0 and continue independent authorized work. Batch user-owned decisions into one ask; never re-ask existing explicit approval. |
+| 6 | Work headless and never steal focus. Use connectors and files before any GUI. |
+| 7 | Relayed reports carry a fixed text label per controller: `[CONDUCTOR]` `[HARNESS]` `[MEESEEKS]` `[ANTICHEAT]` `[CODEX]` `[ROBBIE]` `[WINDOWS]`. Use color only where the medium supports it. |
+| 8 | Run the SDLC skill before code, and prove it loaded: Claude `Skill(sdlc)` or `/sdlc`, Codex `$sdlc` with the skill actually read. Never invent a CLI alias. Claude Code enforces this with a pre-edit and pre-commit skill gate where the repo's hooks are current. |
+| 9 | For a user-authorized computer-use handoff, preserve the confirmed holder's UUID, cwd/worktree, task, plugin arguments and unsubmitted draft. Gracefully end only that holder if release is required, verify its exit before the new writer, and never delete locks, force-kill busy/paused peers or override a pause. |
+| 10 | Auto-trust requires prior user authorization and host permission, and is limited to the exact workspace the conductor opened for the current task in the user's own repo. Never trust other folders, approve permission/auth dialogs, change OS privacy controls, self-grant access or bypass a runtime denial. Report required user action as a blocker. |
+| 11 | Each controller updates only its own progress rows when a workstream changes state. Use a verified installed status collector, such as `status.cjs`, only when available; otherwise report from the existing transcript or ledger. A filename or source branch is not installation evidence. |
+<!-- conduct-operating-model:end -->
+
+Codex treats the shared table as the complete operating rules; these notes are non-normative host examples. If opening a named worker tab would steal focus, use a verified headless named persisted thread in its own worktree.
+
+Role titles create no transport reach, permissions, or permanent watcher. Targets must be registered and reachable; one controller per run, one request/one response, reciprocal recovery, and recovery/supervision stop rules still apply.
+
+Fixed text labels stay emoji-free. Where supported, Codex may render `-` blockers red, `+` moving/done green, `@@` headings cyan, and `█░` progress bars. Optional tab colors are orange Harness, red Conductor, pink Anticheat, and green Codex; health bars are controller-only.
 
 ## Workflow
 
