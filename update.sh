@@ -28,12 +28,13 @@ CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 SKILLS_ROOT="$CODEX_HOME_DIR/skills"
 SKILLS_BACKUP_ROOT="$CODEX_HOME_DIR/backups/skills"
 CORE_SKILLS=("conduct" "feedback" "setup-wizard" "update-wizard")
-CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "scripts/codex-native.py" "scripts/codex-thread.py" "references/protocol.md" "references/codex-native.md" "references/claude-desktop.md" "agents/openai.yaml")
+CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "scripts/status.cjs" "scripts/codex-native.py" "scripts/codex-thread.py" "references/protocol.md" "references/codex-native.md" "references/claude-desktop.md" "agents/openai.yaml")
 PRE_NATIVE_CONDUCT_SKILL_HASH="sha256:1fdc5685ac73ce181ab7df85a30b2e4c732a8c6e38a2843986dd9860b6309041"
 PRE_RECOVERY_CONDUCT_SKILL_HASH="sha256:79606cea31de0694d10e3fb4584f638644d1c3cb8684bb79adead61c6cf1a1d0"
 PRE_THREAD_CONDUCT_SKILL_HASH="sha256:ab2068e4d8cacdcdac72cad5c75c1e915e8eb93f244bcba91fd8e0b45ace3e86"
 PRE_LIFECYCLE_CONDUCT_SKILL_HASH="sha256:a7b33778e7c0df2e3d4407cf9be2a7ebbe149ffe77e69b437c9d20b812463b17"
 PRE_OPERATING_MODEL_CONDUCT_SKILL_HASH="sha256:7232158133e02cc133fc535c030352255b553eaa69cdd322ba2c084b273ab22a"
+PRE_STATUS_CONDUCT_SKILL_HASH="sha256:6a2cf17c8eddff9abaf81ce4bd208c84fa949407f9b2758e724903f6f3a52834"
 PRE_RECOVERY_CONDUCT_PROTOCOL_HASH="sha256:0f6f075b02e543944a057b28011e1cc2a39070da4bd281628fa4ddc9c0e01ee9"
 PRE_LIFECYCLE_CONDUCT_PROTOCOL_HASH="sha256:92f3611ab3704a2a3a382c682c42bc8a02672271125fcea80a329baa26860c22"
 PRE_THREAD_CODEX_NATIVE_REFERENCE_HASH="sha256:de0ae0dc16214a3506db0500168e68c6c19f80208fda8c3c1a9ef651e061a93a"
@@ -44,6 +45,7 @@ PRE_LIFECYCLE_CODEX_NATIVE_REFERENCE_HASH="sha256:d7ad565dab613e7513017a78d01118
 C30_CODEX_THREAD_HASH="sha256:41790af2f70eb9312113a54174afa2f861426f4bc43b87d7babaf3fd97ecf2e2"
 IMMEDIATE_CODEX_THREAD_HASH="sha256:5f7d210b26201b0ba9a65fd69a089d42160212f117be43f7900e16939c8d6458"
 C30_CONDUCT_WRITER_HASH="sha256:53ed69e212151d6eddc850e1bc651d1b1b534e4513b1ae3eda95eb9d2cf5d9a6"
+PRE_STATUS_CONDUCT_WRITER_HASH="sha256:e76ad7089fdd16f0db7fec2d48d9628f48a2ae6cd53253a97a5179e834b659c8"
 C30_CODEX_NATIVE_HASH="sha256:f07314fba9e4a0cf2c552f469d01edaf1fedefeba60d930fcb1849e3e561f260"
 COLLIDING_GLOBAL_SKILLS=("sdlc:repo-scoped .agents/skills/sdlc")
 LEGACY_SKILLS=("codex-sdlc:sdlc")
@@ -345,7 +347,8 @@ NODE
     esac
     case "$support_file" in
         scripts/conduct.cjs)
-            [ "$actual_hash" = "$C30_CONDUCT_WRITER_HASH" ]
+            [ "$actual_hash" = "$C30_CONDUCT_WRITER_HASH" ] ||
+                [ "$actual_hash" = "$PRE_STATUS_CONDUCT_WRITER_HASH" ]
             ;;
         scripts/codex-native.py)
             [ "$actual_hash" = "$C30_CODEX_NATIVE_HASH" ]
@@ -382,6 +385,15 @@ conduct_support_needs_repair() {
     conduct_support_missing || conduct_support_needs_stock_refresh
 }
 
+conduct_status_support_matches_bundle() {
+    cmp -s \
+        "$SCRIPT_DIR/skill-sources/conduct/scripts/conduct.cjs" \
+        "$SKILLS_ROOT/conduct/scripts/conduct.cjs" &&
+        cmp -s \
+            "$SCRIPT_DIR/skill-sources/conduct/scripts/status.cjs" \
+            "$SKILLS_ROOT/conduct/scripts/status.cjs"
+}
+
 conduct_template_is_pre_native() {
     [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
         [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_NATIVE_CONDUCT_SKILL_HASH" ]
@@ -412,10 +424,15 @@ conduct_template_is_pre_operating_model() {
         [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_OPERATING_MODEL_CONDUCT_SKILL_HASH" ]
 }
 
+conduct_template_is_pre_status() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_STATUS_CONDUCT_SKILL_HASH" ]
+}
+
 conduct_template_needs_stock_refresh() {
     conduct_template_is_pre_native || conduct_template_is_pre_recovery || conduct_template_is_pre_thread ||
         conduct_template_is_c30_stock || conduct_template_is_pre_lifecycle ||
-        conduct_template_is_pre_operating_model
+        conduct_template_is_pre_operating_model || conduct_template_is_pre_status
 }
 
 conduct_template_is_stock() {
@@ -557,12 +574,16 @@ repair_skill() {
             fi
         done
         if conduct_template_needs_stock_refresh; then
-            mkdir -p "$SKILLS_BACKUP_ROOT"
-            conduct_backup_exclusive \
-                "$target_path/SKILL.md" \
-                "$SKILLS_BACKUP_ROOT/conduct-template.bak.$(date +%s)" \
-                "file" >/dev/null
-            cp "$source_template" "$target_path/SKILL.md"
+            if conduct_status_support_matches_bundle; then
+                mkdir -p "$SKILLS_BACKUP_ROOT"
+                conduct_backup_exclusive \
+                    "$target_path/SKILL.md" \
+                    "$SKILLS_BACKUP_ROOT/conduct-template.bak.$(date +%s)" \
+                    "file" >/dev/null
+                cp "$source_template" "$target_path/SKILL.md"
+            else
+                echo "Warning: customized Conduct status support prevents complete guide upgrade; preserving $target_path/SKILL.md." >&2
+            fi
         fi
         return 0
     fi

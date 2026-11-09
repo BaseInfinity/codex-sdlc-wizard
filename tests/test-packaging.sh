@@ -365,7 +365,7 @@ test_installer_uses_canonical_sdlc_skill_name() {
     fi
 }
 
-test_installer_packages_codex_thread_helper() {
+test_installer_packages_conduct_helpers() {
     local adapter_clone
     local target_repo
     adapter_clone=$(mktemp -d "$MKTEMP_DIR/sdlc-adapter-clone.XXXXXX")
@@ -379,12 +379,25 @@ test_installer_packages_codex_thread_helper() {
 
     local installed=true
     [ -f "$target_repo/.codex-home/skills/conduct/scripts/codex-thread.py" ] || installed=false
+    [ -f "$target_repo/.codex-home/skills/conduct/scripts/status.cjs" ] || installed=false
+    cmp -s "$adapter_clone/skill-sources/conduct/scripts/status.cjs" \
+        "$target_repo/.codex-home/skills/conduct/scripts/status.cjs" || installed=false
+    if ! node "$target_repo/.codex-home/skills/conduct/scripts/conduct.cjs" status set \
+        --root "$target_repo/status root" --controller HARNESS --workstream packaging \
+        --percent 50 --state in_flight >/dev/null 2>&1; then
+        installed=false
+    fi
+    local status_output
+    status_output=$(node "$target_repo/.codex-home/skills/conduct/scripts/conduct.cjs" status \
+        --root "$target_repo/status root" --controller HARNESS 2>/dev/null) || installed=false
+    printf '%s\n' "$status_output" | grep -Fq '[HARNESS]' || installed=false
+    printf '%s\n' "$status_output" | grep -Fq '50% packaging' || installed=false
     rm -rf "$adapter_clone" "$target_repo"
 
     if [ "$installed" = "true" ]; then
-        pass "Installer packages the Conduct codex-thread helper"
+        pass "Installer packages the Conduct status and codex-thread helpers"
     else
-        fail "Installer did not package the Conduct codex-thread helper"
+        fail "Installer did not package the Conduct status and codex-thread helpers"
     fi
 }
 
@@ -1459,7 +1472,7 @@ test_windows_desktop_real_install_runbook_exists() {
 test_installer_smoke_test_clean_project
 test_installer_scaffolds_only_default_repo_scope_sdlc_skill
 test_installer_uses_canonical_sdlc_skill_name
-test_installer_packages_codex_thread_helper
+test_installer_packages_conduct_helpers
 test_installer_writes_default_model_profile
 test_installer_renders_explicit_mixed_baseline
 test_installer_rejects_unsupported_codex_before_mutation

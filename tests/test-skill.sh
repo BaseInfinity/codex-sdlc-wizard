@@ -19,6 +19,8 @@ GLOBAL_SKILL_SOURCES="$REPO_DIR/skill-sources"
 CONDUCT_SKILL_SOURCE="$GLOBAL_SKILL_SOURCES/conduct/SKILL.template.md"
 CONDUCT_OPENAI_YAML="$GLOBAL_SKILL_SOURCES/conduct/agents/openai.yaml"
 CONDUCT_SCRIPT="$GLOBAL_SKILL_SOURCES/conduct/scripts/conduct.cjs"
+CONDUCT_STATUS_TEST="$REPO_DIR/tests/test-conduct-status.cjs"
+CONDUCT_PARITY_TEST="$REPO_DIR/tests/test-conduct-parity.cjs"
 CONDUCT_PROTOCOL="$GLOBAL_SKILL_SOURCES/conduct/references/protocol.md"
 CONDUCT_CODEX_NATIVE_REFERENCE="$GLOBAL_SKILL_SOURCES/conduct/references/codex-native.md"
 CONDUCT_CLAUDE_DESKTOP_REFERENCE="$GLOBAL_SKILL_SOURCES/conduct/references/claude-desktop.md"
@@ -690,44 +692,142 @@ test_conduct_skill_documents_shared_protocol_and_reachability_boundary() {
 }
 
 test_conduct_operating_model_block_is_unique_and_matches_peer() {
-    local output
-    if output=$(CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
-        CLAUDE_CONDUCT_SKILL_FILE="${CLAUDE_CONDUCT_SKILL_FILE:-}" node <<'NODE' 2>&1
-const fs = require("node:fs");
+    local ws peer_skill output
+    local valid=true
+    ws=$(mktemp -d)
+    peer_skill="$ws/peer/skills/conduct/SKILL.md"
+    mkdir -p "$(dirname "$peer_skill")"
 
+    if ! output=$(CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        node "$CONDUCT_PARITY_TEST" 2>&1); then
+        valid=false
+    fi
+    if [ -z "${CLAUDE_SDLC_WIZARD_DIR:-}" ]; then
+        printf '%s\n' "$output" | grep -Fq 'SKIP: CLAUDE_SDLC_WIZARD_DIR is unset' || valid=false
+    fi
+
+    cp "$CONDUCT_SKILL_SOURCE" "$peer_skill"
+    CLAUDE_SDLC_WIZARD_DIR="$ws/peer" CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        node "$CONDUCT_PARITY_TEST" >/dev/null 2>&1 || valid=false
+
+    if CLAUDE_SDLC_WIZARD_DIR="$ws/missing" CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        node "$CONDUCT_PARITY_TEST" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    PEER_SKILL="$peer_skill" node <<'NODE'
+const fs = require("node:fs");
+const file = process.env.PEER_SKILL;
+const content = fs.readFileSync(file);
+const needle = Buffer.from("The conductor only routes.");
+const offset = content.indexOf(needle);
+if (offset === -1) process.exit(1);
+content[offset] ^= 1;
+fs.writeFileSync(file, content);
+NODE
+    if CLAUDE_SDLC_WIZARD_DIR="$ws/peer" CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        node "$CONDUCT_PARITY_TEST" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    cp "$CONDUCT_SKILL_SOURCE" "$peer_skill"
+    PEER_SKILL="$peer_skill" node <<'NODE'
+const fs = require("node:fs");
+const file = process.env.PEER_SKILL;
+const begin = "<!-- conduct-operating-model:begin -->";
+const content = fs.readFileSync(file, "utf8");
+if (!content.includes(begin)) process.exit(1);
+fs.writeFileSync(file, content.replace(begin, ""));
+NODE
+    if CLAUDE_SDLC_WIZARD_DIR="$ws/peer" CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        node "$CONDUCT_PARITY_TEST" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    cp "$CONDUCT_SKILL_SOURCE" "$peer_skill"
+    PEER_SKILL="$peer_skill" node <<'NODE'
+const fs = require("node:fs");
+const file = process.env.PEER_SKILL;
+const content = fs.readFileSync(file, "utf8");
+fs.writeFileSync(file, content.replace(/\n/g, "\r\n"));
+NODE
+    if CLAUDE_SDLC_WIZARD_DIR="$ws/peer" CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        node "$CONDUCT_PARITY_TEST" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    cp "$CONDUCT_SKILL_SOURCE" "$peer_skill"
+    PEER_SKILL="$peer_skill" node <<'NODE'
+const fs = require("node:fs");
+const file = process.env.PEER_SKILL;
+const begin = "<!-- conduct-operating-model:begin -->";
+const content = fs.readFileSync(file, "utf8");
+fs.writeFileSync(file, `${content}${begin}\n`);
+NODE
+    if CLAUDE_SDLC_WIZARD_DIR="$ws/peer" CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        node "$CONDUCT_PARITY_TEST" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    cp "$CONDUCT_SKILL_SOURCE" "$peer_skill"
+    PEER_SKILL="$peer_skill" node <<'NODE'
+const fs = require("node:fs");
+const file = process.env.PEER_SKILL;
 const begin = "<!-- conduct-operating-model:begin -->";
 const end = "<!-- conduct-operating-model:end -->";
+const content = fs.readFileSync(file, "utf8");
+fs.writeFileSync(file, content.replace(begin, "PLACEHOLDER").replace(end, begin).replace("PLACEHOLDER", end));
+NODE
+    if CLAUDE_SDLC_WIZARD_DIR="$ws/peer" CONDUCT_SKILL_SOURCE="$CONDUCT_SKILL_SOURCE" \
+        node "$CONDUCT_PARITY_TEST" >/dev/null 2>&1; then
+        valid=false
+    fi
 
-function extractCanonicalBlock(file, label) {
-  // Git's canonical block identity is LF-only; normalize line endings before byte equality.
-  const text = fs.readFileSync(file, "utf8").replace(/\r\n|\r/g, "\n");
-  const beginCount = text.split(begin).length - 1;
-  const endCount = text.split(end).length - 1;
-  if (beginCount !== 1 || endCount !== 1) {
-    throw new Error(`${label} must contain exactly one begin marker and one end marker`);
-  }
-  const start = text.indexOf(begin);
-  const finish = text.indexOf(end, start + begin.length);
-  if (finish < start) throw new Error(`${label} has reversed operating-model markers`);
-  return text.slice(start, finish + end.length);
-}
-
-const localBlock = extractCanonicalBlock(process.env.CONDUCT_SKILL_SOURCE, "Codex Conduct skill");
-const peerFile = process.env.CLAUDE_CONDUCT_SKILL_FILE;
-if (peerFile) {
-  const peerBlock = extractCanonicalBlock(peerFile, "Claude Conduct skill");
-  if (localBlock !== peerBlock) throw new Error("Claude and Codex operating-model blocks differ");
-  process.stdout.write("peer operating-model block matches canonical LF identity\n");
-} else {
-  process.stdout.write("optional peer parity skipped; local marker uniqueness verified\n");
+    local local_skill="$ws/local/SKILL.template.md"
+    mkdir -p "$(dirname "$local_skill")"
+    cp "$CONDUCT_SKILL_SOURCE" "$local_skill"
+    cp "$CONDUCT_SKILL_SOURCE" "$peer_skill"
+    LOCAL_SKILL="$local_skill" PEER_SKILL="$peer_skill" node <<'NODE'
+const fs = require("node:fs");
+for (const file of [process.env.LOCAL_SKILL, process.env.PEER_SKILL]) {
+  const content = fs.readFileSync(file, "utf8");
+  fs.writeFileSync(file, content.replace(/^\| 4 \|.*\n/m, ""));
 }
 NODE
-    ); then
+    if CLAUDE_SDLC_WIZARD_DIR="$ws/peer" CONDUCT_SKILL_SOURCE="$local_skill" \
+        node "$CONDUCT_PARITY_TEST" >/dev/null 2>&1; then
+        valid=false
+    fi
+
+    rm -rf "$ws"
+    if [ "$valid" = "true" ]; then
         printf '%s\n' "$output"
-        pass "conduct operating model has one marked block and optional peer parity"
+        pass "conduct operating model uses strict directory-based raw-byte peer parity"
     else
         printf '%s\n' "$output" >&2
-        fail "conduct operating model markers or peer parity are invalid"
+        fail "conduct operating model markers or strict peer parity are invalid"
+    fi
+}
+
+test_conduct_status_public_entrypoint() {
+    if node "$CONDUCT_STATUS_TEST"; then
+        pass "conduct exposes status through its shipped public entrypoint"
+    else
+        fail "conduct does not dispatch its public status command"
+    fi
+}
+
+test_conduct_status_docs_use_shipped_entrypoint() {
+    local valid=true
+    grep -Fq 'node <skill-root>/scripts/conduct.cjs status --root <repo>' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq 'node <skill-root>/scripts/conduct.cjs status set' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq 'Each controller updates only its own rows.' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq 'does not install a usage collector' "$CONDUCT_SKILL_SOURCE" || valid=false
+    grep -Fq 'claude-sdlc-harness #749' "$REPO_DIR/TESTING.md" || valid=false
+    if [ "$valid" = "true" ]; then
+        pass "conduct documents the shipped status entrypoint, row ownership, and vendor limitation"
+    else
+        fail "conduct status documentation is missing or overclaims the installed runtime"
     fi
 }
 
@@ -1120,6 +1220,8 @@ test_repo_scoped_sdlc_skill_documents_codex_shape_and_repo_focus
 test_repo_scoped_sdlc_skill_documents_native_review
 test_conduct_skill_documents_shared_protocol_and_reachability_boundary
 test_conduct_operating_model_block_is_unique_and_matches_peer
+test_conduct_status_public_entrypoint
+test_conduct_status_docs_use_shipped_entrypoint
 test_conduct_helper_writes_exact_envelopes_and_blocks_response_loops
 test_conduct_rejects_symlink_state
 test_conduct_cli_validation

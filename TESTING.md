@@ -110,6 +110,21 @@ checkout, note that `git status` there will report large numbers of spurious
 modifications; confirm with `git diff -w --ignore-cr-at-eol` before believing
 them.
 
+The Conduct status parity checks run with:
+
+```bash
+node tests/test-conduct-status.cjs
+CLAUDE_SDLC_WIZARD_DIR=/path/to/claude-sdlc-harness node tests/test-conduct-parity.cjs
+```
+
+The status test also creates an isolated Git index and checkout with
+`core.autocrlf=true` and compares the marked template plus both shared scripts
+byte-for-byte. The vendored status helper intentionally remains identical to
+its certified upstream source. Its known malformed-state limitation is tracked
+as `claude-sdlc-harness #749`: an existing `{"rows":[]}` can report a successful
+set without saving the row; this port does not claim to repair that upstream
+debt.
+
 ## Before you commit
 
 1. `node scripts/run-proof-suite.cjs` — green.

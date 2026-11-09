@@ -1,1 +1,6 @@
 *.sh text eol=lf
+skill-sources/conduct/SKILL.template.md text eol=lf
+skill-sources/conduct/scripts/status.cjs text eol=lf
+skill-sources/conduct/scripts/conduct.cjs text eol=lf
+tests/fixtures/conduct-pre-status-skill.md text eol=lf
+tests/fixtures/conduct-pre-status-writer.cjs text eol=lf

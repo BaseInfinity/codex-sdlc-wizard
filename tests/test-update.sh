@@ -1097,6 +1097,7 @@ test_update_repairs_missing_native_skills() {
     run_setup_local "$ws"
     rm -rf "$ws/.codex-home/skills/feedback"
     rm -f "$ws/.codex-home/skills/conduct/scripts/conduct.cjs"
+    rm -f "$ws/.codex-home/skills/conduct/scripts/status.cjs"
     rm -f "$ws/.codex-home/skills/conduct/scripts/codex-thread.py"
     rm -f "$ws/.codex-home/skills/conduct/agents/openai.yaml"
 
@@ -1106,6 +1107,7 @@ test_update_repairs_missing_native_skills() {
     [ -f "$ws/.codex-home/skills/feedback/SKILL.md" ] || valid=false
     [ -f "$ws/.codex-home/skills/conduct/SKILL.md" ] || valid=false
     [ -f "$ws/.codex-home/skills/conduct/scripts/conduct.cjs" ] || valid=false
+    [ -f "$ws/.codex-home/skills/conduct/scripts/status.cjs" ] || valid=false
     [ -f "$ws/.codex-home/skills/conduct/scripts/codex-thread.py" ] || valid=false
     [ -f "$ws/.codex-home/skills/conduct/agents/openai.yaml" ] || valid=false
     echo "$output" | grep -q 'skills/feedback' 2>/dev/null || valid=false
@@ -1125,6 +1127,42 @@ test_update_repairs_missing_native_skills() {
         pass "update repairs missing native skills in CODEX_HOME"
     else
         fail "update did not repair the missing native skill"
+    fi
+}
+
+test_update_refreshes_pre_status_conduct_stock_and_preserves_custom_install() {
+    local ws output valid=true
+    ws=$(mktemp -d "$MKTEMP_DIR/update-test.XXXXXX")
+    echo '{"name":"test-app","scripts":{"test":"jest"}}' > "$ws/package.json"
+    mkdir -p "$ws/src"
+    run_setup_local "$ws"
+
+    cp "$SCRIPT_DIR/fixtures/conduct-pre-status-skill.md" \
+        "$ws/.codex-home/skills/conduct/SKILL.md"
+    cp "$SCRIPT_DIR/fixtures/conduct-pre-status-writer.cjs" \
+        "$ws/.codex-home/skills/conduct/scripts/conduct.cjs"
+    rm -f "$ws/.codex-home/skills/conduct/scripts/status.cjs"
+    output=$(run_update "$ws")
+    cmp -s "$REPO_DIR/skill-sources/conduct/SKILL.template.md" \
+        "$ws/.codex-home/skills/conduct/SKILL.md" || valid=false
+    cmp -s "$REPO_DIR/skill-sources/conduct/scripts/conduct.cjs" \
+        "$ws/.codex-home/skills/conduct/scripts/conduct.cjs" || valid=false
+    cmp -s "$REPO_DIR/skill-sources/conduct/scripts/status.cjs" \
+        "$ws/.codex-home/skills/conduct/scripts/status.cjs" || valid=false
+    find "$ws/.codex-home/backups/skills" -maxdepth 1 -name 'conduct-template.bak.*' \
+        -type f | grep -q . || valid=false
+
+    echo '# USER CUSTOM CONDUCT SKILL' >> "$ws/.codex-home/skills/conduct/SKILL.md"
+    echo '// USER CUSTOM CONDUCT PARENT' >> "$ws/.codex-home/skills/conduct/scripts/conduct.cjs"
+    output=$(run_update "$ws")
+    grep -Fq 'USER CUSTOM CONDUCT SKILL' "$ws/.codex-home/skills/conduct/SKILL.md" || valid=false
+    grep -Fq 'USER CUSTOM CONDUCT PARENT' "$ws/.codex-home/skills/conduct/scripts/conduct.cjs" || valid=false
+
+    if [ "$valid" = "true" ]; then
+        pass "update refreshes authentic pre-status Conduct stock and preserves customized installs"
+    else
+        printf '%s\n' "$output" >&2
+        fail "update did not refresh only authentic pre-status Conduct stock"
     fi
 }
 
@@ -2097,6 +2135,7 @@ test_update_upgrades_unmodified_outdated_managed_files_only
 test_update_replaces_and_backs_up_malformed_hooks
 test_update_merges_config_without_dropping_other_settings
 test_update_repairs_missing_native_skills
+test_update_refreshes_pre_status_conduct_stock_and_preserves_custom_install
 test_update_removes_legacy_codex_sdlc_skill
 test_update_preserves_user_owned_global_sdlc_skill
 test_update_repairs_mixed_profile_reasoning_drift

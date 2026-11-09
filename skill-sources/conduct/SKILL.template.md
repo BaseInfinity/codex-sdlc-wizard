@@ -37,6 +37,24 @@ Role titles create no transport reach, permissions, or permanent watcher. Target
 
 Fixed text labels stay emoji-free. Where supported, Codex may render `-` blockers red, `+` moving/done green, `@@` headings cyan, and `█░` progress bars. Optional tab colors are orange Harness, red Conductor, pink Anticheat, and green Codex; health bars are controller-only.
 
+## Controller status
+
+Use the shipped parent command to read the fleet view from an owned repository root:
+
+```bash
+node <skill-root>/scripts/conduct.cjs status --root <repo>
+```
+
+Update one workstream when its state changes:
+
+```bash
+node <skill-root>/scripts/conduct.cjs status set \
+  --root <repo> --controller HARNESS --workstream <name> \
+  --percent <0-100> --state <in_flight|blocked|planned|done>
+```
+
+Each controller updates only its own rows. A blocked row also requires `--blocker-owner`; optional `--next` and `--evidence` values remain display text. The helper can display existing account-usage rows, but this package does not install a usage collector, so absent usage data remains `unknown`.
+
 ## Workflow
 
 1. Resolve the repository root and create or reuse one run ID.

@@ -32,7 +32,10 @@ stock_33e_workspace=$(mktemp -d)
 stock_custom_support_workspace=$(mktemp -d)
 stock_custom_template_workspace=$(mktemp -d)
 pre_operating_model_workspace=$(mktemp -d)
-trap 'rm -rf "$native_upgrade_workspace" "$native_stock_workspace" "$custom_template_workspace" "$c30_stock_workspace" "$c30_crlf_workspace" "$c30_custom_support_workspace" "$previous_stock_workspace" "$custom_reference_workspace" "$unsafe_file_workspace" "$unsafe_support_dir_workspace" "$unsafe_skill_root_workspace" "$unsafe_backup_workspace" "$invalid_entry_workspace" "$fallback_symlink_root_workspace" "$selective_backup_leaf_workspace" "$fallback_backup_leaf_workspace" "$fresh_missing_skills_workspace" "$immediate_lf_workspace" "$immediate_crlf_workspace" "$immediate_custom_helper_workspace" "$immediate_custom_template_workspace" "$absent_history_workspace" "$stock_965_workspace" "$stock_c8_workspace" "$stock_3ed_workspace" "$stock_c30_documents_workspace" "$stock_33e_workspace" "$stock_custom_support_workspace" "$stock_custom_template_workspace" "$pre_operating_model_workspace"' EXIT
+pre_status_stock_workspace=$(mktemp -d)
+pre_status_custom_parent_workspace=$(mktemp -d)
+pre_status_custom_helper_workspace=$(mktemp -d)
+trap 'rm -rf "$native_upgrade_workspace" "$native_stock_workspace" "$custom_template_workspace" "$c30_stock_workspace" "$c30_crlf_workspace" "$c30_custom_support_workspace" "$previous_stock_workspace" "$custom_reference_workspace" "$unsafe_file_workspace" "$unsafe_support_dir_workspace" "$unsafe_skill_root_workspace" "$unsafe_backup_workspace" "$invalid_entry_workspace" "$fallback_symlink_root_workspace" "$selective_backup_leaf_workspace" "$fallback_backup_leaf_workspace" "$fresh_missing_skills_workspace" "$immediate_lf_workspace" "$immediate_crlf_workspace" "$immediate_custom_helper_workspace" "$immediate_custom_template_workspace" "$absent_history_workspace" "$stock_965_workspace" "$stock_c8_workspace" "$stock_3ed_workspace" "$stock_c30_documents_workspace" "$stock_33e_workspace" "$stock_custom_support_workspace" "$stock_custom_template_workspace" "$pre_operating_model_workspace" "$pre_status_stock_workspace" "$pre_status_custom_parent_workspace" "$pre_status_custom_helper_workspace"' EXIT
 export CODEX_HOME="$native_upgrade_workspace/codex-home"
 export CODEX_SDLC_CODEX_BIN="$SCRIPT_DIR/fixtures/codex-version-stub.sh"
 export CODEX_SDLC_DISABLE_REASONING=1
@@ -74,6 +77,8 @@ const expected = {
   "conduct-33e-codex-native.md": "d7ad565dab613e7513017a78d0111866a8bba4b1c855ee7f5ed04683212e5df9",
   "conduct-33e-protocol.md": "92f3611ab3704a2a3a382c682c42bc8a02672271125fcea80a329baa26860c22",
   "conduct-pre-recovery-protocol.md": "0f6f075b02e543944a057b28011e1cc2a39070da4bd281628fa4ddc9c0e01ee9",
+  "conduct-pre-status-skill.md": "6a2cf17c8eddff9abaf81ce4bd208c84fa949407f9b2758e724903f6f3a52834",
+  "conduct-pre-status-writer.cjs": "e76ad7089fdd16f0db7fec2d48d9628f48a2ae6cd53253a97a5179e834b659c8",
 };
 for (const [file, hash] of Object.entries(expected)) {
   const actual = crypto.createHash("sha256").update(fs.readFileSync(path.join(process.env.FIXTURE_DIR, file))).digest("hex");
@@ -463,6 +468,65 @@ run_fixture_without_history_regression() {
     fi
     grep -Fxq 'rejected historical show' "$CONDUCT_TEST_GIT_LOG"
 }
+prepare_pre_status_workspace() {
+    local workspace="$1"
+    local package_name="$2"
+    initialize_current_conduct_workspace "$workspace" "$package_name"
+    cp "$SCRIPT_DIR/fixtures/conduct-pre-status-skill.md" "$CODEX_HOME/skills/conduct/SKILL.md"
+    cp "$SCRIPT_DIR/fixtures/conduct-pre-status-writer.cjs" "$CODEX_HOME/skills/conduct/scripts/conduct.cjs"
+}
+run_pre_status_stock_regression() {
+    local workspace="$pre_status_stock_workspace"
+    local output="$workspace/update.out"
+    prepare_pre_status_workspace "$workspace" "conduct-pre-status-stock"
+    rm "$CODEX_HOME/skills/conduct/scripts/status.cjs"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$output" 2>&1)
+    grep -Fq 'Applied: skills/conduct' "$output"
+    cmp "$REPO_DIR/skill-sources/conduct/SKILL.template.md" "$CODEX_HOME/skills/conduct/SKILL.md"
+    cmp "$REPO_DIR/skill-sources/conduct/scripts/conduct.cjs" "$CODEX_HOME/skills/conduct/scripts/conduct.cjs"
+    cmp "$REPO_DIR/skill-sources/conduct/scripts/status.cjs" "$CODEX_HOME/skills/conduct/scripts/status.cjs"
+    echo 'PASS: authentic pre-status stock upgrades guide, parent, and status helper coherently'
+}
+run_pre_status_custom_parent_regression() {
+    local workspace="$pre_status_custom_parent_workspace"
+    local output="$workspace/update.out"
+    prepare_pre_status_workspace "$workspace" "conduct-pre-status-custom-parent"
+    printf '\n%s\n' '// USER CUSTOM PRE-STATUS PARENT' >> "$CODEX_HOME/skills/conduct/scripts/conduct.cjs"
+    cp "$CODEX_HOME/skills/conduct/SKILL.md" "$workspace/skill.before"
+    cp "$CODEX_HOME/skills/conduct/scripts/conduct.cjs" "$workspace/conduct.before"
+    rm "$CODEX_HOME/skills/conduct/scripts/status.cjs"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$output" 2>&1)
+    cmp "$workspace/skill.before" "$CODEX_HOME/skills/conduct/SKILL.md" || {
+        echo 'FAIL: customized pre-status parent allowed an unsupported status guide upgrade' >&2
+        return 1
+    }
+    cmp "$workspace/conduct.before" "$CODEX_HOME/skills/conduct/scripts/conduct.cjs"
+    cmp "$REPO_DIR/skill-sources/conduct/scripts/status.cjs" "$CODEX_HOME/skills/conduct/scripts/status.cjs"
+    grep -Fq 'customized Conduct status support prevents complete guide upgrade' "$output"
+    echo 'PASS: customized pre-status parent preserves the old guide and warns'
+}
+run_pre_status_custom_helper_regression() {
+    local workspace="$pre_status_custom_helper_workspace"
+    local output="$workspace/update.out"
+    prepare_pre_status_workspace "$workspace" "conduct-pre-status-custom-helper"
+    printf '\n%s\n' '// USER CUSTOM STATUS HELPER' >> "$CODEX_HOME/skills/conduct/scripts/status.cjs"
+    cp "$CODEX_HOME/skills/conduct/SKILL.md" "$workspace/skill.before"
+    cp "$CODEX_HOME/skills/conduct/scripts/status.cjs" "$workspace/status.before"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$output" 2>&1)
+    cmp "$workspace/skill.before" "$CODEX_HOME/skills/conduct/SKILL.md" || {
+        echo 'FAIL: customized status helper allowed an unsupported status guide upgrade' >&2
+        return 1
+    }
+    cmp "$REPO_DIR/skill-sources/conduct/scripts/conduct.cjs" "$CODEX_HOME/skills/conduct/scripts/conduct.cjs"
+    cmp "$workspace/status.before" "$CODEX_HOME/skills/conduct/scripts/status.cjs"
+    grep -Fq 'customized Conduct status support prevents complete guide upgrade' "$output"
+    echo 'PASS: customized status helper preserves the old guide and warns'
+}
+run_pre_status_status_regressions() {
+    (run_pre_status_stock_regression)
+    (run_pre_status_custom_parent_regression)
+    (run_pre_status_custom_helper_regression)
+}
 case "${CONDUCT_UPGRADE_FOCUS:-}" in
     pre-operating-model) run_pre_operating_model_regression; exit ;;
     fallback-symlink-root) run_fallback_symlink_root_regression; exit ;;
@@ -474,9 +538,11 @@ case "${CONDUCT_UPGRADE_FOCUS:-}" in
     immediate-helper) run_immediate_helper_regressions; exit ;;
     stock-documents) run_stock_document_regressions; exit ;;
     fixture-no-history) run_fixture_without_history_regression; exit ;;
+    pre-status-status) run_pre_status_status_regressions; exit ;;
     '') ;;
     *) echo "Unknown CONDUCT_UPGRADE_FOCUS: $CONDUCT_UPGRADE_FOCUS" >&2; exit 1 ;;
 esac
+run_pre_status_status_regressions
 run_immediate_helper_regressions
 echo 'PASS: immediate stock helper refresh is selective, stable, and customization-safe'
 run_stock_document_regressions
@@ -593,13 +659,14 @@ cp "$CODEX_HOME/skills/conduct/references/codex-native.md" "$c30_custom_support_
 cp "$CODEX_HOME/skills/conduct/scripts/codex-thread.py" "$c30_custom_support_workspace/codex-thread.before"
 cp "$CODEX_HOME/skills/conduct/scripts/conduct.cjs" "$c30_custom_support_workspace/conduct.before"
 cp "$CODEX_HOME/skills/conduct/scripts/codex-native.py" "$c30_custom_support_workspace/codex-native-adapter.before"
-(cd "$c30_custom_support_workspace" && bash "$REPO_DIR/update.sh" >/dev/null)
-cmp "$REPO_DIR/skill-sources/conduct/SKILL.template.md" "$CODEX_HOME/skills/conduct/SKILL.md"
+(cd "$c30_custom_support_workspace" && bash "$REPO_DIR/update.sh" >"$c30_custom_support_workspace/update.out" 2>&1)
+cmp "$SCRIPT_DIR/fixtures/conduct-c30-skill.md" "$CODEX_HOME/skills/conduct/SKILL.md"
 cmp "$c30_custom_support_workspace/codex-native-reference.before" "$CODEX_HOME/skills/conduct/references/codex-native.md"
 cmp "$c30_custom_support_workspace/codex-thread.before" "$CODEX_HOME/skills/conduct/scripts/codex-thread.py"
 cmp "$c30_custom_support_workspace/conduct.before" "$CODEX_HOME/skills/conduct/scripts/conduct.cjs"
 cmp "$c30_custom_support_workspace/codex-native-adapter.before" "$CODEX_HOME/skills/conduct/scripts/codex-native.py"
-echo 'PASS: c30 stock template upgrades without replacing customized reference or helper'
+grep -Fq 'customized Conduct status support prevents complete guide upgrade' "$c30_custom_support_workspace/update.out"
+echo 'PASS: c30 customized support preserves its matching stock guide and warns'
 
 export CODEX_HOME="$custom_reference_workspace/codex-home"
 printf '%s\n' '{"name":"conduct-custom-reference-upgrade","scripts":{"test":"node --test"}}' > "$custom_reference_workspace/package.json"
