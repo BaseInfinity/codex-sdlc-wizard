@@ -24,7 +24,14 @@ immediate_crlf_workspace=$(mktemp -d)
 immediate_custom_helper_workspace=$(mktemp -d)
 immediate_custom_template_workspace=$(mktemp -d)
 absent_history_workspace=$(mktemp -d)
-trap 'rm -rf "$native_upgrade_workspace" "$native_stock_workspace" "$custom_template_workspace" "$c30_stock_workspace" "$c30_crlf_workspace" "$c30_custom_support_workspace" "$previous_stock_workspace" "$custom_reference_workspace" "$unsafe_file_workspace" "$unsafe_support_dir_workspace" "$unsafe_skill_root_workspace" "$unsafe_backup_workspace" "$invalid_entry_workspace" "$fallback_symlink_root_workspace" "$selective_backup_leaf_workspace" "$fallback_backup_leaf_workspace" "$fresh_missing_skills_workspace" "$immediate_lf_workspace" "$immediate_crlf_workspace" "$immediate_custom_helper_workspace" "$immediate_custom_template_workspace" "$absent_history_workspace"' EXIT
+stock_965_workspace=$(mktemp -d)
+stock_c8_workspace=$(mktemp -d)
+stock_3ed_workspace=$(mktemp -d)
+stock_c30_documents_workspace=$(mktemp -d)
+stock_33e_workspace=$(mktemp -d)
+stock_custom_support_workspace=$(mktemp -d)
+stock_custom_template_workspace=$(mktemp -d)
+trap 'rm -rf "$native_upgrade_workspace" "$native_stock_workspace" "$custom_template_workspace" "$c30_stock_workspace" "$c30_crlf_workspace" "$c30_custom_support_workspace" "$previous_stock_workspace" "$custom_reference_workspace" "$unsafe_file_workspace" "$unsafe_support_dir_workspace" "$unsafe_skill_root_workspace" "$unsafe_backup_workspace" "$invalid_entry_workspace" "$fallback_symlink_root_workspace" "$selective_backup_leaf_workspace" "$fallback_backup_leaf_workspace" "$fresh_missing_skills_workspace" "$immediate_lf_workspace" "$immediate_crlf_workspace" "$immediate_custom_helper_workspace" "$immediate_custom_template_workspace" "$absent_history_workspace" "$stock_965_workspace" "$stock_c8_workspace" "$stock_3ed_workspace" "$stock_c30_documents_workspace" "$stock_33e_workspace" "$stock_custom_support_workspace" "$stock_custom_template_workspace"' EXIT
 export CODEX_HOME="$native_upgrade_workspace/codex-home"
 export CODEX_SDLC_CODEX_BIN="$SCRIPT_DIR/fixtures/codex-version-stub.sh"
 export CODEX_SDLC_DISABLE_REASONING=1
@@ -51,16 +58,24 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const expected = {
+  "conduct-cli-v1.md": "1fdc5685ac73ce181ab7df85a30b2e4c732a8c6e38a2843986dd9860b6309041",
+  "conduct-native-v1.md": "79606cea31de0694d10e3fb4584f638644d1c3cb8684bb79adead61c6cf1a1d0",
+  "conduct-peer-recovery-v1.md": "ab2068e4d8cacdcdac72cad5c75c1e915e8eb93f244bcba91fd8e0b45ace3e86",
+  "conduct-peer-recovery-codex-native-v1.md": "de0ae0dc16214a3506db0500168e68c6c19f80208fda8c3c1a9ef651e061a93a",
   "conduct-c30-skill.md": "0ecd37f0e2f90ef43893999444f5afa68bcf1539178d8adb3092b7c623a11b34",
   "conduct-c30-codex-native.md": "4e6742e6f3f1bc0fd0bf38a7ab63982f148a5d0e274c722b5f0b23cf091b6db8",
   "conduct-c30-codex-thread.py": "41790af2f70eb9312113a54174afa2f861426f4bc43b87d7babaf3fd97ecf2e2",
   "conduct-c30-conduct.cjs": "53ed69e212151d6eddc850e1bc651d1b1b534e4513b1ae3eda95eb9d2cf5d9a6",
   "conduct-c30-codex-native.py": "f07314fba9e4a0cf2c552f469d01edaf1fedefeba60d930fcb1849e3e561f260",
   "conduct-33e-codex-thread.py": "5f7d210b26201b0ba9a65fd69a089d42160212f117be43f7900e16939c8d6458",
+  "conduct-33e-skill.md": "a7b33778e7c0df2e3d4407cf9be2a7ebbe149ffe77e69b437c9d20b812463b17",
+  "conduct-33e-codex-native.md": "d7ad565dab613e7513017a78d0111866a8bba4b1c855ee7f5ed04683212e5df9",
+  "conduct-33e-protocol.md": "92f3611ab3704a2a3a382c682c42bc8a02672271125fcea80a329baa26860c22",
+  "conduct-pre-recovery-protocol.md": "0f6f075b02e543944a057b28011e1cc2a39070da4bd281628fa4ddc9c0e01ee9",
 };
 for (const [file, hash] of Object.entries(expected)) {
   const actual = crypto.createHash("sha256").update(fs.readFileSync(path.join(process.env.FIXTURE_DIR, file))).digest("hex");
-  if (actual !== hash) throw new Error(`${file} is not the exact c30b1bb predecessor`);
+  if (actual !== hash) throw new Error(`${file} does not match its pinned predecessor hash`);
 }
 NODE
 grep -Fq '53ed69e212151d6eddc850e1bc651d1b1b534e4513b1ae3eda95eb9d2cf5d9a6' "$REPO_DIR/update.sh"
@@ -287,6 +302,105 @@ run_immediate_helper_regressions() {
     (run_immediate_custom_helper_regression)
     (run_immediate_custom_template_regression)
 }
+assert_current_stock_documents() {
+    local generation="$1"
+    local document
+    for document in \
+        SKILL.md \
+        references/protocol.md \
+        references/codex-native.md; do
+        local source_document="$document"
+        if [ "$document" = "SKILL.md" ]; then
+            source_document="SKILL.template.md"
+        fi
+        if ! cmp \
+            "$REPO_DIR/skill-sources/conduct/$source_document" \
+            "$CODEX_HOME/skills/conduct/$document"; then
+            echo "FAIL: $generation stock did not migrate $document" >&2
+            return 1
+        fi
+    done
+}
+run_stock_document_generation_regression() {
+    local workspace="$1"
+    local generation="$2"
+    local template_fixture="$3"
+    local protocol_fixture="$4"
+    local native_fixture="$5"
+    local first_output="$workspace/first-update.out"
+    local second_output="$workspace/second-update.out"
+    export CODEX_HOME="$workspace/codex-home"
+    printf '%s\n' "{\"name\":\"conduct-${generation}-documents\",\"scripts\":{\"test\":\"node --test\"}}" > "$workspace/package.json"
+    mkdir "$workspace/src"
+    (cd "$workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)
+    cp "$SCRIPT_DIR/fixtures/$template_fixture" "$CODEX_HOME/skills/conduct/SKILL.md"
+    cp "$SCRIPT_DIR/fixtures/$protocol_fixture" "$CODEX_HOME/skills/conduct/references/protocol.md"
+    if [ "$native_fixture" = "absent" ]; then
+        rm "$CODEX_HOME/skills/conduct/references/codex-native.md"
+        test ! -e "$CODEX_HOME/skills/conduct/references/codex-native.md"
+    else
+        cp "$SCRIPT_DIR/fixtures/$native_fixture" "$CODEX_HOME/skills/conduct/references/codex-native.md"
+    fi
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$first_output")
+    grep -Fq 'Applied: skills/conduct' "$first_output"
+    assert_current_stock_documents "$generation"
+    snapshot_current_conduct_docs "$workspace"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$second_output")
+    grep -Fq 'No changes applied.' "$second_output"
+    assert_current_conduct_docs_unchanged "$workspace"
+}
+run_custom_support_document_regression() {
+    local workspace="$stock_custom_support_workspace"
+    local second_output="$workspace/second-update.out"
+    export CODEX_HOME="$workspace/codex-home"
+    printf '%s\n' '{"name":"conduct-custom-support-documents","scripts":{"test":"node --test"}}' > "$workspace/package.json"
+    mkdir "$workspace/src"
+    (cd "$workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)
+    cp "$SCRIPT_DIR/fixtures/conduct-33e-skill.md" "$CODEX_HOME/skills/conduct/SKILL.md"
+    cp "$SCRIPT_DIR/fixtures/conduct-pre-recovery-protocol.md" "$CODEX_HOME/skills/conduct/references/protocol.md"
+    cp "$SCRIPT_DIR/fixtures/conduct-33e-codex-native.md" "$CODEX_HOME/skills/conduct/references/codex-native.md"
+    printf '\n%s\n' '# GENUINE CUSTOM PROTOCOL' >> "$CODEX_HOME/skills/conduct/references/protocol.md"
+    printf '\n%s\n' '# GENUINE CUSTOM NATIVE REFERENCE' >> "$CODEX_HOME/skills/conduct/references/codex-native.md"
+    cp "$CODEX_HOME/skills/conduct/references/protocol.md" "$workspace/protocol.before"
+    cp "$CODEX_HOME/skills/conduct/references/codex-native.md" "$workspace/codex-native.before"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >/dev/null)
+    cmp "$REPO_DIR/skill-sources/conduct/SKILL.template.md" "$CODEX_HOME/skills/conduct/SKILL.md"
+    cmp "$workspace/protocol.before" "$CODEX_HOME/skills/conduct/references/protocol.md"
+    cmp "$workspace/codex-native.before" "$CODEX_HOME/skills/conduct/references/codex-native.md"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$second_output")
+    grep -Fq 'No changes applied.' "$second_output"
+    cmp "$workspace/protocol.before" "$CODEX_HOME/skills/conduct/references/protocol.md"
+    cmp "$workspace/codex-native.before" "$CODEX_HOME/skills/conduct/references/codex-native.md"
+}
+run_custom_template_document_regression() {
+    local workspace="$stock_custom_template_workspace"
+    local first_output="$workspace/first-update.out"
+    local second_output="$workspace/second-update.out"
+    export CODEX_HOME="$workspace/codex-home"
+    printf '%s\n' '{"name":"conduct-custom-template-documents","scripts":{"test":"node --test"}}' > "$workspace/package.json"
+    mkdir "$workspace/src"
+    (cd "$workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)
+    cp "$SCRIPT_DIR/fixtures/conduct-33e-skill.md" "$CODEX_HOME/skills/conduct/SKILL.md"
+    cp "$SCRIPT_DIR/fixtures/conduct-pre-recovery-protocol.md" "$CODEX_HOME/skills/conduct/references/protocol.md"
+    cp "$SCRIPT_DIR/fixtures/conduct-33e-codex-native.md" "$CODEX_HOME/skills/conduct/references/codex-native.md"
+    printf '\n%s\n' '# GENUINE CUSTOM TEMPLATE' >> "$CODEX_HOME/skills/conduct/SKILL.md"
+    snapshot_current_conduct_docs "$workspace"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$first_output")
+    grep -Fq 'No changes applied.' "$first_output"
+    assert_current_conduct_docs_unchanged "$workspace"
+    (cd "$workspace" && bash "$REPO_DIR/update.sh" >"$second_output")
+    grep -Fq 'No changes applied.' "$second_output"
+    assert_current_conduct_docs_unchanged "$workspace"
+}
+run_stock_document_regressions() {
+    (run_stock_document_generation_regression "$stock_965_workspace" 965ecf5 conduct-cli-v1.md conduct-pre-recovery-protocol.md absent)
+    (run_stock_document_generation_regression "$stock_c8_workspace" c8ee45f conduct-native-v1.md conduct-pre-recovery-protocol.md conduct-peer-recovery-codex-native-v1.md)
+    (run_stock_document_generation_regression "$stock_3ed_workspace" 3ed1368 conduct-peer-recovery-v1.md conduct-33e-protocol.md conduct-peer-recovery-codex-native-v1.md)
+    (run_stock_document_generation_regression "$stock_c30_documents_workspace" c30b1bb conduct-c30-skill.md conduct-33e-protocol.md conduct-c30-codex-native.md)
+    (run_stock_document_generation_regression "$stock_33e_workspace" 33e603a conduct-33e-skill.md conduct-33e-protocol.md conduct-33e-codex-native.md)
+    (run_custom_support_document_regression)
+    (run_custom_template_document_regression)
+}
 run_fixture_without_history_regression() {
     git --version >/dev/null
     if git show 33e603a253fb9aee629b494cd953fdbe38920987:skill-sources/conduct/scripts/codex-thread.py \
@@ -304,12 +418,15 @@ case "${CONDUCT_UPGRADE_FOCUS:-}" in
     c30-crlf-writer) run_c30_crlf_writer_regression; exit ;;
     c30-custom-writer) run_c30_custom_writer_regression; exit ;;
     immediate-helper) run_immediate_helper_regressions; exit ;;
+    stock-documents) run_stock_document_regressions; exit ;;
     fixture-no-history) run_fixture_without_history_regression; exit ;;
     '') ;;
     *) echo "Unknown CONDUCT_UPGRADE_FOCUS: $CONDUCT_UPGRADE_FOCUS" >&2; exit 1 ;;
 esac
 run_immediate_helper_regressions
 echo 'PASS: immediate stock helper refresh is selective, stable, and customization-safe'
+run_stock_document_regressions
+echo 'PASS: supported stock Conduct documents migrate selectively and remain stable'
 printf '%s\n' '{"name":"conduct-upgrade","scripts":{"test":"node --test"}}' > "$native_upgrade_workspace/package.json"
 mkdir "$native_upgrade_workspace/src"
 (cd "$native_upgrade_workspace" && bash "$REPO_DIR/setup.sh" --yes >/dev/null)

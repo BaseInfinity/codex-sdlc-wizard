@@ -32,10 +32,14 @@ CONDUCT_SUPPORT_FILES=("scripts/conduct.cjs" "scripts/codex-native.py" "scripts/
 PRE_NATIVE_CONDUCT_SKILL_HASH="sha256:1fdc5685ac73ce181ab7df85a30b2e4c732a8c6e38a2843986dd9860b6309041"
 PRE_RECOVERY_CONDUCT_SKILL_HASH="sha256:79606cea31de0694d10e3fb4584f638644d1c3cb8684bb79adead61c6cf1a1d0"
 PRE_THREAD_CONDUCT_SKILL_HASH="sha256:ab2068e4d8cacdcdac72cad5c75c1e915e8eb93f244bcba91fd8e0b45ace3e86"
+PRE_LIFECYCLE_CONDUCT_SKILL_HASH="sha256:a7b33778e7c0df2e3d4407cf9be2a7ebbe149ffe77e69b437c9d20b812463b17"
+PRE_RECOVERY_CONDUCT_PROTOCOL_HASH="sha256:0f6f075b02e543944a057b28011e1cc2a39070da4bd281628fa4ddc9c0e01ee9"
+PRE_LIFECYCLE_CONDUCT_PROTOCOL_HASH="sha256:92f3611ab3704a2a3a382c682c42bc8a02672271125fcea80a329baa26860c22"
 PRE_THREAD_CODEX_NATIVE_REFERENCE_HASH="sha256:de0ae0dc16214a3506db0500168e68c6c19f80208fda8c3c1a9ef651e061a93a"
 PRE_THREAD_CLAUDE_DESKTOP_REFERENCE_HASH="sha256:0144ec3e1818f439dc9eeb65004c763ff26537f89ec4a84c59aba8fe75925617"
 C30_CONDUCT_SKILL_HASH="sha256:0ecd37f0e2f90ef43893999444f5afa68bcf1539178d8adb3092b7c623a11b34"
 C30_CODEX_NATIVE_REFERENCE_HASH="sha256:4e6742e6f3f1bc0fd0bf38a7ab63982f148a5d0e274c722b5f0b23cf091b6db8"
+PRE_LIFECYCLE_CODEX_NATIVE_REFERENCE_HASH="sha256:d7ad565dab613e7513017a78d0111866a8bba4b1c855ee7f5ed04683212e5df9"
 C30_CODEX_THREAD_HASH="sha256:41790af2f70eb9312113a54174afa2f861426f4bc43b87d7babaf3fd97ecf2e2"
 IMMEDIATE_CODEX_THREAD_HASH="sha256:5f7d210b26201b0ba9a65fd69a089d42160212f117be43f7900e16939c8d6458"
 C30_CONDUCT_WRITER_HASH="sha256:53ed69e212151d6eddc850e1bc651d1b1b534e4513b1ae3eda95eb9d2cf5d9a6"
@@ -347,7 +351,12 @@ NODE
             ;;
         references/codex-native.md)
             [ "$actual_hash" = "$PRE_THREAD_CODEX_NATIVE_REFERENCE_HASH" ] ||
-                [ "$actual_hash" = "$C30_CODEX_NATIVE_REFERENCE_HASH" ]
+                [ "$actual_hash" = "$C30_CODEX_NATIVE_REFERENCE_HASH" ] ||
+                [ "$actual_hash" = "$PRE_LIFECYCLE_CODEX_NATIVE_REFERENCE_HASH" ]
+            ;;
+        references/protocol.md)
+            [ "$actual_hash" = "$PRE_RECOVERY_CONDUCT_PROTOCOL_HASH" ] ||
+                [ "$actual_hash" = "$PRE_LIFECYCLE_CONDUCT_PROTOCOL_HASH" ]
             ;;
         references/claude-desktop.md)
             [ "$actual_hash" = "$PRE_THREAD_CLAUDE_DESKTOP_REFERENCE_HASH" ]
@@ -392,9 +401,14 @@ conduct_template_is_c30_stock() {
         [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$C30_CONDUCT_SKILL_HASH" ]
 }
 
+conduct_template_is_pre_lifecycle() {
+    [ -f "$SKILLS_ROOT/conduct/SKILL.md" ] &&
+        [ "$(file_sha256 "$SKILLS_ROOT/conduct/SKILL.md")" = "$PRE_LIFECYCLE_CONDUCT_SKILL_HASH" ]
+}
+
 conduct_template_needs_stock_refresh() {
     conduct_template_is_pre_native || conduct_template_is_pre_recovery || conduct_template_is_pre_thread ||
-        conduct_template_is_c30_stock
+        conduct_template_is_c30_stock || conduct_template_is_pre_lifecycle
 }
 
 conduct_template_is_stock() {

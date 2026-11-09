@@ -21,6 +21,10 @@ subprocess with a structured argument array, rereads the saved canonical outbox
 file, and only then sends `turn/start` on that same connection.
 Keep the script, option values, working directory, and prompt file as separate
 arguments; shell users quote each path.
+The new receiver remains read-only with approval policy `never`. It may use
+sandbox-authorized read-only commands needed to inspect its repository, such as
+`git diff` and file searches. It returns its answer through the first-turn
+transport; it does not write the shared Conduct ledger or widen permissions.
 
 On Unix, use `python3`:
 
@@ -76,13 +80,25 @@ unverified `python` command is Python 3. These instructions provide portable
 invocation guidance, not live Windows proof or coverage.
 
 The helper starts a private `codex app-server --listen stdio://`. Ledger-aware
-or startup-probe success means the first turn completed; invalid arguments,
+or startup-probe success means the first turn completed with a usable response;
+invalid arguments,
 canonical writer failure, or any failed, interrupted, incomplete, or RPC-failed
 operation is nonzero. The helper does not claim that a UUID returned before a
 turn is independently queueable. The completed thread is stored where Codex
 Desktop can list it, but this terminal route does not grant direct GUI access or
 permission to change another receiver's runtime mode. It uses only Python's
 standard library and was observed with Codex CLI 0.167.0.
+
+For ledger-aware startup, the exit status governs only whether stdout is usable
+first-turn transport data; it does not determine task or ledger completion. The
+controller checks the exit status, treats stdout as data, and rereads the ledger.
+If an existing correlated result passes validation, the controller reuses it and
+marks the request `answered` regardless of the courier exit, recording a nonzero
+exit as a transport note rather than request failure. It never emits a
+duplicate. An existing invalid result is not trusted, overwritten, or marked
+`answered`. Only when no correlated result exists may exit `0` stdout be
+validated and emitted as one result; a nonzero exit or unusable stdout leaves
+the request unanswered.
 
 This helper owns only the private app-server process it starts and reaps that
 process when the bounded turn ends. It does not start, stop, or reconfigure the
