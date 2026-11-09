@@ -9,6 +9,12 @@ Coordinate multiple agent sessions through one logical controller. One Conductor
 
 Read [references/protocol.md](references/protocol.md) before dispatching. It defines the exact `{v, id, from, to, type, prompt, cwd, ref}` envelope, durable `.brain` ledger, and one-request/one-response boundary.
 
+## Optional conductor/controller/worker pattern
+
+For larger multi-harness work, the following is **recommended, optional**; direct Conduct handoffs and single-session use remain valid. Use one conductor as the front door that routes work only. Give each harness or project one controller, which owns implementation and integration decisions while preserving one logical controller per Conduct run. That controller decides whether to start a new worker or queue work to a current worker. Put parallel coding workers in separate Git worktrees. Give every worker one bounded task and have it return exactly one correlated result through Conduct.
+
+These role names are coordination conveniences, not authority or permissions. They do not create transport reach, displace reciprocal peer recovery, or authorize a permanent watcher. Each target must still be registered and reachable, and the existing one-request/one-response and supervision-stop rules still apply.
+
 ## Workflow
 
 1. Resolve the repository root and create or reuse one run ID.
